@@ -26,10 +26,10 @@ export function RoofForm({ spec, onUpdate }: RoofFormProps) {
             <button
               key={type.value}
               onClick={() => onUpdate({ roofType: type.value })}
-              className={`w-full px-4 py-3 rounded-lg text-sm font-semibold transition-all shadow-sm text-left ${
+              className={`w-full px-5 py-2.5 rounded-full text-sm font-medium border-2 text-left transition-all duration-200 ease-out ${
                 spec.roofType === type.value
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-blue-500 border-blue-400 text-white shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)]'
+                  : 'bg-gray-100 border-blue-400/60 text-blue-700 hover:bg-blue-500 hover:border-blue-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)] hover:-translate-y-0.5 active:translate-y-0'
               }`}
             >
               {type.label}
@@ -50,7 +50,7 @@ export function RoofForm({ spec, onUpdate }: RoofFormProps) {
             step="0.5"
             value={spec.roofHeight}
             onChange={(e) => onUpdate({ roofHeight: parseFloat(e.target.value) })}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            className="w-full h-2.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:transition-all"
           />
           <input
             type="number"
@@ -59,7 +59,7 @@ export function RoofForm({ spec, onUpdate }: RoofFormProps) {
             step="0.5"
             value={spec.roofHeight}
             onChange={(e) => onUpdate({ roofHeight: parseFloat(e.target.value) })}
-            className="mt-2 w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:outline-none"
+            className="mt-2 w-full px-4 py-2.5 border-2 border-gray-300 rounded-full text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
           />
         </div>
       )}

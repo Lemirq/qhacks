@@ -25,10 +25,10 @@ export function WindowForm({ spec, onUpdate }: WindowFormProps) {
             <button
               key={pattern.value}
               onClick={() => onUpdate({ windowPattern: pattern.value })}
-              className={`w-full px-4 py-3 rounded-lg text-sm font-semibold transition-all shadow-sm text-left ${
+              className={`w-full px-5 py-2.5 rounded-full text-sm font-medium border-2 text-left transition-all duration-200 ease-out ${
                 spec.windowPattern === pattern.value
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-blue-500 border-blue-400 text-white shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)]'
+                  : 'bg-gray-100 border-blue-400/60 text-blue-700 hover:bg-blue-500 hover:border-blue-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)] hover:-translate-y-0.5 active:translate-y-0'
               }`}
             >
               {pattern.label}
@@ -50,7 +50,7 @@ export function WindowForm({ spec, onUpdate }: WindowFormProps) {
               step="1"
               value={spec.windowRows}
               onChange={(e) => onUpdate({ windowRows: parseInt(e.target.value) })}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              className="w-full h-2.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:transition-all"
             />
           </div>
 
@@ -66,7 +66,7 @@ export function WindowForm({ spec, onUpdate }: WindowFormProps) {
                 step="0.1"
                 value={spec.windowWidth || 1.2}
                 onChange={(e) => onUpdate({ windowWidth: parseFloat(e.target.value) })}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                className="w-full h-2.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:transition-all"
               />
             </div>
             <div className="space-y-2">
@@ -80,7 +80,7 @@ export function WindowForm({ spec, onUpdate }: WindowFormProps) {
                 step="0.1"
                 value={spec.windowHeight || 1.8}
                 onChange={(e) => onUpdate({ windowHeight: parseFloat(e.target.value) })}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                className="w-full h-2.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:transition-all"
               />
             </div>
           </div>
@@ -102,7 +102,7 @@ export function WindowForm({ spec, onUpdate }: WindowFormProps) {
               step="0.1"
               value={spec.doorWidth || 1.5}
               onChange={(e) => onUpdate({ doorWidth: parseFloat(e.target.value) })}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              className="w-full h-2.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:transition-all"
             />
           </div>
           <div className="space-y-2">
@@ -116,7 +116,7 @@ export function WindowForm({ spec, onUpdate }: WindowFormProps) {
               step="0.1"
               value={spec.doorHeight || 2.4}
               onChange={(e) => onUpdate({ doorHeight: parseFloat(e.target.value) })}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              className="w-full h-2.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:transition-all"
             />
           </div>
         </div>
@@ -132,7 +132,7 @@ export function WindowForm({ spec, onUpdate }: WindowFormProps) {
             step="0.01"
             value={spec.doorPosition || 0.5}
             onChange={(e) => onUpdate({ doorPosition: parseFloat(e.target.value) })}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            className="w-full h-2.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:transition-all"
           />
           <p className="text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded-lg">
             Slide to move door around the building perimeter

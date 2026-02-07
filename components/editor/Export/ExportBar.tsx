@@ -55,25 +55,25 @@ export function ExportBar({ sceneRef }: ExportBarProps) {
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <button
             onClick={handleExportGLB}
             disabled={exporting}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:opacity-50 rounded-md font-medium text-sm transition-colors"
+            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-700/80 border-blue-400/60 text-blue-300 hover:bg-blue-500 hover:border-blue-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)] hover:-translate-y-0.5 active:translate-y-0 disabled:bg-gray-700 disabled:border-gray-600 disabled:text-gray-500 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none transition-all duration-200 ease-out"
           >
             {exporting ? 'Exporting...' : 'Download GLB'}
           </button>
 
           <button
             onClick={handleExportJSON}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-md font-medium text-sm transition-colors"
+            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-700/80 border-emerald-400/60 text-emerald-300 hover:bg-emerald-500 hover:border-emerald-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(16,185,129,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out"
           >
             Download JSON
           </button>
 
           <button
             onClick={handleCopyJSON}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md font-medium text-sm transition-colors"
+            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-700/80 border-violet-400/60 text-violet-300 hover:bg-violet-500 hover:border-violet-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(139,92,246,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out"
           >
             {copied ? 'Copied!' : 'Copy JSON'}
           </button>

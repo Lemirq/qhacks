@@ -21,7 +21,7 @@ export function BuildingList() {
         <button
           onClick={handleAddBuilding}
           disabled={placementMode}
-          className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
+          className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-100 border-blue-400/60 text-blue-700 hover:bg-blue-500 hover:border-blue-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)] hover:-translate-y-0.5 active:translate-y-0 disabled:bg-gray-100 disabled:border-gray-300 disabled:text-gray-500 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none transition-all duration-200 ease-out"
         >
           {placementMode ? 'Click on Grid...' : '+ Add Building'}
         </button>
@@ -32,10 +32,10 @@ export function BuildingList() {
           <div
             key={building.id}
             className={`
-              p-3 rounded-lg border-2 cursor-pointer transition-all
+              p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ease-out
               ${selectedBuildingId === building.id
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-200 bg-white hover:border-gray-300'
+                ? 'border-blue-400 bg-blue-50 shadow-[0_4px_15px_-3px_rgba(59,130,246,0.25)]'
+                : 'border-gray-200 bg-white hover:border-blue-400/60 hover:shadow-md'
               }
             `}
             onClick={() => selectBuilding(building.id)}
@@ -59,7 +59,7 @@ export function BuildingList() {
                     alert('Cannot delete the last building');
                   }
                 }}
-                className="ml-2 p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                className="ml-2 p-2 rounded-full border-2 border-red-400/40 text-red-600 hover:bg-red-500 hover:border-red-400 hover:text-white transition-all duration-200 ease-out"
                 title="Delete building"
               >
                 <svg
@@ -102,7 +102,7 @@ export function BuildingList() {
               </p>
               <button
                 onClick={() => setPlacementMode(false)}
-                className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                className="mt-2 px-3 py-1.5 rounded-full text-xs font-medium border-2 border-blue-400/60 text-blue-700 hover:bg-blue-500 hover:border-blue-400 hover:text-white transition-all duration-200 ease-out"
               >
                 Cancel
               </button>
