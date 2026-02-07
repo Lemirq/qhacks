@@ -77,6 +77,7 @@ export const DEFAULT_BUILDING_SPEC: BuildingSpecification = {
 
 // Multi-building support types
 export type BuildingId = string;
+export type GroupId = string;
 
 export interface BuildingInstance {
   id: BuildingId;
@@ -84,7 +85,23 @@ export interface BuildingInstance {
   position: { x: number; y: number; z: number };
   rotation: number;
   spec: BuildingSpecification;
+  groupId?: GroupId;  // Buildings in the same group share textures/windows
 }
+
+// Properties that are synced across grouped buildings
+export const GROUP_SYNCED_PROPERTIES: (keyof BuildingSpecification)[] = [
+  'wallTexture',
+  'roofTexture',
+  'windowTexture',
+  'customWallTexture',
+  'customRoofTexture',
+  'customWindowTexture',
+  'windowPattern',
+  'windowShape',
+  'windowRows',
+  'windowWidth',
+  'windowHeight',
+];
 
 export interface MultiBuildingExportData {
   version: string;

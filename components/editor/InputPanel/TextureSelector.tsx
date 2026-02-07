@@ -47,8 +47,8 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
               onClick={() => onUpdate({ wallTexture: texture.name, customWallTexture: undefined })}
               className={`w-full px-5 py-2.5 rounded-full text-sm font-medium border-2 text-left transition-all duration-200 ease-out ${
                 spec.wallTexture === texture.name && !spec.customWallTexture
-                  ? 'bg-blue-500 border-blue-400 text-white shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)]'
-                  : 'bg-gray-100 border-blue-400/60 text-blue-700 hover:bg-blue-500 hover:border-blue-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)] hover:-translate-y-0.5 active:translate-y-0'
+                  ? 'bg-amber-500 border-amber-400 text-white shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)]'
+                  : 'bg-gray-100 border-amber-400/60 text-amber-700 hover:bg-amber-500 hover:border-amber-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)] hover:-translate-y-0.5 active:translate-y-0'
               }`}
             >
               {texture.displayName}
@@ -67,10 +67,10 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
                 file:mr-4 file:py-2.5 file:px-5
                 file:rounded-full file:border-2
                 file:text-sm file:font-medium
-                file:bg-gray-100 file:border-blue-400/60 file:text-blue-700
-                hover:file:bg-blue-500 hover:file:border-blue-400 hover:file:text-white
+                file:bg-gray-100 file:border-amber-400/60 file:text-amber-700
+                hover:file:bg-amber-500 hover:file:border-amber-400 hover:file:text-white
                 file:cursor-pointer file:transition-all file:duration-200
-                file:shadow-md hover:file:shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)] hover:file:-translate-y-0.5"
+                file:shadow-md hover:file:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)] hover:file:-translate-y-0.5"
             />
           </label>
           {spec.customWallTexture && (
@@ -93,8 +93,8 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
               onClick={() => onUpdate({ windowTexture: texture.name, customWindowTexture: undefined })}
               className={`w-full px-5 py-2.5 rounded-full text-sm font-medium border-2 text-left transition-all duration-200 ease-out ${
                 spec.windowTexture === texture.name && !spec.customWindowTexture
-                  ? 'bg-blue-500 border-blue-400 text-white shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)]'
-                  : 'bg-gray-100 border-blue-400/60 text-blue-700 hover:bg-blue-500 hover:border-blue-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)] hover:-translate-y-0.5 active:translate-y-0'
+                  ? 'bg-amber-500 border-amber-400 text-white shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)]'
+                  : 'bg-gray-100 border-amber-400/60 text-amber-700 hover:bg-amber-500 hover:border-amber-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)] hover:-translate-y-0.5 active:translate-y-0'
               }`}
             >
               {texture.displayName}
@@ -113,10 +113,10 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
                 file:mr-4 file:py-2.5 file:px-5
                 file:rounded-full file:border-2
                 file:text-sm file:font-medium
-                file:bg-gray-100 file:border-blue-400/60 file:text-blue-700
-                hover:file:bg-blue-500 hover:file:border-blue-400 hover:file:text-white
+                file:bg-gray-100 file:border-amber-400/60 file:text-amber-700
+                hover:file:bg-amber-500 hover:file:border-amber-400 hover:file:text-white
                 file:cursor-pointer file:transition-all file:duration-200
-                file:shadow-md hover:file:shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)] hover:file:-translate-y-0.5"
+                file:shadow-md hover:file:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)] hover:file:-translate-y-0.5"
             />
           </label>
           {spec.customWindowTexture && (
