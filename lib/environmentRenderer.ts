@@ -104,8 +104,13 @@ export function createGround(
 
   const ground = new THREE.Mesh(geometry, material);
 
-  // Position at y=0 (ground level) in the center of the bbox
-  ground.position.set(centerX, 0, centerZ);
+  // Position with calibrated offset for proper alignment with buildings
+  // These values were manually adjusted to align satellite imagery with 3D buildings
+  ground.position.set(centerX + 22.2, -10.0, centerZ - 800.6);
+
+  // Scale calibration for perfect alignment
+  ground.scale.set(0.910, 1.000, 0.950);
+
   ground.receiveShadow = true;
 
   return ground;

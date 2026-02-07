@@ -30,14 +30,14 @@ export function renderRoads(
       projection.projectToWorld(coord)
     );
 
-    // Calculate road width based on lanes (3.5 meters per lane is standard)
-    const width = edge.lanes * 3.5;
+    // Calculate road width based on lanes (5 meters per lane for better visibility)
+    const width = edge.lanes * 5.0;
 
     // Create road mesh
     const roadMesh = createRoadMesh(points, width);
 
-    // Position slightly above ground to prevent z-fighting
-    roadMesh.position.y = 0.1;
+    // Position at ground level (same as building bases)
+    roadMesh.position.y = 0;
 
     // Add to scene
     scene.add(roadMesh);
@@ -194,11 +194,11 @@ export function renderRoadsWithTubes(
       projection.projectToWorld(coord)
     );
 
-    const width = edge.lanes * 3.5;
+    const width = edge.lanes * 5.0;
 
     // Use tube geometry for 3D appearance
     const roadMesh = createTubeRoad(points, width);
-    roadMesh.position.y = 0.1;
+    roadMesh.position.y = 0;
     scene.add(roadMesh);
   });
 

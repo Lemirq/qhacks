@@ -259,6 +259,10 @@ export default function ThreeMap({
   const [loadingStatus, setLoadingStatus] = useState<string>("Initializing...");
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [groundPosition, setGroundPosition] = useState({ x: 0, y: 0, z: 0 });
+  const [groundRotation, setGroundRotation] = useState({ x: 0, y: 0, z: 0 });
+  const [groundScale, setGroundScale] = useState({ x: 1, y: 1, z: 1 });
+  const groundMeshRef = useRef<THREE.Mesh | null>(null);
 
   useEffect(() => {
     if (!canvasRef.current || initialized.current) return;
@@ -358,6 +362,24 @@ export default function ThreeMap({
           satelliteTexture
         );
         groups.environment.add(ground);
+        groundMeshRef.current = ground;
+
+        // Set initial ground position, rotation, and scale state
+        setGroundPosition({
+          x: ground.position.x,
+          y: ground.position.y,
+          z: ground.position.z
+        });
+        setGroundRotation({
+          x: ground.rotation.x,
+          y: ground.rotation.y,
+          z: ground.rotation.z
+        });
+        setGroundScale({
+          x: ground.scale.x,
+          y: ground.scale.y,
+          z: ground.scale.z
+        });
 
         // Fetch and render buildings
         setLoadingStatus("Fetching buildings from OpenStreetMap...");
@@ -670,6 +692,86 @@ export default function ThreeMap({
     };
   }, []);
 
+  // Keyboard controls for adjusting ground position, rotation, and scale - Disabled after calibration
+  // Uncomment to re-enable for recalibration
+  /*
+  useEffect(() => {
+    function handleKeyPress(event: KeyboardEvent) {
+      if (!groundMeshRef.current) return;
+
+      const step = event.shiftKey ? 50 : 10;
+      const rotationStep = event.shiftKey ? 0.1 : 0.01;
+      const scaleStep = event.shiftKey ? 0.1 : 0.01;
+      const ground = groundMeshRef.current;
+
+      switch (event.key) {
+        case 'ArrowLeft':
+          ground.position.x -= step;
+          break;
+        case 'ArrowRight':
+          ground.position.x += step;
+          break;
+        case 'ArrowUp':
+          ground.position.z -= step;
+          break;
+        case 'ArrowDown':
+          ground.position.z += step;
+          break;
+        case 'PageUp':
+          ground.position.y += step;
+          break;
+        case 'PageDown':
+          ground.position.y -= step;
+          break;
+        case 'q':
+          ground.rotation.y -= rotationStep;
+          break;
+        case 'e':
+          ground.rotation.y += rotationStep;
+          break;
+        case '+':
+        case '=':
+          ground.scale.x += scaleStep;
+          ground.scale.z += scaleStep;
+          break;
+        case '-':
+        case '_':
+          ground.scale.x = Math.max(0.1, ground.scale.x - scaleStep);
+          ground.scale.z = Math.max(0.1, ground.scale.z - scaleStep);
+          break;
+        case 'w':
+          ground.scale.x += scaleStep;
+          break;
+        case 's':
+          ground.scale.x = Math.max(0.1, ground.scale.x - scaleStep);
+          break;
+        case 'a':
+          ground.scale.z += scaleStep;
+          break;
+        case 'd':
+          ground.scale.z = Math.max(0.1, ground.scale.z - scaleStep);
+          break;
+        case 'r':
+          ground.position.set(0, 0, 0);
+          ground.rotation.set(-Math.PI / 2, 0, 0);
+          ground.scale.set(1, 1, 1);
+          break;
+        default:
+          return;
+      }
+
+      setGroundPosition({ x: ground.position.x, y: ground.position.y, z: ground.position.z });
+      setGroundRotation({ x: ground.rotation.x, y: ground.rotation.y, z: ground.rotation.z });
+      setGroundScale({ x: ground.scale.x, y: ground.scale.y, z: ground.scale.z });
+
+      event.preventDefault();
+    }
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
+  */
+
   return (
     <div className={`relative ${className}`}>
       <canvas
@@ -715,6 +817,32 @@ export default function ThreeMap({
           </div>
         </div>
       )}
+
+      {/* Ground position adjustment UI - Disabled after calibration */}
+      {/* {isReady && (
+        <div className="absolute top-20 left-4 bg-black/80 text-white px-4 py-3 rounded-lg shadow-lg z-20 font-mono text-sm max-w-md">
+          <div className="font-bold mb-2">🎮 Ground Adjustment Controls</div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
+            <div>← → : Move X</div>
+            <div>+ - : Scale All</div>
+            <div>↑ ↓ : Move Z</div>
+            <div>W/S : Scale X</div>
+            <div>PgUp/PgDn : Move Y</div>
+            <div>A/D : Scale Z</div>
+            <div>Q/E : Rotate Y</div>
+            <div>R : Reset All</div>
+            <div className="col-span-2 text-yellow-300 mt-1">Shift + Key : Bigger steps</div>
+          </div>
+          <div className="border-t border-white/30 pt-2 text-xs">
+            <div className="font-bold mb-1">Current Values:</div>
+            <div className="bg-black/50 p-2 rounded space-y-1">
+              <div>Position: ({groundPosition.x.toFixed(1)}, {groundPosition.y.toFixed(1)}, {groundPosition.z.toFixed(1)})</div>
+              <div>Rotation: ({groundRotation.x.toFixed(3)}, {groundRotation.y.toFixed(3)}, {groundRotation.z.toFixed(3)})</div>
+              <div className="text-green-300">Scale: ({groundScale.x.toFixed(3)}, {groundScale.y.toFixed(3)}, {groundScale.z.toFixed(3)})</div>
+            </div>
+          </div>
+        </div>
+      )} */}
     </div>
   );
 }
