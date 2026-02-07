@@ -16,7 +16,7 @@ import { createGround } from "@/lib/environmentRenderer";
 
 // Projection and camera
 import { CityProjection } from "@/lib/projection";
-import { setupControls, flyToQueens, updateTweens } from "@/lib/cameraController";
+import { setupControls, flyToLocation, updateTweens } from "@/lib/cameraController";
 
 // Traffic simulation
 import { RoadNetwork } from "@/lib/roadNetwork";
@@ -26,6 +26,13 @@ import { Spawner, SpawnedCar } from "@/lib/spawning";
 interface ThreeMapProps {
   initialCenter?: [number, number];
   className?: string;
+  onCoordinateClick?: (coordinate: {
+    lat: number;
+    lng: number;
+    worldX: number;
+    worldY: number;
+    worldZ: number;
+  } | null) => void;
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -241,6 +248,7 @@ async function fetchAllTrafficSignals(): Promise<
 export default function ThreeMap({
   initialCenter = [-76.4951, 44.2253], // Queen's University
   className = "w-full h-full",
+  onCoordinateClick,
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -258,6 +266,7 @@ export default function ThreeMap({
   const [groundRotation, setGroundRotation] = useState({ x: 0, y: 0, z: 0 });
   const [groundScale, setGroundScale] = useState({ x: 1, y: 1, z: 1 });
   const groundMeshRef = useRef<THREE.Mesh | null>(null);
+  const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster());
 
   useEffect(() => {
     if (!canvasRef.current || initialized.current) return;
@@ -431,9 +440,9 @@ export default function ThreeMap({
         setLoadingStatus("Starting simulation...");
         startAnimationLoop();
 
-        // Fly to Queen's campus
-        setLoadingStatus("Flying to Queen's...");
-        await flyToQueens(camera, controls);
+        // Fly to specific coordinates: Latitude 44.232760°, Longitude -76.479941°
+        setLoadingStatus("Flying to target location...");
+        await flyToLocation(camera, controls, [-76.479941, 44.232760], 600, 3500);
 
         // Ensure controls are re-enabled after animation
         controls.enabled = true;
@@ -719,6 +728,56 @@ export default function ThreeMap({
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
 
+  // Click handler to find coordinates
+  useEffect(() => {
+    function handleCanvasClick(event: MouseEvent) {
+      if (!canvasRef.current || !cameraRef.current || !sceneRef.current || !groundMeshRef.current) {
+        return;
+      }
+
+      // Calculate mouse position in normalized device coordinates (-1 to +1)
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouse = new THREE.Vector2();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      // Update raycaster with mouse position
+      raycasterRef.current.setFromCamera(mouse, cameraRef.current);
+
+      // Find intersections with all objects in the scene
+      const intersects = raycasterRef.current.intersectObjects(sceneRef.current.children, true);
+
+      if (intersects.length > 0) {
+        // Get the first intersection point
+        const intersectionPoint = intersects[0].point;
+
+        // Convert world coordinates to lat/lng
+        const [lng, lat] = CityProjection.unprojectFromWorld(intersectionPoint);
+
+        // Call the callback with the clicked coordinate
+        const coordinate = {
+          lat,
+          lng,
+          worldX: intersectionPoint.x,
+          worldY: intersectionPoint.y,
+          worldZ: intersectionPoint.z,
+        };
+
+        if (onCoordinateClick) {
+          onCoordinateClick(coordinate);
+        }
+
+        console.log('Clicked coordinate:', { lat, lng, worldPos: intersectionPoint });
+      }
+    }
+
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.addEventListener('click', handleCanvasClick);
+      return () => canvas.removeEventListener('click', handleCanvasClick);
+    }
+  }, [onCoordinateClick]);
+
   return (
     <div className={`relative ${className}`}>
       <canvas
@@ -765,31 +824,6 @@ export default function ThreeMap({
         </div>
       )}
 
-      {/* Ground position adjustment UI */}
-      {isReady && (
-        <div className="absolute top-20 left-4 bg-black/80 text-white px-4 py-3 rounded-lg shadow-lg z-20 font-mono text-sm max-w-md">
-          <div className="font-bold mb-2">🎮 Ground Adjustment Controls</div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
-            <div>← → : Move X</div>
-            <div>+ - : Scale All</div>
-            <div>↑ ↓ : Move Z</div>
-            <div>W/S : Scale X</div>
-            <div>PgUp/PgDn : Move Y</div>
-            <div>A/D : Scale Z</div>
-            <div>Q/E : Rotate Y</div>
-            <div>R : Reset All</div>
-            <div className="col-span-2 text-yellow-300 mt-1">Shift + Key : Bigger steps</div>
-          </div>
-          <div className="border-t border-white/30 pt-2 text-xs">
-            <div className="font-bold mb-1">Current Values:</div>
-            <div className="bg-black/50 p-2 rounded space-y-1">
-              <div>Position: ({groundPosition.x.toFixed(1)}, {groundPosition.y.toFixed(1)}, {groundPosition.z.toFixed(1)})</div>
-              <div>Rotation: ({groundRotation.x.toFixed(3)}, {groundRotation.y.toFixed(3)}, {groundRotation.z.toFixed(3)})</div>
-              <div className="text-green-300">Scale: ({groundScale.x.toFixed(3)}, {groundScale.y.toFixed(3)}, {groundScale.z.toFixed(3)})</div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

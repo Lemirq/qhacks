@@ -101,17 +101,16 @@ export function createGround(
     `Ground dimensions: ${width.toFixed(1)}m x ${depth.toFixed(1)}m at (${centerX.toFixed(1)}, 0, ${centerZ.toFixed(1)})`,
   );
 
-  // Create ground geometry - add padding for seamless appearance
-  const padding = 1.2;
-  const geometry = new THREE.PlaneGeometry(width * padding, depth * padding);
+  // Create infinite ground geometry
+  const geometry = new THREE.PlaneGeometry(100000, 100000); // 100km x 100km (effectively infinite)
 
   // Rotate geometry to be horizontal (in XZ plane) BEFORE creating mesh
   geometry.rotateX(-Math.PI / 2);
 
-  // Create material - plain white ground
+  // Create material - light gray ground (#EEE)
   const material = new THREE.MeshStandardMaterial({
     map: satelliteTexture || null,
-    color: satelliteTexture ? 0xffffff : 0xffffff, // White
+    color: satelliteTexture ? 0xffffff : 0xeeeeee, // #EEE light gray
     roughness: 0.9,
     metalness: 0.0,
     side: THREE.DoubleSide,
