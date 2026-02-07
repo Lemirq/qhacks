@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(ls:*)",
-      "Bash(npx next build:*)"
+      "Bash(npx next build:*)",
+      "WebFetch(domain:epicurusscientific.com)",
+      "Bash(npx next dev:*)"
     ]
   }
 }
