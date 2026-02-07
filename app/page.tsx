@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
+import { FeatureSteps } from '@/components/ui/feature-section';
 
 export default function Landing() {
   const heroRef = useRef<HTMLDivElement>(null);
@@ -68,6 +69,41 @@ export default function Landing() {
           Kingston deserves to see what it will look like,<br />
           how traffic will shift, and what it <em>costs the air.</em>
         </p>
+      </section>
+
+      {/* ───── HOW IT WORKS ───── */}
+      <section className="bg-[#f4efe6]">
+        <FeatureSteps
+          features={[
+            {
+              step: 'Step 1',
+              title: 'Build a 3D Building From Any Input',
+              content:
+                'Create accurate 3D buildings from blueprints or simple specs in minutes, then adjust floors, height, roof type, and materials in a live preview.',
+              image:
+                'https://images.unsplash.com/photo-1686164748261-33e13eef70b6?q=80&w=2070&auto=format&fit=crop',
+            },
+            {
+              step: 'Step 2',
+              title: 'Place It Anywhere in Kingston',
+              content:
+                'Drop your building onto a real Kingston location and export it as GeoJSON or GLB for seamless use in planning and mapping workflows.',
+              image:
+                'https://images.unsplash.com/photo-1598897270268-f7091c801c3d?q=80&w=2070&auto=format&fit=crop',
+            },
+            {
+              step: 'Step 3',
+              title: 'Simulate Impact Before Construction Starts',
+              content:
+                'Visualize construction progress over time while tracking CO₂, noise, air quality, and traffic impacts before anything is built.',
+              image:
+                'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?q=80&w=2070&auto=format&fit=crop',
+            },
+          ]}
+          title="Your Journey Starts Here"
+          autoPlayInterval={4000}
+          imageHeight="h-[500px]"
+        />
       </section>
 
       {/* ───── DETAILS ───── */}

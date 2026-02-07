@@ -4,6 +4,16 @@ const nextConfig: NextConfig = {
   // Disable React strict mode for Three.js compatibility
   reactStrictMode: false,
 
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
+      },
+    ],
+  },
+
   // Ignore TypeScript build errors (React Three Fiber types are provided at runtime)
   typescript: {
     ignoreBuildErrors: true,
