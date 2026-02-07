@@ -3,6 +3,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import * as THREE from 'three';
 import { BuildingWrapper } from './BuildingWrapper';
+import { GltfModel } from './GltfModel';
 import { useBuildings } from '@/lib/editor/contexts/BuildingsContext';
 
 interface SceneContentProps {
@@ -72,6 +73,9 @@ function SceneContent({ sceneRef }: SceneContentProps) {
         fadeStrength={1}
         infiniteGrid
       />
+
+      {/* GLTF Model */}
+      <GltfModel />
 
       {/* Buildings */}
       {buildings.map((building) => (
