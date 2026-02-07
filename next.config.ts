@@ -9,25 +9,25 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
 
-  webpack: (config) => {
-    // Handle GLSL shaders
-    config.module.rules.push({
-      test: /\.(glsl|vs|fs|vert|frag)$/,
-      type: 'asset/source',
-    });
+  // webpack: (config) => {
+  //   // Handle GLSL shaders
+  //   config.module.rules.push({
+  //     test: /\.(glsl|vs|fs|vert|frag)$/,
+  //     type: 'asset/source',
+  //   });
 
-    // Suppress warnings for certain modules
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-      path: false,
-    };
+  //   // Suppress warnings for certain modules
+  //   config.resolve.fallback = {
+  //     ...config.resolve.fallback,
+  //     fs: false,
+  //     path: false,
+  //   };
 
-    return config;
-  },
+  //   return config;
+  // },
 
   // Transpile Three.js and R3F packages
-  transpilePackages: ['three', '@react-three/fiber', '@react-three/drei'],
+  transpilePackages: ["three", "@react-three/fiber", "@react-three/drei"],
 };
 
 export default nextConfig;

@@ -1,3 +1,9 @@
+/**
+ * @deprecated This component uses Mapbox GL and is being replaced by ThreeMap.tsx
+ * which uses Three.js for better 3D rendering. This file is archived and should
+ * not be used for new features.
+ */
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -5,6 +11,9 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import * as turf from "@turf/turf";
 import * as THREE from "three";
+import { RoadNetwork, Destination } from "@/lib/roadNetwork";
+import { Pathfinder, Route } from "@/lib/pathfinding";
+import { Spawner, SpawnedCar } from "@/lib/spawning";
 
 interface MapProps {
   initialCenter?: [number, number];
@@ -27,6 +36,12 @@ interface Car {
   type: CarType;
   mesh?: THREE.Mesh;
   stoppedAtLight: boolean;
+  // Autonomous navigation fields
+  destination: Destination;
+  route: Route;
+  currentEdgeId: string;
+  currentNodeId: string;
+  distanceOnEdge: number; // Distance traveled on current edge (meters)
 }
 
 interface TrafficLight {
@@ -199,7 +214,55 @@ function createTrafficLightModel(): THREE.Group {
   return group;
 }
 
-// Fetch route from Mapbox Directions API
+// Fetch ALL traffic signals from OpenStreetMap Overpass API
+async function fetchAllTrafficSignals(): Promise<Array<{
+  lat: number;
+  lon: number;
+  type: string;
+  id: number;
+}>> {
+  try {
+    // Bounding box for Queen's University area
+    // Format: (south, west, north, east)
+    const query = `
+      [out:json][timeout:25];
+      (
+        node["highway"="traffic_signals"](44.220,-76.510,44.240,-76.480);
+        node["highway"="stop"](44.220,-76.510,44.240,-76.480);
+      );
+      out body;
+    `;
+
+    console.log("Fetching traffic signals from OpenStreetMap...");
+    const response = await fetch(
+      `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`
+    );
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        console.warn("⚠️ OSM Overpass API rate limit (429). Using fallback traffic lights.");
+      } else {
+        console.warn(`⚠️ OSM Overpass API error: ${response.status}. Using fallback.`);
+      }
+      return []; // Return empty, will trigger fallback
+    }
+
+    const data = await response.json();
+    console.log(`✅ Found ${data.elements?.length || 0} traffic controls from OSM`);
+
+    return data.elements.map((el: any) => ({
+      lat: el.lat,
+      lon: el.lon,
+      type: el.tags.highway, // "traffic_signals" or "stop"
+      id: el.id,
+    }));
+  } catch (error) {
+    console.warn("⚠️ Error fetching from Overpass API. Using fallback traffic lights:", error);
+    return [];
+  }
+}
+
+// Fetch route from Mapbox Directions API (simplified - no intersection data)
 async function fetchRoute(
   start: [number, number],
   end: [number, number],
@@ -384,12 +447,163 @@ function placeTrafficLightsAtIntersection(
   }
 }
 
+// Add debug visualization of road network
+function addRoadNetworkDebugVisualization(map: mapboxgl.Map, network: RoadNetwork) {
+  console.log('🎨 Adding road network debug visualization...');
+
+  // Visualize road edges
+  const edgeFeatures = network.getEdges().map(edge => ({
+    type: 'Feature' as const,
+    geometry: {
+      type: 'LineString' as const,
+      coordinates: edge.geometry,
+    },
+    properties: {
+      name: edge.name || 'Unnamed',
+      speedLimit: edge.speedLimit,
+      oneway: edge.oneway,
+    },
+  }));
+
+  map.addSource('road-network-edges', {
+    type: 'geojson',
+    data: {
+      type: 'FeatureCollection',
+      features: edgeFeatures,
+    },
+  });
+
+  map.addLayer({
+    id: 'road-network-edges-layer',
+    type: 'line',
+    source: 'road-network-edges',
+    paint: {
+      'line-color': '#4CAF50',
+      'line-width': 2,
+      'line-opacity': 0.6,
+    },
+  });
+
+  // Visualize intersections (nodes with 3+ connections)
+  const intersectionFeatures = network.getNodes()
+    .filter(node => node.type === 'intersection')
+    .map(node => ({
+      type: 'Feature' as const,
+      geometry: {
+        type: 'Point' as const,
+        coordinates: node.position,
+      },
+      properties: {
+        connections: node.connectedEdges.length,
+      },
+    }));
+
+  map.addSource('road-network-intersections', {
+    type: 'geojson',
+    data: {
+      type: 'FeatureCollection',
+      features: intersectionFeatures,
+    },
+  });
+
+  map.addLayer({
+    id: 'road-network-intersections-layer',
+    type: 'circle',
+    source: 'road-network-intersections',
+    paint: {
+      'circle-radius': 6,
+      'circle-color': '#FF9800',
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#fff',
+      'circle-opacity': 0.8,
+    },
+  });
+
+  // Visualize destinations
+  const destinationFeatures = network.getDestinations().map(dest => ({
+    type: 'Feature' as const,
+    geometry: {
+      type: 'Point' as const,
+      coordinates: dest.position,
+    },
+    properties: {
+      name: dest.name,
+      type: dest.type,
+    },
+  }));
+
+  map.addSource('road-network-destinations', {
+    type: 'geojson',
+    data: {
+      type: 'FeatureCollection',
+      features: destinationFeatures,
+    },
+  });
+
+  map.addLayer({
+    id: 'road-network-destinations-layer',
+    type: 'circle',
+    source: 'road-network-destinations',
+    paint: {
+      'circle-radius': 8,
+      'circle-color': '#2196F3',
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#fff',
+      'circle-opacity': 0.9,
+    },
+  });
+
+  console.log(`✅ Debug visualization added: ${edgeFeatures.length} edges, ${intersectionFeatures.length} intersections, ${destinationFeatures.length} destinations`);
+}
+
 // Initialize traffic simulation with 3D models
-async function initializeTrafficSimulation(map: mapboxgl.Map, center: [number, number]) {
+async function initializeTrafficSimulation(
+  map: mapboxgl.Map,
+  center: [number, number],
+  onProgress?: (status: string) => void,
+  debugVisualization: boolean = false
+) {
+  console.log('🚗 Initializing traffic simulation...');
+  onProgress?.('Initializing road network...');
+
   const accessToken = mapboxgl.accessToken;
-  const cars: Car[] = [];
   const trafficLights: TrafficLight[] = [];
-  const routeEndpoints = getRouteEndpoints();
+  const routeEndpoints = getRouteEndpoints(); // Used for fallback traffic light placement
+
+  // Initialize road network and pathfinding
+  const roadNetwork = new RoadNetwork();
+  let pathfinder: Pathfinder;
+
+  try {
+    onProgress?.('Fetching road network from OpenStreetMap...');
+    await roadNetwork.fetchFromOSM({
+      south: 44.220,
+      west: -76.510,
+      north: 44.240,
+      east: -76.480,
+    });
+
+    onProgress?.('Adding Queen\'s University destinations...');
+    roadNetwork.addQueensDestinations();
+
+    pathfinder = new Pathfinder(roadNetwork);
+
+    console.log('✅ Road network loaded successfully');
+    console.log(`   Nodes: ${roadNetwork.getNodes().length}`);
+    console.log(`   Edges: ${roadNetwork.getEdges().length}`);
+    console.log(`   Destinations: ${roadNetwork.getDestinations().length}`);
+
+    // Add debug visualization if enabled
+    if (debugVisualization) {
+      addRoadNetworkDebugVisualization(map, roadNetwork);
+    }
+  } catch (error) {
+    console.error('❌ Failed to load road network:', error);
+    onProgress?.('Error loading road network. Using fallback mode.');
+    throw error; // Re-throw to be handled by caller
+  }
+
+  onProgress?.('Setting up simulation...');
 
   // Mapbox GL JS to Mercator projection utilities
   const modelTransform = {
@@ -402,59 +616,126 @@ async function initializeTrafficSimulation(map: mapboxgl.Map, center: [number, n
     scale: 5.41843220338983e-8,
   };
 
-  // Fetch routes for each endpoint pair
-  console.log("Fetching routes from Mapbox Directions API...");
-  for (let i = 0; i < routeEndpoints.length; i++) {
-    const { start, end, color, type } = routeEndpoints[i];
-    const routeGeometry = await fetchRoute(start, end, accessToken);
+  // Fetch ALL traffic signals from OpenStreetMap (one-time)
+  const osmTrafficSignals = await fetchAllTrafficSignals();
 
-    if (routeGeometry && routeGeometry.geometry.coordinates.length > 0) {
-      // Create 2 cars per route with different starting positions
-      for (let j = 0; j < 2; j++) {
-        const routeLength = turf.length(routeGeometry, { units: 'kilometers' });
-        cars.push({
-          id: `car-${i}-${j}`,
-          position: routeGeometry.geometry.coordinates[0] as [number, number],
-          routeGeometry: routeGeometry,
-          distance: (j * routeLength) / 2, // Stagger cars along route
-          bearing: 0,
-          speed: 30 + Math.random() * 20, // 30-50 km/h
-          maxSpeed: 30 + Math.random() * 20,
-          color: color,
-          type: type,
-          stoppedAtLight: false,
-        });
-      }
-      console.log(`Created route ${i} with ${routeGeometry.geometry.coordinates.length} points`);
-    }
-  }
+  // Initialize dynamic spawning system
+  console.log("🚗 Initializing dynamic car spawning system...");
 
-  // Get unique routes from cars
-  const uniqueRoutes = Array.from(
-    new Set(cars.map(car => JSON.stringify(car.routeGeometry.geometry)))
-  ).map((s, i) => ({
-    route: {
-      type: 'Feature' as const,
-      properties: {},
-      geometry: JSON.parse(s),
+  const spawner = new Spawner(roadNetwork, {
+    maxCars: 30, // Maximum 30 concurrent cars
+    globalSpawnRate: 1.2, // 20% faster spawning
+    despawnRadius: 25, // Despawn within 25m of destination
+    defaultCarSpeed: 40, // 40 km/h average speed
+    carTypeDistribution: {
+      sedan: 0.4,   // 40%
+      suv: 0.25,    // 25%
+      truck: 0.15,  // 15%
+      compact: 0.2, // 20%
     },
-    routeId: i,
+  });
+
+  // Initialize spawn points around Queen's campus
+  spawner.initializeQueensSpawnPoints();
+
+  console.log(`✅ Spawner initialized with ${spawner.getSpawnPoints().length} spawn points`);
+  console.log(`   Max cars: ${spawner.getConfig().maxCars}`);
+  console.log(`   Spawn rate: ${spawner.getConfig().globalSpawnRate}x`);
+
+  // Track car meshes separately (meshes persist, cars are managed by spawner)
+  // Use object instead of Map to avoid naming conflict with component
+  const carMeshes: Record<string, THREE.Mesh> = {};
+
+  // Convert OSM signals to our format
+  const uniqueSignals: Array<{
+    id: string;
+    location: [number, number];
+    type: string;
+  }> = osmTrafficSignals.map((signal, idx) => ({
+    id: `osm-${signal.id}`,
+    location: [signal.lon, signal.lat], // Note: OSM is [lat, lon], we need [lon, lat]
+    type: signal.type,
   }));
 
-  // Use predefined intersections at real Queen's locations
-  const realIntersections = getRealIntersections();
-  console.log(`Using ${realIntersections.length} predefined intersections`);
+  console.log(`Using ${uniqueSignals.length} traffic signals from OpenStreetMap`);
 
-  // Place traffic lights at each intersection
-  realIntersections.forEach((intersection) => {
-    const lightsAtIntersection = placeTrafficLightsForIntersection(
-      intersection,
-      uniqueRoutes
-    );
+  // Fallback: if OSM returns no signals, use manual intersections
+  if (uniqueSignals.length === 0) {
+    console.warn("⚠️ No signals from OSM, using manual fallback intersections");
+    const manualIntersections = getRealIntersections();
+    manualIntersections.forEach((intersection) => {
+      uniqueSignals.push({
+        id: intersection.id,
+        location: intersection.center,
+        type: 'traffic_signals',
+      });
+    });
+  }
+
+  // Create traffic lights at each OSM signal location
+  uniqueSignals.forEach((signal, idx) => {
+    const lightsAtSignal: TrafficLight[] = [];
+
+    // Check each car/route to see if it passes near this signal
+    cars.forEach((car, carIdx) => {
+      const routeIdx = Math.floor(carIdx / 2); // Each route has 2 cars
+
+      try {
+        // Check if route actually passes near this signal (within 40m)
+        const nearestOnRoute = turf.nearestPointOnLine(car.routeGeometry, turf.point(signal.location));
+        const distanceToRoute = turf.distance(
+          turf.point(signal.location),
+          nearestOnRoute,
+          { units: 'meters' }
+        );
+
+        if (distanceToRoute > 40) {
+          // Route doesn't pass near this signal
+          return;
+        }
+
+        // Find position 15m before the signal on this route
+        const distanceToSignal = nearestOnRoute.properties.location || 0;
+        const approachDistance = Math.max(0, distanceToSignal - 0.015); // 15m before
+
+        const lightPosition = turf.along(car.routeGeometry, approachDistance, { units: 'kilometers' });
+
+        // Calculate bearing to determine direction
+        const nextPoint = turf.along(car.routeGeometry, approachDistance + 0.005, { units: 'kilometers' });
+        const bearing = turf.bearing(
+          turf.point(lightPosition.geometry.coordinates),
+          turf.point(nextPoint.geometry.coordinates)
+        );
+
+        const normalizedBearing = ((bearing + 360) % 360);
+        const direction: "ns" | "ew" =
+          (normalizedBearing > 45 && normalizedBearing < 135) ||
+          (normalizedBearing > 225 && normalizedBearing < 315)
+            ? "ew"
+            : "ns";
+
+        // Check if we already have a light for this route at this signal
+        const alreadyExists = lightsAtSignal.some(l => l.id.includes(`route-${routeIdx}`));
+        if (!alreadyExists) {
+          lightsAtSignal.push({
+            id: `${signal.id}-route-${routeIdx}`,
+            position: lightPosition.geometry.coordinates as [number, number],
+            state: "red",
+            timer: Date.now(),
+            intersectionId: signal.id,
+            direction,
+          });
+
+          console.log(`✅ Placed light at OSM signal ${signal.id} for route ${routeIdx} (${direction}, ${normalizedBearing.toFixed(0)}°, ${distanceToRoute.toFixed(1)}m from signal)`);
+        }
+      } catch (e) {
+        console.error(`Error placing light at signal ${signal.id}:`, e);
+      }
+    });
 
     // Set initial states - alternate NS and EW
-    const nsLights = lightsAtIntersection.filter(l => l.direction === "ns");
-    const ewLights = lightsAtIntersection.filter(l => l.direction === "ew");
+    const nsLights = lightsAtSignal.filter(l => l.direction === "ns");
+    const ewLights = lightsAtSignal.filter(l => l.direction === "ew");
 
     nsLights.forEach(light => {
       light.state = "green";
@@ -466,17 +747,29 @@ async function initializeTrafficSimulation(map: mapboxgl.Map, center: [number, n
       trafficLights.push(light);
     });
 
-    console.log(`${intersection.name}: ${nsLights.length} NS lights, ${ewLights.length} EW lights`);
+    console.log(`Signal ${idx} at [${signal.location}]: ${nsLights.length} NS lights (green), ${ewLights.length} EW lights (red)`);
   });
 
-  console.log(`Created ${cars.length} cars and ${trafficLights.length} traffic lights`);
+  console.log(`✅ Created ${cars.length} cars and ${trafficLights.length} traffic lights`);
+
+  if (trafficLights.length === 0) {
+    console.error("⚠️ WARNING: No traffic lights were created! Check the console logs above.");
+  } else {
+    console.log("Traffic light positions:", trafficLights.map(l => ({
+      id: l.id,
+      pos: l.position,
+      state: l.state,
+      dir: l.direction
+    })));
+  }
 
   // Add route visualization (for debugging)
+  // Routes will be updated dynamically as cars spawn
   map.addSource('car-routes', {
     type: 'geojson',
     data: {
       type: 'FeatureCollection',
-      features: cars.map(car => car.routeGeometry),
+      features: [], // Start empty, will be populated by spawner
     },
   });
 
@@ -550,6 +843,7 @@ async function initializeTrafficSimulation(map: mapboxgl.Map, center: [number, n
   });
 
   // Custom Three.js layer
+  let threeScene: THREE.Scene | null = null;
   const customLayer: mapboxgl.CustomLayerInterface = {
     id: '3d-model',
     type: 'custom',
@@ -558,6 +852,7 @@ async function initializeTrafficSimulation(map: mapboxgl.Map, center: [number, n
     onAdd: function (map: mapboxgl.Map, gl: WebGLRenderingContext) {
       this.camera = new THREE.Camera();
       this.scene = new THREE.Scene();
+      threeScene = this.scene;
 
       // Lighting
       const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -567,17 +862,8 @@ async function initializeTrafficSimulation(map: mapboxgl.Map, center: [number, n
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
       this.scene.add(ambientLight);
 
-      // Create car meshes
-      cars.forEach(car => {
-        const mesh = createCarModel(car.type, car.color);
-        mesh.scale.set(
-          modelTransform.scale,
-          -modelTransform.scale,
-          modelTransform.scale
-        );
-        car.mesh = mesh;
-        this.scene.add(mesh);
-      });
+      // Car meshes are created dynamically by spawner in animation loop
+      // No need to pre-create them here
 
       // Create traffic light meshes
       trafficLights.forEach(light => {
@@ -742,56 +1028,79 @@ async function initializeTrafficSimulation(map: mapboxgl.Map, center: [number, n
     // Update traffic lights
     updateTrafficLights();
 
-    cars.forEach(car => {
+    // Update spawner (handles spawning/despawning automatically)
+    spawner.update(deltaTime);
+
+    // Get all active cars from spawner
+    const activeCars = spawner.getActiveCars();
+
+    // Track which cars we've processed
+    const processedCarIds = new Set<string>();
+
+    // Update each active car
+    activeCars.forEach((spawnedCar) => {
+      processedCarIds.add(spawnedCar.id);
+
+      // Create mesh if it doesn't exist
+      if (!carMeshes[spawnedCar.id]) {
+        const mesh = createCarModel(spawnedCar.type, spawnedCar.color);
+        mesh.scale.set(
+          modelTransform.scale,
+          -modelTransform.scale,
+          modelTransform.scale
+        );
+        carMeshes[spawnedCar.id] = mesh;
+        if (threeScene) {
+          threeScene.add(mesh);
+        }
+      }
+
       // Check traffic lights
       let shouldStop = false;
       for (const light of trafficLights) {
-        if (isNearTrafficLight(car, light) && (light.state === "red" || light.state === "yellow")) {
+        const distance = turf.distance(
+          turf.point(spawnedCar.position),
+          turf.point(light.position),
+          { units: 'meters' }
+        );
+
+        if (distance < 30 && (light.state === "red" || light.state === "yellow")) {
           shouldStop = true;
-          car.stoppedAtLight = true;
+          spawnedCar.stoppedAtLight = true;
           break;
         }
       }
 
       if (!shouldStop) {
-        car.stoppedAtLight = false;
+        spawnedCar.stoppedAtLight = false;
       }
 
       // Update speed based on traffic lights
-      if (car.stoppedAtLight) {
-        car.speed = Math.max(0, car.speed - 50 * deltaTime); // Brake
+      if (spawnedCar.stoppedAtLight) {
+        spawnedCar.speed = Math.max(0, spawnedCar.speed - 50 * deltaTime); // Brake
       } else {
-        car.speed = Math.min(car.maxSpeed, car.speed + 30 * deltaTime); // Accelerate
+        spawnedCar.speed = Math.min(spawnedCar.maxSpeed, spawnedCar.speed + 30 * deltaTime); // Accelerate
       }
 
-      // Move car
-      const distanceTraveled = (car.speed * deltaTime) / 3600;
-      car.distance += distanceTraveled;
-
-      const routeLength = turf.length(car.routeGeometry, { units: 'kilometers' });
-      if (car.distance >= routeLength) {
-        car.distance = 0;
-      }
-
-      const point = turf.along(car.routeGeometry, car.distance, { units: 'kilometers' });
-      car.position = point.geometry.coordinates as [number, number];
-
-      const lookaheadDistance = 0.002;
-      const nextDistance = Math.min(car.distance + lookaheadDistance, routeLength);
-      const nextPoint = turf.along(car.routeGeometry, nextDistance, { units: 'kilometers' });
-
-      if (nextPoint && nextPoint.geometry.coordinates) {
-        car.bearing = turf.bearing(
-          turf.point(car.position),
-          turf.point(nextPoint.geometry.coordinates)
-        );
-      }
+      // Update car position along route (handled by spawner)
+      spawner.updateCarPosition(spawnedCar.id, deltaTime);
 
       // Update 3D mesh position
-      if (car.mesh) {
-        const worldPos = projectToWorld(car.position);
-        car.mesh.position.set(worldPos.x, worldPos.y, worldPos.z);
-        car.mesh.rotation.z = (car.bearing * Math.PI) / 180;
+      const mesh = carMeshes[spawnedCar.id];
+      if (mesh) {
+        const worldPos = projectToWorld(spawnedCar.position);
+        mesh.position.set(worldPos.x, worldPos.y, worldPos.z);
+        mesh.rotation.z = (spawnedCar.bearing * Math.PI) / 180;
+      }
+    });
+
+    // Remove meshes for despawned cars
+    Object.entries(carMeshes).forEach(([carId, mesh]) => {
+      if (!processedCarIds.has(carId)) {
+        if (threeScene) {
+          threeScene.remove(mesh);
+        }
+        delete carMeshes[carId];
       }
     });
 
@@ -809,7 +1118,7 @@ async function initializeTrafficSimulation(map: mapboxgl.Map, center: [number, n
       if (carsSource && carsSource.setData) {
         carsSource.setData({
           type: 'FeatureCollection',
-          features: cars.map(car => ({
+          features: activeCars.map(car => ({
             type: 'Feature',
             geometry: {
               type: 'Point',
@@ -819,6 +1128,24 @@ async function initializeTrafficSimulation(map: mapboxgl.Map, center: [number, n
               id: car.id,
               color: car.color,
               speed: car.speed.toFixed(1),
+            },
+          })),
+        });
+      }
+    }
+
+    // Update route visualization (check if source exists first)
+    if (map && map.getSource && map.getSource('car-routes')) {
+      const routesSource = map.getSource('car-routes') as mapboxgl.GeoJSONSource;
+      if (routesSource && routesSource.setData) {
+        routesSource.setData({
+          type: 'FeatureCollection',
+          features: activeCars.map(car => ({
+            type: 'Feature',
+            properties: { carId: car.id },
+            geometry: {
+              type: 'LineString',
+              coordinates: car.route.waypoints,
             },
           })),
         });
@@ -848,8 +1175,14 @@ async function initializeTrafficSimulation(map: mapboxgl.Map, center: [number, n
     requestAnimationFrame(animateCars);
   }
 
-  console.log("Starting 3D animation...");
+  console.log("Starting 3D animation with dynamic spawning...");
   animateCars();
+
+  // Log spawner stats periodically
+  setInterval(() => {
+    const stats = spawner.getStats();
+    console.log(`🚗 Traffic Stats: ${stats.activeCars}/${stats.maxCars} cars | ${stats.activeSpawnPoints}/${stats.spawnPoints} spawn points active`);
+  }, 10000); // Every 10 seconds
 }
 
 export default function Map({
@@ -860,12 +1193,16 @@ export default function Map({
 }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
+  const initialized = useRef(false); // Prevent multiple initializations
   const [mapLoaded, setMapLoaded] = useState(false);
   const [isSatellite, setIsSatellite] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState<string>('Initializing map...');
+  const [networkError, setNetworkError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!mapContainer.current) return;
-    if (map.current) return; // Initialize map only once
+    if (initialized.current) return; // Already initialized, skip
+    initialized.current = true; // Mark as initialized
 
     // Set Mapbox access token
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
@@ -908,15 +1245,29 @@ export default function Map({
     map.current.addControl(geolocateControl, "top-right");
 
     // Set map loaded state and start zoom animation
-    map.current.on("load", () => {
+    map.current.on("load", async () => {
       setMapLoaded(true);
 
       if (!map.current) return;
 
       const mapInstance = map.current;
 
-      // Initialize traffic simulation
-      initializeTrafficSimulation(mapInstance, initialCenter);
+      try {
+        // Initialize traffic simulation with progress updates
+        await initializeTrafficSimulation(
+          mapInstance,
+          initialCenter,
+          (status) => setLoadingStatus(status),
+          false // Set to true to enable debug visualization
+        );
+
+        setLoadingStatus('Simulation ready');
+        setNetworkError(null);
+      } catch (error) {
+        console.error('Failed to initialize simulation:', error);
+        setNetworkError(error instanceof Error ? error.message : 'Failed to load road network');
+        setLoadingStatus('Error - Running in limited mode');
+      }
 
       // Fly to Queen's University after a short delay
       setTimeout(() => {
@@ -938,7 +1289,9 @@ export default function Map({
         map.current = null;
       }
     };
-  }, [initialCenter, initialZoom, style]);
+    // Empty dependency array - only run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Toggle satellite view
   const toggleSatellite = () => {
@@ -1041,11 +1394,47 @@ export default function Map({
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainer} className={className} />
+
+      {/* Loading overlay */}
       {!mapLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-900">
-          <p className="text-gray-600 dark:text-gray-400">Loading map...</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900">
+          <div className="text-center">
+            <div className="mb-4">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status">
+                <span className="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]">Loading...</span>
+              </div>
+            </div>
+            <p className="text-gray-600 dark:text-gray-400">{loadingStatus}</p>
+          </div>
         </div>
       )}
+
+      {/* Error notification */}
+      {networkError && mapLoaded && (
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-200 px-4 py-3 rounded-lg shadow-lg z-20 max-w-md">
+          <div className="flex items-center">
+            <span className="mr-2">⚠️</span>
+            <div>
+              <p className="font-bold">Road Network Error</p>
+              <p className="text-sm">{networkError}</p>
+            </div>
+            <button
+              onClick={() => setNetworkError(null)}
+              className="ml-4 text-red-700 dark:text-red-200 hover:text-red-900 dark:hover:text-red-100"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Status indicator when loaded */}
+      {mapLoaded && !networkError && loadingStatus !== 'Simulation ready' && (
+        <div className="absolute top-20 left-4 bg-blue-100 dark:bg-blue-900 border border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-200 px-3 py-2 rounded-lg shadow-md z-10 text-sm">
+          {loadingStatus}
+        </div>
+      )}
+
       {/* Satellite toggle button */}
       <button
         onClick={toggleSatellite}

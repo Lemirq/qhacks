@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import Map from '@/components/Map';
+import ThreeMap from '@/components/ThreeMap';
 
 export default function Home() {
   return (
@@ -23,7 +23,7 @@ export default function Home() {
         </div>
       </header>
       <main className="flex-1 relative">
-        <Map />
+        <ThreeMap />
       </main>
     </div>
   );

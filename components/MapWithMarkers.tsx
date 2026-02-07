@@ -1,3 +1,9 @@
+/**
+ * @deprecated This component uses Mapbox GL and is being replaced by ThreeMap.tsx
+ * which uses Three.js for better 3D rendering. This file is archived and should
+ * not be used for new features.
+ */
+
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
