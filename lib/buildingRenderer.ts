@@ -3,9 +3,18 @@
  * Renders buildings as extruded 3D meshes in Three.js
  */
 
-import * as THREE from 'three';
-import { Building } from './buildingData';
-import { CityProjection } from './projection';
+import * as THREE from "three";
+import { Building } from "./buildingData";
+import { CityProjection } from "./projection";
+
+// ==================== BUILDING HEIGHT CONFIGURATION ====================
+// Adjust this multiplier to make buildings taller or shorter
+// Examples:
+//   1.0 = Real-world proportions (with scale factor applied)
+//   2.0 = Buildings appear twice as tall (more dramatic)
+//   0.5 = Buildings appear half as tall (more subtle)
+export const HEIGHT_MULTIPLIER = 8.0;
+// ======================================================================
 
 /**
  * Render buildings as 3D meshes and add them to the scene
@@ -17,7 +26,7 @@ import { CityProjection } from './projection';
 export function renderBuildings(
   buildings: Building[],
   projection: typeof CityProjection,
-  scene: THREE.Scene
+  scene: THREE.Scene,
 ): void {
   console.log(`Rendering ${buildings.length} buildings...`);
 
@@ -46,7 +55,7 @@ export function renderBuildings(
  */
 function createBuildingMesh(
   building: Building,
-  projection: typeof CityProjection
+  projection: typeof CityProjection,
 ): THREE.Mesh | null {
   // Need at least 3 points for a valid polygon
   if (building.footprint.length < 3) {
@@ -79,8 +88,12 @@ function createBuildingMesh(
   }
 
   // Extrude settings
+  // Apply the same scale factor used for horizontal coordinates
+  // to maintain proper proportions (SCALE_FACTOR = 10/1.4 ≈ 7.14)
+  // Then apply HEIGHT_MULTIPLIER for visual adjustments
+  const SCALE_FACTOR = 10 / 1.4;
   const extrudeSettings: THREE.ExtrudeGeometryOptions = {
-    depth: building.height,
+    depth: building.height * SCALE_FACTOR * HEIGHT_MULTIPLIER,
     bevelEnabled: false,
   };
 
@@ -100,8 +113,10 @@ function createBuildingMesh(
   const mesh = new THREE.Mesh(geometry, material);
 
   // Position at ground level (y=0)
-  // The geometry is already centered, so we just need to set the base at y=0
-  mesh.position.y = 0;
+  // After rotation, the extruded geometry is centered, so we need to lift it
+  // by half its height to make the base sit at y=0 and extend upward
+  const scaledHeight = building.height * SCALE_FACTOR * HEIGHT_MULTIPLIER;
+  mesh.position.y = scaledHeight / 2;
 
   // Enable shadows
   mesh.castShadow = true;
@@ -117,43 +132,43 @@ function createBuildingMesh(
  * Get building color based on type
  */
 function getBuildingColor(type?: string): number {
-  if (!type || type === 'yes') {
+  if (!type || type === "yes") {
     return 0x888888; // Default gray
   }
 
   // Vary colors by building type
   switch (type) {
-    case 'residential':
-    case 'house':
-    case 'apartments':
+    case "residential":
+    case "house":
+    case "apartments":
       return 0xb8956a; // Tan/beige
 
-    case 'commercial':
-    case 'retail':
-    case 'shop':
+    case "commercial":
+    case "retail":
+    case "shop":
       return 0x7a9bc4; // Light blue
 
-    case 'industrial':
-    case 'warehouse':
+    case "industrial":
+    case "warehouse":
       return 0x8b7a6a; // Brown
 
-    case 'school':
-    case 'university':
-    case 'college':
+    case "school":
+    case "university":
+    case "college":
       return 0xa47d5c; // Academic brown
 
-    case 'hospital':
-    case 'clinic':
+    case "hospital":
+    case "clinic":
       return 0xc47d7d; // Reddish
 
-    case 'church':
-    case 'cathedral':
-    case 'chapel':
+    case "church":
+    case "cathedral":
+    case "chapel":
       return 0x9a8a7a; // Stone gray
 
-    case 'civic':
-    case 'public':
-    case 'government':
+    case "civic":
+    case "public":
+    case "government":
       return 0x7a8a9a; // Blue gray
 
     default:

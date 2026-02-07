@@ -1,13 +1,406 @@
 @import "tailwindcss";
 
 body {
-  font-family: 'Archivo', sans-serif;
+  font-family: "Archivo", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, .serif-font {
-  font-family: 'Lora', serif;
+@layer components {
+  .lp {
+    min-height: 100vh;
+    background: #f4efe6;
+    color: #1a1611;
+  }
+
+  .lp-nav {
+    position: fixed;
+    top: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: min(600px, 88vw);
+    padding: 0.85rem 1.8rem;
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(14px);
+    border-radius: 50px;
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.04),
+      0 8px 30px rgba(0, 0, 0, 0.06);
+  }
+
+  .lp-nav-logo {
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-weight: 700;
+    font-size: 1.15rem;
+    color: #1a1611;
+    letter-spacing: -0.01em;
+  }
+
+  .lp-nav-links {
+    display: flex;
+    gap: 1.75rem;
+  }
+
+  .lp-nav-links a {
+    font-size: 0.78rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #3d362c;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .lp-nav-links a:hover {
+    color: #1a1611;
+  }
+
+  .lp-hero-wrap {
+    padding: 1.25rem;
+  }
+
+  .lp-hero {
+    position: relative;
+    width: 100%;
+    height: 92vh;
+    min-height: 520px;
+    border-radius: 24px;
+    overflow: hidden;
+    cursor: default;
+    --mx: 0px;
+    --my: 0px;
+  }
+
+  .lp-hero-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    user-select: none;
+  }
+
+  .lp-hero-vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(to top, rgba(0, 0, 0, 0.45) 0%, transparent 40%),
+      radial-gradient(
+        ellipse 80% 80% at 50% 50%,
+        transparent 40%,
+        rgba(0, 0, 0, 0.25) 100%
+      );
+  }
+
+  .lp-fireflies {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    transition: transform 0.4s ease-out;
+    transform: translate(calc(var(--mx) * 1.8), calc(var(--my) * 1.5));
+  }
+
+  .lp-firefly {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #e8d49a;
+    box-shadow:
+      0 0 6px 2px rgba(232, 212, 154, 0.6),
+      0 0 18px 6px rgba(232, 212, 154, 0.2);
+    animation: fireflyPulse 3s ease-in-out infinite alternate;
+  }
+
+  .lp-firefly:nth-child(odd) {
+    width: 3px;
+    height: 3px;
+    background: #f0e6c0;
+  }
+
+  .lp-hero-title {
+    position: absolute;
+    bottom: 2.5rem;
+    left: 3rem;
+    z-index: 3;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(3rem, 7vw, 5.5rem);
+    color: #faf5eb;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    text-shadow: 0 2px 30px rgba(0, 0, 0, 0.4);
+    margin: 0;
+  }
+
+  .lp-hero-cta {
+    position: absolute;
+    bottom: 2.8rem;
+    right: 3rem;
+    z-index: 3;
+    padding: 0.75rem 2rem;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-size: 0.95rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #faf5eb;
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 50px;
+    transition:
+      background 0.25s,
+      transform 0.2s;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .lp-hero-cta:hover {
+    background: rgba(255, 255, 255, 0.18);
+    transform: translateY(-2px);
+  }
+
+  .lp-statement {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 7rem 2rem 6rem;
+    text-align: center;
+  }
+
+  .lp-stmt-line {
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-size: clamp(1.3rem, 2.8vw, 1.8rem);
+    font-weight: 400;
+    line-height: 1.6;
+    color: #1a1611;
+    margin: 0 0 2.5rem;
+  }
+
+  .lp-stmt-large {
+    font-size: clamp(1.5rem, 3.2vw, 2.2rem);
+    line-height: 1.55;
+    margin-bottom: 0;
+  }
+
+  .lp-stmt-large em {
+    font-style: italic;
+    color: #3d362c;
+  }
+
+  .lp-details {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    max-width: 1000px;
+    margin: 0 auto 4rem;
+    padding: 0 2rem;
+  }
+
+  .lp-detail {
+    padding: 2.5rem 2rem;
+    border-top: 1px solid #e8e0d2;
+  }
+
+  .lp-detail-num {
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-style: italic;
+    font-size: 0.85rem;
+    color: #8a8279;
+    display: block;
+    margin-bottom: 1rem;
+  }
+
+  .lp-detail h3 {
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin: 0 0 0.75rem;
+    letter-spacing: -0.01em;
+  }
+
+  .lp-detail p {
+    font-size: 0.92rem;
+    line-height: 1.7;
+    color: #8a8279;
+    margin: 0;
+  }
+
+  .lp-detail-link {
+    display: inline-block;
+    margin-top: 1rem;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-style: italic;
+    font-size: 0.88rem;
+    color: #3d362c;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .lp-detail-link:hover {
+    color: #1a1611;
+  }
+
+  .lp-closing {
+    text-align: center;
+    padding: 5rem 2rem;
+    border-top: 1px solid #e8e0d2;
+  }
+
+  .lp-closing-text {
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-style: italic;
+    font-size: 1rem;
+    color: #8a8279;
+    margin: 0 0 2rem;
+    letter-spacing: 0.04em;
+  }
+
+  .lp-closing-ctas {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .lp-btn-warm {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.8rem 2rem;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-size: 0.9rem;
+    background: #1a1611;
+    color: #f4efe6;
+    border-radius: 50px;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+    transition:
+      transform 0.15s,
+      box-shadow 0.25s;
+  }
+
+  .lp-btn-warm:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(26, 22, 17, 0.18);
+  }
+
+  .lp-btn-outline {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.8rem 2rem;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-size: 0.9rem;
+    background: transparent;
+    color: #3d362c;
+    border: 1px solid #e8e0d2;
+    border-radius: 50px;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+    transition:
+      border-color 0.2s,
+      color 0.2s;
+  }
+
+  .lp-btn-outline:hover {
+    border-color: #3d362c;
+    color: #1a1611;
+  }
+
+  .lp-footer {
+    text-align: center;
+    padding: 2.5rem 2rem;
+    border-top: 1px solid #e8e0d2;
+  }
+
+  .lp-footer a {
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #8a8279;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .lp-footer a:hover {
+    color: #1a1611;
+  }
+}
+
+@keyframes fireflyPulse {
+  0% {
+    opacity: 0.15;
+    transform: scale(0.8) translateY(0px);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.3;
+    transform: scale(1.1) translateY(-6px);
+  }
+}
+
+@media (max-width: 768px) {
+  .lp-hero-wrap {
+    padding: 0.75rem;
+  }
+
+  .lp-hero {
+    height: 75vh;
+    border-radius: 18px;
+  }
+
+  .lp-hero-title {
+    bottom: 2rem;
+    left: 1.75rem;
+  }
+
+  .lp-hero-cta {
+    bottom: 2rem;
+    right: 1.75rem;
+    font-size: 0.82rem;
+    padding: 0.6rem 1.4rem;
+  }
+
+  .lp-details {
+    grid-template-columns: 1fr;
+    padding: 0 1.25rem;
+  }
+
+  .lp-statement {
+    padding: 5rem 1.5rem 4rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .lp-hero-cta {
+    bottom: auto;
+    top: 5.5rem;
+    right: 1.25rem;
+  }
+
+  .lp-hero-title {
+    font-size: 2.8rem;
+    bottom: 1.5rem;
+    left: 1.25rem;
+  }
+
+  .lp-closing-ctas {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+h1,
+h2,
+h3,
+.serif-font {
+  font-family: "Lora", serif;
 }
 
 /* Glass morphism effect */
@@ -19,7 +412,11 @@ h1, h2, h3, .serif-font {
 
 /* Map gradient overlay */
 .map-gradient {
-  background: radial-gradient(circle at center, transparent 0%, rgba(241, 245, 249, 0.6) 100%);
+  background: radial-gradient(
+    circle at center,
+    transparent 0%,
+    rgba(241, 245, 249, 0.6) 100%
+  );
 }
 
 /* Custom scrollbar for light theme */

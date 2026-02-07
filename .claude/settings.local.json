@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(npx next build:*)",
+      "WebFetch(domain:epicurusscientific.com)",
+      "Bash(npx next dev:*)",
+      "Bash(curl:*)",
+      "Bash(npx tsx:*)",
+      "Bash(python3:*)",
+      "Bash(cat:*)"
+    ]
+  }
+}

@@ -42,3 +42,6 @@ yarn-error.log*
 next-env.d.ts
 model/.next/dev/build/chunks/[root-of-the-server]__992036af._.js.map
 model/.next/
+
+# Map data - keep processed, ignore raw
+public/map-data/*-raw.json
