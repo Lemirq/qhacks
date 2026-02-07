@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import * as turf from "@turf/turf";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 // Scene management
 import { createSceneManager, handleResize } from "@/lib/sceneManager";
@@ -23,6 +24,14 @@ import { RoadNetwork } from "@/lib/roadNetwork";
 import { Pathfinder } from "@/lib/pathfinding";
 import { Spawner, SpawnedCar } from "@/lib/spawning";
 
+interface PlacedBuilding {
+  id: string;
+  modelPath: string;
+  position: { x: number; y: number; z: number };
+  lat: number;
+  lng: number;
+}
+
 interface ThreeMapProps {
   initialCenter?: [number, number];
   className?: string;
@@ -33,6 +42,7 @@ interface ThreeMapProps {
     worldY: number;
     worldZ: number;
   } | null) => void;
+  placedBuildings?: PlacedBuilding[];
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -249,6 +259,7 @@ export default function ThreeMap({
   initialCenter = [-76.4951, 44.2253], // Queen's University
   className = "w-full h-full",
   onCoordinateClick,
+  placedBuildings = [],
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -777,6 +788,59 @@ export default function ThreeMap({
       return () => canvas.removeEventListener('click', handleCanvasClick);
     }
   }, [onCoordinateClick]);
+
+  // Load and display placed buildings
+  useEffect(() => {
+    if (!groupsRef.current || !isReady) return;
+
+    const loader = new GLTFLoader();
+    const loadedModels: THREE.Group[] = [];
+
+    // Remove all previously loaded custom buildings
+    const customBuildingsGroup = groupsRef.current.dynamicObjects;
+    const objectsToRemove: THREE.Object3D[] = [];
+    customBuildingsGroup.children.forEach((child) => {
+      if (child.userData.isCustomBuilding) {
+        objectsToRemove.push(child);
+      }
+    });
+    objectsToRemove.forEach((obj) => customBuildingsGroup.remove(obj));
+
+    // Load and place each building
+    placedBuildings.forEach((building) => {
+      loader.load(
+        building.modelPath,
+        (gltf) => {
+          const model = gltf.scene;
+          model.userData.isCustomBuilding = true;
+          model.userData.buildingId = building.id;
+
+          // Position the model
+          model.position.set(building.position.x, building.position.y, building.position.z);
+
+          // Scale the model appropriately (adjust as needed)
+          model.scale.set(10, 10, 10);
+
+          // Add to scene
+          groupsRef.current?.dynamicObjects.add(model);
+          loadedModels.push(model);
+
+          console.log(`✅ Loaded building at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`);
+        },
+        undefined,
+        (error) => {
+          console.error(`❌ Error loading building model:`, error);
+        }
+      );
+    });
+
+    return () => {
+      // Cleanup loaded models when component unmounts
+      loadedModels.forEach((model) => {
+        groupsRef.current?.dynamicObjects.remove(model);
+      });
+    };
+  }, [placedBuildings, isReady]);
 
   return (
     <div className={`relative ${className}`}>

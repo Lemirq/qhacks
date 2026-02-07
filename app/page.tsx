@@ -2,7 +2,15 @@
 
 import { useState } from 'react';
 import ThreeMap from '@/components/ThreeMap';
-import { Landmark, SlidersHorizontal, Building2, TrafficCone, Leaf, FileText, PlayCircle, Clock, Settings, MapPin, Copy, X } from 'lucide-react';
+import { Landmark, SlidersHorizontal, Building2, TrafficCone, Leaf, FileText, PlayCircle, Clock, Settings, MapPin, Copy, X, Plus, Trash2 } from 'lucide-react';
+
+interface PlacedBuilding {
+  id: string;
+  modelPath: string;
+  position: { x: number; y: number; z: number };
+  lat: number;
+  lng: number;
+}
 
 export default function Home() {
   const [clickedCoordinate, setClickedCoordinate] = useState<{
@@ -12,16 +20,60 @@ export default function Home() {
     worldY: number;
     worldZ: number;
   } | null>(null);
+
+  const [placedBuildings, setPlacedBuildings] = useState<PlacedBuilding[]>([]);
+  const [isPlacementMode, setIsPlacementMode] = useState(false);
+
+  const handleMapClick = (coordinate: {
+    lat: number;
+    lng: number;
+    worldX: number;
+    worldY: number;
+    worldZ: number;
+  } | null) => {
+    if (coordinate) {
+      if (isPlacementMode) {
+        // Place a building at the clicked location
+        const newBuilding: PlacedBuilding = {
+          id: `building-${Date.now()}`,
+          modelPath: '/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf',
+          position: { x: coordinate.worldX, y: coordinate.worldY, z: coordinate.worldZ },
+          lat: coordinate.lat,
+          lng: coordinate.lng,
+        };
+        setPlacedBuildings([...placedBuildings, newBuilding]);
+        setIsPlacementMode(false); // Exit placement mode after placing
+      } else {
+        // Just show the coordinate
+        setClickedCoordinate(coordinate);
+      }
+    }
+  };
+
+  const removeBuilding = (id: string) => {
+    setPlacedBuildings(placedBuildings.filter(b => b.id !== id));
+  };
+
   return (
     <div className="relative min-h-screen w-full bg-slate-100 text-slate-800 overflow-hidden">
       {/* MAP BACKGROUND (3D Simulation) */}
       <div className="absolute inset-0 z-0">
         <ThreeMap
           className="w-full h-full"
-          onCoordinateClick={setClickedCoordinate}
+          onCoordinateClick={handleMapClick}
+          placedBuildings={placedBuildings}
         />
         {/* Map gradient overlay for better UI contrast */}
         <div className="absolute inset-0 map-gradient pointer-events-none"></div>
+
+        {/* Placement Mode Indicator */}
+        {isPlacementMode && (
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 glass border-accent-blue px-6 py-3 rounded-lg shadow-lg z-50 pointer-events-none">
+            <p className="text-sm font-black text-accent-blue uppercase tracking-tight">
+              Click on the map to place building
+            </p>
+          </div>
+        )}
       </div>
 
       {/* SIDEBARS CONTAINER */}
@@ -256,6 +308,58 @@ export default function Home() {
                   <span>1200 HRS</span>
                   <span>1700 HRS</span>
                   <span>2200 HRS</span>
+                </div>
+              </div>
+
+              {/* Building Placement */}
+              <div className="pt-6 mt-6 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="ui-label">Building Placement</h3>
+                  <button
+                    onClick={() => setIsPlacementMode(!isPlacementMode)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider transition-colors ${
+                      isPlacementMode
+                        ? 'bg-accent-blue text-white'
+                        : 'bg-white border border-accent-blue text-accent-blue hover:bg-blue-50'
+                    }`}
+                  >
+                    <Plus size={12} />
+                    {isPlacementMode ? 'Cancel' : 'Place'}
+                  </button>
+                </div>
+
+                <div className="bg-slate-50 rounded-md p-3 border border-slate-200">
+                  <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Model: Let Me Sleep Building</p>
+
+                  {placedBuildings.length === 0 ? (
+                    <p className="text-[10px] text-slate-500 text-center py-4">
+                      No buildings placed yet
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar">
+                      {placedBuildings.map((building) => (
+                        <div
+                          key={building.id}
+                          className="flex items-center justify-between bg-white rounded p-2 border border-slate-200"
+                        >
+                          <div className="flex-1">
+                            <p className="text-[10px] font-bold text-slate-900">
+                              {building.lat.toFixed(5)}°, {building.lng.toFixed(5)}°
+                            </p>
+                            <p className="text-[8px] text-slate-500">
+                              X: {building.position.x.toFixed(1)}m, Z: {building.position.z.toFixed(1)}m
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => removeBuilding(building.id)}
+                            className="p-1 hover:bg-red-50 rounded transition-colors text-slate-400 hover:text-red-600"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
