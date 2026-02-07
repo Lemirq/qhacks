@@ -1,11 +1,7 @@
 @import "tailwindcss";
 
-* {
-  box-sizing: border-box;
-}
-
 body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: "Archivo", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -31,11 +27,13 @@ body {
     background: rgba(255, 255, 255, 0.88);
     backdrop-filter: blur(14px);
     border-radius: 50px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 8px 30px rgba(0, 0, 0, 0.06);
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.04),
+      0 8px 30px rgba(0, 0, 0, 0.06);
   }
 
   .lp-nav-logo {
-    font-family: var(--font-playfair), 'Playfair Display', Georgia, serif;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
     font-weight: 700;
     font-size: 1.15rem;
     color: #1a1611;
@@ -91,7 +89,11 @@ body {
     pointer-events: none;
     background:
       linear-gradient(to top, rgba(0, 0, 0, 0.45) 0%, transparent 40%),
-      radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.25) 100%);
+      radial-gradient(
+        ellipse 80% 80% at 50% 50%,
+        transparent 40%,
+        rgba(0, 0, 0, 0.25) 100%
+      );
   }
 
   .lp-fireflies {
@@ -109,7 +111,9 @@ body {
     height: 4px;
     border-radius: 50%;
     background: #e8d49a;
-    box-shadow: 0 0 6px 2px rgba(232, 212, 154, 0.6), 0 0 18px 6px rgba(232, 212, 154, 0.2);
+    box-shadow:
+      0 0 6px 2px rgba(232, 212, 154, 0.6),
+      0 0 18px 6px rgba(232, 212, 154, 0.2);
     animation: fireflyPulse 3s ease-in-out infinite alternate;
   }
 
@@ -124,7 +128,7 @@ body {
     bottom: 2.5rem;
     left: 3rem;
     z-index: 3;
-    font-family: var(--font-playfair), 'Playfair Display', Georgia, serif;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
     font-style: italic;
     font-weight: 400;
     font-size: clamp(3rem, 7vw, 5.5rem);
@@ -141,7 +145,7 @@ body {
     right: 3rem;
     z-index: 3;
     padding: 0.75rem 2rem;
-    font-family: var(--font-playfair), 'Playfair Display', Georgia, serif;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
     font-size: 0.95rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -151,7 +155,9 @@ body {
     backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 50px;
-    transition: background 0.25s, transform 0.2s;
+    transition:
+      background 0.25s,
+      transform 0.2s;
     text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
   }
 
@@ -168,7 +174,7 @@ body {
   }
 
   .lp-stmt-line {
-    font-family: var(--font-playfair), 'Playfair Display', Georgia, serif;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
     font-size: clamp(1.3rem, 2.8vw, 1.8rem);
     font-weight: 400;
     line-height: 1.6;
@@ -202,7 +208,7 @@ body {
   }
 
   .lp-detail-num {
-    font-family: var(--font-playfair), 'Playfair Display', Georgia, serif;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
     font-style: italic;
     font-size: 0.85rem;
     color: #8a8279;
@@ -211,7 +217,7 @@ body {
   }
 
   .lp-detail h3 {
-    font-family: var(--font-playfair), 'Playfair Display', Georgia, serif;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
     font-size: 1.35rem;
     font-weight: 600;
     margin: 0 0 0.75rem;
@@ -228,7 +234,7 @@ body {
   .lp-detail-link {
     display: inline-block;
     margin-top: 1rem;
-    font-family: var(--font-playfair), 'Playfair Display', Georgia, serif;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
     font-style: italic;
     font-size: 0.88rem;
     color: #3d362c;
@@ -247,7 +253,7 @@ body {
   }
 
   .lp-closing-text {
-    font-family: var(--font-playfair), 'Playfair Display', Georgia, serif;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
     font-style: italic;
     font-size: 1rem;
     color: #8a8279;
@@ -266,14 +272,16 @@ body {
     display: inline-flex;
     align-items: center;
     padding: 0.8rem 2rem;
-    font-family: var(--font-playfair), 'Playfair Display', Georgia, serif;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
     font-size: 0.9rem;
     background: #1a1611;
     color: #f4efe6;
     border-radius: 50px;
     text-decoration: none;
     letter-spacing: 0.02em;
-    transition: transform 0.15s, box-shadow 0.25s;
+    transition:
+      transform 0.15s,
+      box-shadow 0.25s;
   }
 
   .lp-btn-warm:hover {
@@ -285,7 +293,7 @@ body {
     display: inline-flex;
     align-items: center;
     padding: 0.8rem 2rem;
-    font-family: var(--font-playfair), 'Playfair Display', Georgia, serif;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
     font-size: 0.9rem;
     background: transparent;
     color: #3d362c;
@@ -293,7 +301,9 @@ body {
     border-radius: 50px;
     text-decoration: none;
     letter-spacing: 0.02em;
-    transition: border-color 0.2s, color 0.2s;
+    transition:
+      border-color 0.2s,
+      color 0.2s;
   }
 
   .lp-btn-outline:hover {
@@ -322,9 +332,17 @@ body {
 }
 
 @keyframes fireflyPulse {
-  0% { opacity: 0.15; transform: scale(0.8) translateY(0px); }
-  50% { opacity: 1; }
-  100% { opacity: 0.3; transform: scale(1.1) translateY(-6px); }
+  0% {
+    opacity: 0.15;
+    transform: scale(0.8) translateY(0px);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.3;
+    transform: scale(1.1) translateY(-6px);
+  }
 }
 
 @media (max-width: 768px) {
@@ -376,4 +394,59 @@ body {
     flex-direction: column;
     align-items: center;
   }
+}
+
+h1,
+h2,
+h3,
+.serif-font {
+  font-family: "Lora", serif;
+}
+
+/* Glass morphism effect */
+.glass {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid #e2e8f0;
+}
+
+/* Map gradient overlay */
+.map-gradient {
+  background: radial-gradient(
+    circle at center,
+    transparent 0%,
+    rgba(241, 245, 249, 0.6) 100%
+  );
+}
+
+/* Custom scrollbar for light theme */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Sidebar transition */
+.sidebar-transition {
+  transition: all 0.2s ease-in-out;
+}
+
+/* UI Label utility class */
+.ui-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
 }

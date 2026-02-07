@@ -90,10 +90,9 @@ function createBuildingMesh(
   // Rotate geometry to stand upright (extrusion happens along Z, we want Y)
   geometry.rotateX(Math.PI / 2);
 
-  // Choose material color based on building type
-  const color = getBuildingColor(building.type);
+  // Use uniform color for all buildings
   const material = new THREE.MeshLambertMaterial({
-    color,
+    color: 0xcccccc, // Light gray for all buildings
     flatShading: false,
   });
 

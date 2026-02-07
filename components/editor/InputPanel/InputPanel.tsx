@@ -2,13 +2,12 @@ import { useBuildings } from '@/lib/editor/contexts/BuildingsContext';
 import { DimensionsForm } from './DimensionsForm';
 import { TextureSelector } from './TextureSelector';
 import { WindowForm } from './WindowForm';
-import { RoofForm } from './RoofForm';
 import { BlueprintUploader } from './BlueprintUploader';
 import { BuildingList } from './BuildingList';
 import { DEFAULT_BUILDING_SPEC } from '@/lib/editor/types/buildingSpec';
 
 export function InputPanel() {
-  const { getSelectedBuilding, updateBuilding } = useBuildings();
+  const { getSelectedBuilding, updateBuilding, updateBuildingRotation } = useBuildings();
   const selectedBuilding = getSelectedBuilding();
 
   const handleUpdate = (updates: Partial<typeof DEFAULT_BUILDING_SPEC>) => {
@@ -48,7 +47,7 @@ export function InputPanel() {
               </h3>
               <button
                 onClick={handleReset}
-                className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-100 border-amber-400/60 text-amber-700 hover:bg-amber-500 hover:border-amber-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out"
               >
                 Reset
               </button>
@@ -56,11 +55,13 @@ export function InputPanel() {
 
             <div className="space-y-6">
               <div className="bg-white p-6 rounded-xl border-2 border-gray-200 shadow-sm">
-                <DimensionsForm spec={selectedBuilding.spec} onUpdate={handleUpdate} />
-              </div>
-
-              <div className="bg-white p-6 rounded-xl border-2 border-gray-200 shadow-sm">
-                <RoofForm spec={selectedBuilding.spec} onUpdate={handleUpdate} />
+                <DimensionsForm
+                  spec={selectedBuilding.spec}
+                  onUpdate={handleUpdate}
+                  buildingId={selectedBuilding.id}
+                  rotation={selectedBuilding.rotation}
+                  onRotationChange={(rotation) => updateBuildingRotation(selectedBuilding.id, rotation)}
+                />
               </div>
 
               <div className="bg-white p-6 rounded-xl border-2 border-gray-200 shadow-sm">

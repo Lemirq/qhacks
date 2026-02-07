@@ -1,25 +1,22 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
+import { Archivo, Lora } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const archivo = Archivo({
+  weight: ["400", "500", "700", "800"],
   subsets: ["latin"],
+  variable: "--font-archivo",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const lora = Lora({
+  weight: ["400", "700"],
   subsets: ["latin"],
-});
-
-const playfair = Playfair_Display({
-  variable: "--font-playfair",
-  subsets: ["latin"],
+  variable: "--font-lora",
 });
 
 export const metadata: Metadata = {
-  title: "KingsView — Urban Planning for Kingston",
-  description: "3D urban planning tool for the City of Kingston. Design buildings, simulate construction timelines, and measure environmental impact before breaking ground.",
+  title: "Kingston Municipal Planning Authority",
+  description: "Geospatial planning and traffic simulation platform for Kingston",
 };
 
 export default function RootLayout({
@@ -30,9 +27,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} antialiased`}
+        className={`${archivo.variable} ${lora.variable} antialiased`}
       >
         {children}
+        <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js" async></script>
       </body>
     </html>
   );

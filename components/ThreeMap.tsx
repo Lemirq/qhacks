@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import * as turf from "@turf/turf";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 // Scene management
 import { createSceneManager, handleResize } from "@/lib/sceneManager";
@@ -12,25 +13,36 @@ import { createSceneManager, handleResize } from "@/lib/sceneManager";
 import { fetchBuildings } from "@/lib/buildingData";
 import { renderBuildings } from "@/lib/buildingRenderer";
 import { renderRoads } from "@/lib/roadRenderer";
-import {
-  createSky,
-  setupFog,
-  createGround,
-  fetchSatelliteImagery
-} from "@/lib/environmentRenderer";
+import { createGround } from "@/lib/environmentRenderer";
 
 // Projection and camera
 import { CityProjection } from "@/lib/projection";
-import { setupControls, flyToQueens, updateTweens } from "@/lib/cameraController";
+import { setupControls, flyToLocation, updateTweens } from "@/lib/cameraController";
 
 // Traffic simulation
 import { RoadNetwork } from "@/lib/roadNetwork";
 import { Pathfinder } from "@/lib/pathfinding";
 import { Spawner, SpawnedCar } from "@/lib/spawning";
 
+interface PlacedBuilding {
+  id: string;
+  modelPath: string;
+  position: { x: number; y: number; z: number };
+  lat: number;
+  lng: number;
+}
+
 interface ThreeMapProps {
   initialCenter?: [number, number];
   className?: string;
+  onCoordinateClick?: (coordinate: {
+    lat: number;
+    lng: number;
+    worldX: number;
+    worldY: number;
+    worldZ: number;
+  } | null) => void;
+  placedBuildings?: PlacedBuilding[];
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -246,6 +258,8 @@ async function fetchAllTrafficSignals(): Promise<
 export default function ThreeMap({
   initialCenter = [-76.4951, 44.2253], // Queen's University
   className = "w-full h-full",
+  onCoordinateClick,
+  placedBuildings = [],
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -263,6 +277,7 @@ export default function ThreeMap({
   const [groundRotation, setGroundRotation] = useState({ x: 0, y: 0, z: 0 });
   const [groundScale, setGroundScale] = useState({ x: 1, y: 1, z: 1 });
   const groundMeshRef = useRef<THREE.Mesh | null>(null);
+  const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster());
 
   useEffect(() => {
     if (!canvasRef.current || initialized.current) return;
@@ -298,58 +313,13 @@ export default function ThreeMap({
           enablePan: controls.enablePan
         });
 
-        // Add sky and fog
+        // Environment setup (sky and fog removed for clearer view)
         setLoadingStatus("Setting up environment...");
-        const sky = createSky();
-        groups.environment.add(sky);
-        setupFog(scene);
 
         // Define bounding box for Kingston/Queen's area
         const bbox: [number, number, number, number] = [44.220, -76.510, 44.240, -76.480];
 
-        // Fetch and apply satellite imagery
-        setLoadingStatus("Fetching satellite imagery...");
-        const satelliteImageUrl = await fetchSatelliteImagery(bbox);
-
-        let satelliteTexture: THREE.Texture | undefined;
-        if (satelliteImageUrl) {
-          const textureLoader = new THREE.TextureLoader();
-          satelliteTexture = await new Promise<THREE.Texture>((resolve, reject) => {
-            textureLoader.load(
-              satelliteImageUrl,
-              (texture) => {
-                // Enable proper texture filtering for better quality at all distances
-                texture.wrapS = THREE.ClampToEdgeWrapping;
-                texture.wrapT = THREE.ClampToEdgeWrapping;
-
-                // Use mipmaps for better quality at distance
-                texture.minFilter = THREE.LinearMipmapLinearFilter;
-                texture.magFilter = THREE.LinearFilter;
-
-                // Enable anisotropic filtering for better quality at oblique angles
-                if (rendererRef.current) {
-                  const maxAnisotropy = rendererRef.current.capabilities.getMaxAnisotropy();
-                  texture.anisotropy = Math.min(16, maxAnisotropy);
-                  console.log(`✅ Satellite texture loaded with anisotropy: ${texture.anisotropy}`);
-                }
-
-                // Generate mipmaps for better LOD
-                texture.generateMipmaps = true;
-                texture.needsUpdate = true;
-
-                console.log('✅ Satellite texture loaded successfully');
-                resolve(texture);
-              },
-              undefined,
-              (error) => {
-                console.warn('Failed to load satellite texture:', error);
-                reject(error);
-              }
-            );
-          }).catch(() => undefined);
-        }
-
-        // Create ground with satellite texture
+        // Create ground plane (plain white, no texture)
         setLoadingStatus("Creating ground plane...");
         const ground = createGround(
           {
@@ -359,7 +329,7 @@ export default function ThreeMap({
             maxLng: bbox[3]
           },
           CityProjection,
-          satelliteTexture
+          undefined // No texture - plain white ground
         );
         groups.environment.add(ground);
         groundMeshRef.current = ground;
@@ -481,9 +451,9 @@ export default function ThreeMap({
         setLoadingStatus("Starting simulation...");
         startAnimationLoop();
 
-        // Fly to Queen's campus
-        setLoadingStatus("Flying to Queen's...");
-        await flyToQueens(camera, controls);
+        // Fly to specific coordinates: Latitude 44.232760°, Longitude -76.479941°
+        setLoadingStatus("Flying to target location...");
+        await flyToLocation(camera, controls, [-76.479941, 44.232760], 600, 3500);
 
         // Ensure controls are re-enabled after animation
         controls.enabled = true;
@@ -692,9 +662,7 @@ export default function ThreeMap({
     };
   }, []);
 
-  // Keyboard controls for adjusting ground position, rotation, and scale - Disabled after calibration
-  // Uncomment to re-enable for recalibration
-  /*
+  // Keyboard controls for adjusting ground position, rotation, and scale
   useEffect(() => {
     function handleKeyPress(event: KeyboardEvent) {
       if (!groundMeshRef.current) return;
@@ -770,7 +738,109 @@ export default function ThreeMap({
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
-  */
+
+  // Click handler to find coordinates
+  useEffect(() => {
+    function handleCanvasClick(event: MouseEvent) {
+      if (!canvasRef.current || !cameraRef.current || !sceneRef.current || !groundMeshRef.current) {
+        return;
+      }
+
+      // Calculate mouse position in normalized device coordinates (-1 to +1)
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouse = new THREE.Vector2();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      // Update raycaster with mouse position
+      raycasterRef.current.setFromCamera(mouse, cameraRef.current);
+
+      // Find intersections with all objects in the scene
+      const intersects = raycasterRef.current.intersectObjects(sceneRef.current.children, true);
+
+      if (intersects.length > 0) {
+        // Get the first intersection point
+        const intersectionPoint = intersects[0].point;
+
+        // Convert world coordinates to lat/lng
+        const [lng, lat] = CityProjection.unprojectFromWorld(intersectionPoint);
+
+        // Call the callback with the clicked coordinate
+        const coordinate = {
+          lat,
+          lng,
+          worldX: intersectionPoint.x,
+          worldY: intersectionPoint.y,
+          worldZ: intersectionPoint.z,
+        };
+
+        if (onCoordinateClick) {
+          onCoordinateClick(coordinate);
+        }
+
+        console.log('Clicked coordinate:', { lat, lng, worldPos: intersectionPoint });
+      }
+    }
+
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.addEventListener('click', handleCanvasClick);
+      return () => canvas.removeEventListener('click', handleCanvasClick);
+    }
+  }, [onCoordinateClick]);
+
+  // Load and display placed buildings
+  useEffect(() => {
+    if (!groupsRef.current || !isReady) return;
+
+    const loader = new GLTFLoader();
+    const loadedModels: THREE.Group[] = [];
+
+    // Remove all previously loaded custom buildings
+    const customBuildingsGroup = groupsRef.current.dynamicObjects;
+    const objectsToRemove: THREE.Object3D[] = [];
+    customBuildingsGroup.children.forEach((child) => {
+      if (child.userData.isCustomBuilding) {
+        objectsToRemove.push(child);
+      }
+    });
+    objectsToRemove.forEach((obj) => customBuildingsGroup.remove(obj));
+
+    // Load and place each building
+    placedBuildings.forEach((building) => {
+      loader.load(
+        building.modelPath,
+        (gltf) => {
+          const model = gltf.scene;
+          model.userData.isCustomBuilding = true;
+          model.userData.buildingId = building.id;
+
+          // Position the model
+          model.position.set(building.position.x, building.position.y, building.position.z);
+
+          // Scale the model appropriately (adjust as needed)
+          model.scale.set(10, 10, 10);
+
+          // Add to scene
+          groupsRef.current?.dynamicObjects.add(model);
+          loadedModels.push(model);
+
+          console.log(`✅ Loaded building at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`);
+        },
+        undefined,
+        (error) => {
+          console.error(`❌ Error loading building model:`, error);
+        }
+      );
+    });
+
+    return () => {
+      // Cleanup loaded models when component unmounts
+      loadedModels.forEach((model) => {
+        groupsRef.current?.dynamicObjects.remove(model);
+      });
+    };
+  }, [placedBuildings, isReady]);
 
   return (
     <div className={`relative ${className}`}>
@@ -818,31 +888,6 @@ export default function ThreeMap({
         </div>
       )}
 
-      {/* Ground position adjustment UI - Disabled after calibration */}
-      {/* {isReady && (
-        <div className="absolute top-20 left-4 bg-black/80 text-white px-4 py-3 rounded-lg shadow-lg z-20 font-mono text-sm max-w-md">
-          <div className="font-bold mb-2">🎮 Ground Adjustment Controls</div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
-            <div>← → : Move X</div>
-            <div>+ - : Scale All</div>
-            <div>↑ ↓ : Move Z</div>
-            <div>W/S : Scale X</div>
-            <div>PgUp/PgDn : Move Y</div>
-            <div>A/D : Scale Z</div>
-            <div>Q/E : Rotate Y</div>
-            <div>R : Reset All</div>
-            <div className="col-span-2 text-yellow-300 mt-1">Shift + Key : Bigger steps</div>
-          </div>
-          <div className="border-t border-white/30 pt-2 text-xs">
-            <div className="font-bold mb-1">Current Values:</div>
-            <div className="bg-black/50 p-2 rounded space-y-1">
-              <div>Position: ({groundPosition.x.toFixed(1)}, {groundPosition.y.toFixed(1)}, {groundPosition.z.toFixed(1)})</div>
-              <div>Rotation: ({groundRotation.x.toFixed(3)}, {groundRotation.y.toFixed(3)}, {groundRotation.z.toFixed(3)})</div>
-              <div className="text-green-300">Scale: ({groundScale.x.toFixed(3)}, {groundScale.y.toFixed(3)}, {groundScale.z.toFixed(3)})</div>
-            </div>
-          </div>
-        </div>
-      )} */}
     </div>
   );
 }

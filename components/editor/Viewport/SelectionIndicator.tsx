@@ -4,9 +4,10 @@ import type { BuildingSpecification } from '@/lib/editor/types/buildingSpec';
 
 interface SelectionIndicatorProps {
   spec: BuildingSpecification;
+  isMergeMode?: boolean;
 }
 
-export function SelectionIndicator({ spec }: SelectionIndicatorProps) {
+export function SelectionIndicator({ spec, isMergeMode = false }: SelectionIndicatorProps) {
   const totalHeight = spec.floorHeight * spec.numberOfFloors + spec.roofHeight;
 
   const outlineGeometry = useMemo(() => {
@@ -22,12 +23,15 @@ export function SelectionIndicator({ spec }: SelectionIndicatorProps) {
     return edges;
   }, [spec.width, spec.depth, totalHeight]);
 
+  // Purple for merge mode, blue for normal selection
+  const color = isMergeMode ? "#9333ea" : "#3b82f6";
+
   return (
     <lineSegments
       geometry={outlineGeometry}
       position={[0, totalHeight / 2, 0]}
     >
-      <lineBasicMaterial color="#3b82f6" linewidth={2} />
+      <lineBasicMaterial color={color} linewidth={2} />
     </lineSegments>
   );
 }
