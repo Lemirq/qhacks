@@ -32,6 +32,8 @@ export function createBuildingBody(spec: BuildingSpecification): THREE.Mesh {
 
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff,  // White base so texture shows correctly
+    roughness: 0.8,   // High roughness for diffuse appearance
+    metalness: 0.0,   // Non-metallic for proper texture colors
   });
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -104,6 +106,8 @@ export function createRoof(spec: BuildingSpecification): THREE.Mesh {
 
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff,  // White base so texture shows correctly
+    roughness: 0.8,   // High roughness for diffuse appearance
+    metalness: 0.0,   // Non-metallic for proper texture colors
   });
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -182,6 +186,98 @@ function createHippedRoof(width: number, depth: number, height: number): THREE.B
   return geometry;
 }
 
+function createWindowGeometry(
+  shape: string,
+  width: number,
+  height: number,
+  depth: number
+): { glass: THREE.BufferGeometry; frame: THREE.BufferGeometry } {
+  switch (shape) {
+    case 'circular': {
+      const radius = Math.min(width, height) / 2;
+      const glassGeometry = new THREE.CylinderGeometry(radius, radius, depth, 32);
+      glassGeometry.rotateX(Math.PI / 2);
+      const frameGeometry = new THREE.CylinderGeometry(radius + 0.025, radius + 0.025, depth + 0.01, 32);
+      frameGeometry.rotateX(Math.PI / 2);
+      return { glass: glassGeometry, frame: frameGeometry };
+    }
+
+    case 'arched': {
+      // Create arched window shape
+      const archShape = new THREE.Shape();
+      const halfWidth = width / 2;
+      const archHeight = height * 0.3; // Top 30% is the arch
+
+      archShape.moveTo(-halfWidth, 0);
+      archShape.lineTo(-halfWidth, height - archHeight);
+      archShape.quadraticCurveTo(-halfWidth, height, 0, height);
+      archShape.quadraticCurveTo(halfWidth, height, halfWidth, height - archHeight);
+      archShape.lineTo(halfWidth, 0);
+      archShape.lineTo(-halfWidth, 0);
+
+      const glassGeometry = new THREE.ExtrudeGeometry(archShape, {
+        depth: depth,
+        bevelEnabled: false,
+      });
+      glassGeometry.translate(0, -height / 2, -depth / 2);
+
+      // Frame shape (slightly larger)
+      const frameShape = new THREE.Shape();
+      const framePad = 0.025;
+      frameShape.moveTo(-halfWidth - framePad, -framePad);
+      frameShape.lineTo(-halfWidth - framePad, height - archHeight);
+      frameShape.quadraticCurveTo(-halfWidth - framePad, height + framePad, 0, height + framePad);
+      frameShape.quadraticCurveTo(halfWidth + framePad, height + framePad, halfWidth + framePad, height - archHeight);
+      frameShape.lineTo(halfWidth + framePad, -framePad);
+      frameShape.lineTo(-halfWidth - framePad, -framePad);
+
+      const frameGeometry = new THREE.ExtrudeGeometry(frameShape, {
+        depth: depth + 0.01,
+        bevelEnabled: false,
+      });
+      frameGeometry.translate(0, -height / 2, -(depth + 0.01) / 2);
+
+      return { glass: glassGeometry, frame: frameGeometry };
+    }
+
+    case 'triangular': {
+      const triangleShape = new THREE.Shape();
+      triangleShape.moveTo(0, height / 2);
+      triangleShape.lineTo(width / 2, -height / 2);
+      triangleShape.lineTo(-width / 2, -height / 2);
+      triangleShape.lineTo(0, height / 2);
+
+      const glassGeometry = new THREE.ExtrudeGeometry(triangleShape, {
+        depth: depth,
+        bevelEnabled: false,
+      });
+      glassGeometry.translate(0, 0, -depth / 2);
+
+      const framePad = 0.025;
+      const frameShape = new THREE.Shape();
+      frameShape.moveTo(0, height / 2 + framePad);
+      frameShape.lineTo(width / 2 + framePad, -height / 2 - framePad);
+      frameShape.lineTo(-width / 2 - framePad, -height / 2 - framePad);
+      frameShape.lineTo(0, height / 2 + framePad);
+
+      const frameGeometry = new THREE.ExtrudeGeometry(frameShape, {
+        depth: depth + 0.01,
+        bevelEnabled: false,
+      });
+      frameGeometry.translate(0, 0, -(depth + 0.01) / 2);
+
+      return { glass: glassGeometry, frame: frameGeometry };
+    }
+
+    case 'rectangular':
+    default: {
+      const glassGeometry = new THREE.BoxGeometry(width, height, depth);
+      const frameGeometry = new THREE.BoxGeometry(width + 0.05, height + 0.05, depth + 0.01);
+      return { glass: glassGeometry, frame: frameGeometry };
+    }
+  }
+}
+
 export function createWindows(spec: BuildingSpecification): THREE.Group {
   const group = new THREE.Group();
 
@@ -192,6 +288,7 @@ export function createWindows(spec: BuildingSpecification): THREE.Group {
   const windowWidth = spec.windowWidth || 1.2;
   const windowHeight = spec.windowHeight || 1.8;
   const windowDepth = 0.02;  // Reduced depth for flatter windows
+  const windowShape = spec.windowShape || 'rectangular';
 
   const glassMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffff,  // White glass
@@ -209,17 +306,23 @@ export function createWindows(spec: BuildingSpecification): THREE.Group {
   const horizontalSpacing = (spec.width - windowWidth) / (spec.windowRows + 1);
   const verticalSpacing = spec.floorHeight;
 
+  // Create window geometries based on shape
+  const { glass: glassGeometry, frame: frameGeometry } = createWindowGeometry(
+    windowShape,
+    windowWidth,
+    windowHeight,
+    windowDepth
+  );
+
   for (let floor = 0; floor < spec.numberOfFloors; floor++) {
     for (let col = 0; col < spec.windowRows; col++) {
       const windowGroup = new THREE.Group();
 
       // Glass pane
-      const glassGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowDepth);
-      const glass = new THREE.Mesh(glassGeometry, glassMaterial);
+      const glass = new THREE.Mesh(glassGeometry.clone(), glassMaterial);
 
       // Frame
-      const frameGeometry = new THREE.BoxGeometry(windowWidth + 0.05, windowHeight + 0.05, windowDepth + 0.01);
-      const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+      const frame = new THREE.Mesh(frameGeometry.clone(), frameMaterial);
 
       windowGroup.add(frame);
       windowGroup.add(glass);

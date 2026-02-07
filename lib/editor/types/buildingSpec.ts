@@ -1,5 +1,6 @@
 export type RoofType = 'flat' | 'gabled' | 'hipped' | 'pyramid';
 export type WindowPattern = 'grid' | 'ribbon' | 'none';
+export type WindowShape = 'rectangular' | 'arched' | 'circular' | 'triangular';
 
 export interface BuildingSpecification {
   // Dimensions
@@ -22,6 +23,7 @@ export interface BuildingSpecification {
 
   // Windows
   windowPattern: WindowPattern;
+  windowShape: WindowShape;
   windowRows: number;       // windows per floor horizontally
   windowColumns?: number;   // auto-calculated from numberOfFloors
   windowWidth: number;      // meters
@@ -64,6 +66,7 @@ export const DEFAULT_BUILDING_SPEC: BuildingSpecification = {
   roofTexture: 'shingle',
   windowTexture: 'glass',
   windowPattern: 'grid',
+  windowShape: 'rectangular',
   windowRows: 4,
   windowWidth: 1.2,
   windowHeight: 1.8,

@@ -13,7 +13,7 @@ interface SceneContentProps {
 }
 
 function SceneContent({ sceneRef }: SceneContentProps) {
-  const { buildings, selectedBuildingId, selectBuilding, addBuilding, placementMode } = useBuildings();
+  const { buildings, selectedBuildingId, selectBuilding, addBuilding, placementMode, clearSelection } = useBuildings();
   const { scene } = useThree();
   const gridPlaneRef = useRef<THREE.Mesh>(null);
   const [ghostPosition, setGhostPosition] = useState<{ x: number; y: number; z: number } | null>(null);
@@ -25,6 +25,25 @@ function SceneContent({ sceneRef }: SceneContentProps) {
       sceneRef.current = scene;
     }
   }, [scene, sceneRef]);
+
+  // Handle space key to deselect all buildings
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if we're in an input field
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        clearSelection();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [clearSelection]);
 
   // Calculate snapped position based on existing buildings (including vertical stacking)
   const getSnappedPosition = useCallback((rawX: number, rawZ: number): { x: number; y: number; z: number; snapped: boolean } => {
@@ -225,7 +244,8 @@ export function Scene({ sceneRef }: SceneProps) {
         camera={{ position: [30, 30, 30], fov: 50 }}
         gl={{
           preserveDrawingBuffer: true,
-          alpha: false
+          alpha: false,
+          toneMapping: THREE.NoToneMapping,  // Prevent darkening of textures
         }}
         scene={{ background: new THREE.Color('#ffffff') }}
         style={{ background: '#ffffff' }}
