@@ -18,8 +18,8 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "QMap — Queen's University 3D Campus",
-  description: "Interactive 3D map of Queen's University with traffic simulation and a full building editor. Built at QHacks 2025.",
+  title: "KingsView — Urban Planning for Kingston",
+  description: "3D urban planning tool for the City of Kingston. Design buildings, simulate construction timelines, and measure environmental impact before breaking ground.",
 };
 
 export default function RootLayout({

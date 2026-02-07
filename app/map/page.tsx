@@ -8,10 +8,10 @@ export default function MapPage() {
         <div className="flex items-center justify-between">
           <div>
             <Link href="/" className="text-2xl font-bold text-gray-900 dark:text-white hover:opacity-80 transition-opacity">
-              Queen&apos;s University Campus Map
+              KingsView
             </Link>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              3D interactive campus view
+              3D Kingston city view
             </p>
           </div>
           <Link
