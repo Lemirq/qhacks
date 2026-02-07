@@ -11,7 +11,7 @@ export interface Building {
 }
 
 /**
- * Fetch buildings from OpenStreetMap Overpass API
+ * Fetch buildings from cached Next.js API route
  * @param bbox Bounding box [south, west, north, east]
  * @returns Array of buildings with footprints and heights
  */
@@ -20,30 +20,24 @@ export async function fetchBuildings(
 ): Promise<Building[]> {
   const [south, west, north, east] = bbox;
 
-  const query = `
-    [out:json][timeout:60];
-    (
-      way["building"](${south},${west},${north},${east});
-    );
-    (._;>;);
-    out body;
-  `;
-
-  console.log("Fetching buildings from OSM...");
+  console.log("Fetching buildings from cached API...");
 
   try {
     const response = await fetch(
-      `https://maps.mail.ru/osm/tools/overpass/api/interpreter?data=${encodeURIComponent(query)}`
+      `/api/map/buildings?south=${south}&west=${west}&north=${north}&east=${east}`,
+      {
+        cache: 'force-cache', // Use browser cache
+        next: { revalidate: 86400 }, // Revalidate every 24 hours
+      }
     );
 
     if (!response.ok) {
-      throw new Error(`OSM Overpass API error: ${response.status}`);
+      throw new Error(`API error: ${response.status}`);
     }
 
-    const data = await response.json();
-    const buildings = parseBuildingsFromOSM(data);
+    const buildings = await response.json();
 
-    console.log(`✅ Fetched ${buildings.length} buildings`);
+    console.log(`✅ Fetched ${buildings.length} buildings (cached)`);
     return buildings;
   } catch (error) {
     console.error("Error fetching buildings:", error);

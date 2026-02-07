@@ -41,7 +41,7 @@ export class RoadNetwork {
   constructor() {}
 
   /**
-   * Fetch road network from OpenStreetMap Overpass API
+   * Fetch road network from cached Next.js API route
    */
   async fetchFromOSM(bounds: {
     south: number;
@@ -49,32 +49,48 @@ export class RoadNetwork {
     north: number;
     east: number;
   }): Promise<void> {
-    const query = `
-      [out:json][timeout:60];
-      (
-        way["highway"~"^(primary|secondary|tertiary|residential|unclassified)$"]
-          (${bounds.south},${bounds.west},${bounds.north},${bounds.east});
-      );
-      (._;>;);
-      out body;
-    `;
-
-    console.log("Fetching road network from OSM...");
+    console.log("Fetching road network from cached API...");
 
     try {
       const response = await fetch(
-        `https://maps.mail.ru/osm/tools/overpass/api/interpreter?data=${encodeURIComponent(query)}`,
+        `/api/map/roads?south=${bounds.south}&west=${bounds.west}&north=${bounds.north}&east=${bounds.east}`,
+        {
+          cache: 'force-cache', // Use browser cache
+          next: { revalidate: 86400 }, // Revalidate every 24 hours
+        }
       );
 
       if (!response.ok) {
-        throw new Error(`OSM Overpass API error: ${response.status}`);
+        throw new Error(`API error: ${response.status}`);
       }
 
-      const data = await response.json();
-      this.buildGraphFromOSM(data);
+      const roadNetworkData = await response.json();
+
+      // Populate internal maps from API response
+      this.nodes.clear();
+      this.edges.clear();
+
+      if (roadNetworkData.nodes) {
+        roadNetworkData.nodes.forEach((node: RoadNode) => {
+          this.nodes.set(node.id, node);
+        });
+      }
+
+      if (roadNetworkData.edges) {
+        roadNetworkData.edges.forEach((edge: RoadEdge) => {
+          this.edges.set(edge.id, edge);
+        });
+      }
+
+      // Mark nodes with 3+ connections as intersections
+      this.nodes.forEach((node) => {
+        if (node.connectedEdges.length >= 3) {
+          node.type = "intersection";
+        }
+      });
 
       console.log(
-        `✅ Built road network: ${this.nodes.size} nodes, ${this.edges.size} edges`,
+        `✅ Loaded road network from cache: ${this.nodes.size} nodes, ${this.edges.size} edges`,
       );
     } catch (error) {
       console.error("Error fetching road network:", error);

@@ -5,6 +5,9 @@ import * as THREE from "three";
 import * as turf from "@turf/turf";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { OutlinePass } from "three/examples/jsm/postprocessing/OutlinePass.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 
 // Scene management
 import { createSceneManager, handleResize } from "@/lib/sceneManager";
@@ -43,6 +46,10 @@ interface ThreeMapProps {
     worldZ: number;
   } | null) => void;
   placedBuildings?: PlacedBuilding[];
+  isPlacementMode?: boolean;
+  buildingScale?: { x: number; y: number; z: number };
+  selectedBuildingId?: string | null;
+  onBuildingSelect?: (id: string | null) => void;
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -211,7 +218,7 @@ function createTrafficLightModel(): THREE.Group {
   return group;
 }
 
-// Fetch traffic signals from OpenStreetMap
+// Fetch traffic signals from cached Next.js API route
 async function fetchAllTrafficSignals(): Promise<
   Array<{
     lat: number;
@@ -221,36 +228,26 @@ async function fetchAllTrafficSignals(): Promise<
   }>
 > {
   try {
-    const query = `
-      [out:json][timeout:25];
-      (
-        node["highway"="traffic_signals"](44.220,-76.510,44.240,-76.480);
-        node["highway"="stop"](44.220,-76.510,44.240,-76.480);
-      );
-      out body;
-    `;
-
-    console.log("Fetching traffic signals from OpenStreetMap...");
+    console.log("Fetching traffic signals from cached API...");
     const response = await fetch(
-      `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`
+      `/api/map/traffic-signals?south=44.220&west=-76.510&north=44.240&east=-76.480`,
+      {
+        cache: 'force-cache', // Use browser cache
+        next: { revalidate: 86400 }, // Revalidate every 24 hours
+      }
     );
 
     if (!response.ok) {
-      console.warn(`OSM Overpass API error: ${response.status}`);
+      console.warn(`API error: ${response.status}`);
       return [];
     }
 
-    const data = await response.json();
-    console.log(`✅ Found ${data.elements?.length || 0} traffic controls from OSM`);
+    const signals = await response.json();
+    console.log(`✅ Found ${signals.length} traffic controls from cache`);
 
-    return data.elements.map((el: any) => ({
-      lat: el.lat,
-      lon: el.lon,
-      type: el.tags.highway,
-      id: el.id,
-    }));
+    return signals;
   } catch (error) {
-    console.warn("Error fetching from Overpass API:", error);
+    console.warn("Error fetching traffic signals:", error);
     return [];
   }
 }
@@ -260,6 +257,10 @@ export default function ThreeMap({
   className = "w-full h-full",
   onCoordinateClick,
   placedBuildings = [],
+  isPlacementMode = false,
+  buildingScale = { x: 10, y: 10, z: 10 },
+  selectedBuildingId = null,
+  onBuildingSelect,
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -273,11 +274,12 @@ export default function ThreeMap({
   const [loadingStatus, setLoadingStatus] = useState<string>("Initializing...");
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [groundPosition, setGroundPosition] = useState({ x: 0, y: 0, z: 0 });
-  const [groundRotation, setGroundRotation] = useState({ x: 0, y: 0, z: 0 });
-  const [groundScale, setGroundScale] = useState({ x: 1, y: 1, z: 1 });
-  const groundMeshRef = useRef<THREE.Mesh | null>(null);
   const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster());
+  const [ghostPosition, setGhostPosition] = useState<THREE.Vector3 | null>(null);
+  const ghostModelRef = useRef<THREE.Group | null>(null);
+  const buildingModelsRef = useRef<Map<string, THREE.Group>>(new Map());
+  const composerRef = useRef<EffectComposer | null>(null);
+  const outlinePassRef = useRef<OutlinePass | null>(null);
 
   useEffect(() => {
     if (!canvasRef.current || initialized.current) return;
@@ -332,24 +334,6 @@ export default function ThreeMap({
           undefined // No texture - plain white ground
         );
         groups.environment.add(ground);
-        groundMeshRef.current = ground;
-
-        // Set initial ground position, rotation, and scale state
-        setGroundPosition({
-          x: ground.position.x,
-          y: ground.position.y,
-          z: ground.position.z
-        });
-        setGroundRotation({
-          x: ground.rotation.x,
-          y: ground.rotation.y,
-          z: ground.rotation.z
-        });
-        setGroundScale({
-          x: ground.scale.x,
-          y: ground.scale.y,
-          z: ground.scale.z
-        });
 
         // Fetch and render buildings
         setLoadingStatus("Fetching buildings from OpenStreetMap...");
@@ -620,8 +604,12 @@ export default function ThreeMap({
         // Update controls
         controlsRef.current.update();
 
-        // Render
-        rendererRef.current.render(sceneRef.current, cameraRef.current);
+        // Render with composer if available (for outline effect), otherwise normal render
+        if (composerRef.current) {
+          composerRef.current.render();
+        } else {
+          rendererRef.current.render(sceneRef.current, cameraRef.current);
+        }
 
         animationFrameRef.current = requestAnimationFrame(animate);
       }
@@ -662,87 +650,10 @@ export default function ThreeMap({
     };
   }, []);
 
-  // Keyboard controls for adjusting ground position, rotation, and scale
-  useEffect(() => {
-    function handleKeyPress(event: KeyboardEvent) {
-      if (!groundMeshRef.current) return;
-
-      const step = event.shiftKey ? 50 : 10;
-      const rotationStep = event.shiftKey ? 0.1 : 0.01;
-      const scaleStep = event.shiftKey ? 0.1 : 0.01;
-      const ground = groundMeshRef.current;
-
-      switch (event.key) {
-        case 'ArrowLeft':
-          ground.position.x -= step;
-          break;
-        case 'ArrowRight':
-          ground.position.x += step;
-          break;
-        case 'ArrowUp':
-          ground.position.z -= step;
-          break;
-        case 'ArrowDown':
-          ground.position.z += step;
-          break;
-        case 'PageUp':
-          ground.position.y += step;
-          break;
-        case 'PageDown':
-          ground.position.y -= step;
-          break;
-        case 'q':
-          ground.rotation.y -= rotationStep;
-          break;
-        case 'e':
-          ground.rotation.y += rotationStep;
-          break;
-        case '+':
-        case '=':
-          ground.scale.x += scaleStep;
-          ground.scale.z += scaleStep;
-          break;
-        case '-':
-        case '_':
-          ground.scale.x = Math.max(0.1, ground.scale.x - scaleStep);
-          ground.scale.z = Math.max(0.1, ground.scale.z - scaleStep);
-          break;
-        case 'w':
-          ground.scale.x += scaleStep;
-          break;
-        case 's':
-          ground.scale.x = Math.max(0.1, ground.scale.x - scaleStep);
-          break;
-        case 'a':
-          ground.scale.z += scaleStep;
-          break;
-        case 'd':
-          ground.scale.z = Math.max(0.1, ground.scale.z - scaleStep);
-          break;
-        case 'r':
-          ground.position.set(0, 0, 0);
-          ground.rotation.set(-Math.PI / 2, 0, 0);
-          ground.scale.set(1, 1, 1);
-          break;
-        default:
-          return;
-      }
-
-      setGroundPosition({ x: ground.position.x, y: ground.position.y, z: ground.position.z });
-      setGroundRotation({ x: ground.rotation.x, y: ground.rotation.y, z: ground.rotation.z });
-      setGroundScale({ x: ground.scale.x, y: ground.scale.y, z: ground.scale.z });
-
-      event.preventDefault();
-    }
-
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, []);
-
-  // Click handler to find coordinates
+  // Click handler to find coordinates or select buildings
   useEffect(() => {
     function handleCanvasClick(event: MouseEvent) {
-      if (!canvasRef.current || !cameraRef.current || !sceneRef.current || !groundMeshRef.current) {
+      if (!canvasRef.current || !cameraRef.current || !sceneRef.current || !groupsRef.current) {
         return;
       }
 
@@ -755,8 +666,35 @@ export default function ThreeMap({
       // Update raycaster with mouse position
       raycasterRef.current.setFromCamera(mouse, cameraRef.current);
 
-      // Find intersections with all objects in the scene
-      const intersects = raycasterRef.current.intersectObjects(sceneRef.current.children, true);
+      // Check if we clicked on a building first
+      const buildingObjects = Array.from(buildingModelsRef.current.values());
+      const buildingIntersects = raycasterRef.current.intersectObjects(buildingObjects, true);
+
+      if (buildingIntersects.length > 0 && !isPlacementMode) {
+        // Find which building was clicked
+        let clickedBuilding: THREE.Object3D | null = buildingIntersects[0].object;
+        while (clickedBuilding && !clickedBuilding.userData.buildingId) {
+          clickedBuilding = clickedBuilding.parent;
+        }
+
+        if (clickedBuilding && clickedBuilding.userData.buildingId && onBuildingSelect) {
+          onBuildingSelect(clickedBuilding.userData.buildingId);
+          return; // Don't process as coordinate click
+        }
+      }
+
+      // For placement mode, only raycast against ground and static geometry
+      // For normal mode, raycast against everything
+      let intersects;
+      if (isPlacementMode) {
+        const targetObjects = [
+          ...groupsRef.current.environment.children,
+          ...groupsRef.current.staticGeometry.children
+        ];
+        intersects = raycasterRef.current.intersectObjects(targetObjects, true);
+      } else {
+        intersects = raycasterRef.current.intersectObjects(sceneRef.current.children, true);
+      }
 
       if (intersects.length > 0) {
         // Get the first intersection point
@@ -778,6 +716,11 @@ export default function ThreeMap({
           onCoordinateClick(coordinate);
         }
 
+        // Deselect building if clicking elsewhere
+        if (onBuildingSelect && !isPlacementMode) {
+          onBuildingSelect(null);
+        }
+
         console.log('Clicked coordinate:', { lat, lng, worldPos: intersectionPoint });
       }
     }
@@ -787,7 +730,7 @@ export default function ThreeMap({
       canvas.addEventListener('click', handleCanvasClick);
       return () => canvas.removeEventListener('click', handleCanvasClick);
     }
-  }, [onCoordinateClick]);
+  }, [onCoordinateClick, onBuildingSelect, isPlacementMode]);
 
   // Load and display placed buildings
   useEffect(() => {
@@ -805,6 +748,7 @@ export default function ThreeMap({
       }
     });
     objectsToRemove.forEach((obj) => customBuildingsGroup.remove(obj));
+    buildingModelsRef.current.clear();
 
     // Load and place each building
     placedBuildings.forEach((building) => {
@@ -818,12 +762,19 @@ export default function ThreeMap({
           // Position the model
           model.position.set(building.position.x, building.position.y, building.position.z);
 
-          // Scale the model appropriately (adjust as needed)
-          model.scale.set(10, 10, 10);
+          // Rotation
+          if (building.rotation) {
+            model.rotation.set(building.rotation.x, building.rotation.y, building.rotation.z);
+          }
+
+          // Scale - use per-building scale if available, otherwise use global buildingScale
+          const scale = building.scale || buildingScale;
+          model.scale.set(scale.x, scale.y, scale.z);
 
           // Add to scene
           groupsRef.current?.dynamicObjects.add(model);
           loadedModels.push(model);
+          buildingModelsRef.current.set(building.id, model);
 
           console.log(`✅ Loaded building at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`);
         },
@@ -839,8 +790,162 @@ export default function ThreeMap({
       loadedModels.forEach((model) => {
         groupsRef.current?.dynamicObjects.remove(model);
       });
+      buildingModelsRef.current.clear();
     };
   }, [placedBuildings, isReady]);
+
+  // Load ghost preview model
+  useEffect(() => {
+    if (!isPlacementMode || !groupsRef.current) {
+      // Remove ghost if placement mode is off
+      if (ghostModelRef.current && groupsRef.current) {
+        groupsRef.current.dynamicObjects.remove(ghostModelRef.current);
+        ghostModelRef.current = null;
+      }
+      setGhostPosition(null);
+      return;
+    }
+
+    const loader = new GLTFLoader();
+    loader.load(
+      '/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf',
+      (gltf) => {
+        const ghost = gltf.scene;
+        ghost.scale.set(buildingScale.x, buildingScale.y, buildingScale.z);
+
+        // Make it semi-transparent green
+        ghost.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+            const material = new THREE.MeshBasicMaterial({
+              color: 0x00ff00,
+              transparent: true,
+              opacity: 0.3,
+              wireframe: false,
+            });
+            mesh.material = material;
+          }
+        });
+
+        ghostModelRef.current = ghost;
+        groupsRef.current?.dynamicObjects.add(ghost);
+        ghost.visible = false; // Hide until we have a position
+      },
+      undefined,
+      (error) => console.error('Error loading ghost model:', error)
+    );
+
+    return () => {
+      if (ghostModelRef.current && groupsRef.current) {
+        groupsRef.current.dynamicObjects.remove(ghostModelRef.current);
+        ghostModelRef.current = null;
+      }
+    };
+  }, [isPlacementMode, buildingScale]);
+
+  // Update ghost scale when buildingScale changes
+  useEffect(() => {
+    if (ghostModelRef.current) {
+      ghostModelRef.current.scale.set(buildingScale.x, buildingScale.y, buildingScale.z);
+    }
+  }, [buildingScale]);
+
+  // Highlight selected building
+  useEffect(() => {
+    if (!sceneRef.current || !cameraRef.current || !rendererRef.current) return;
+
+    // Setup composer if not exists
+    if (!composerRef.current && rendererRef.current) {
+      const composer = new EffectComposer(rendererRef.current);
+      const renderPass = new RenderPass(sceneRef.current, cameraRef.current);
+      composer.addPass(renderPass);
+
+      const outlinePass = new OutlinePass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        sceneRef.current,
+        cameraRef.current
+      );
+      outlinePass.edgeStrength = 5;
+      outlinePass.edgeGlow = 1;
+      outlinePass.edgeThickness = 2;
+      outlinePass.visibleEdgeColor.set('#003F7C');
+      outlinePass.hiddenEdgeColor.set('#003F7C');
+
+      composer.addPass(outlinePass);
+      composerRef.current = composer;
+      outlinePassRef.current = outlinePass;
+    }
+
+    // Update outline
+    if (outlinePassRef.current) {
+      if (selectedBuildingId) {
+        const selectedModel = buildingModelsRef.current.get(selectedBuildingId);
+        if (selectedModel) {
+          outlinePassRef.current.selectedObjects = [selectedModel];
+        } else {
+          outlinePassRef.current.selectedObjects = [];
+        }
+      } else {
+        outlinePassRef.current.selectedObjects = [];
+      }
+    }
+  }, [selectedBuildingId]);
+
+  // Update building transforms in real-time
+  useEffect(() => {
+    placedBuildings.forEach((building) => {
+      const model = buildingModelsRef.current.get(building.id);
+      if (model) {
+        model.position.set(building.position.x, building.position.y, building.position.z);
+        if (building.rotation) {
+          model.rotation.set(building.rotation.x, building.rotation.y, building.rotation.z);
+        }
+        const scale = building.scale || buildingScale;
+        model.scale.set(scale.x, scale.y, scale.z);
+      }
+    });
+  }, [placedBuildings, buildingScale]);
+
+  // Update ghost position on mouse move
+  useEffect(() => {
+    if (!isPlacementMode) return;
+
+    function handleMouseMove(event: MouseEvent) {
+      if (!canvasRef.current || !cameraRef.current || !groupsRef.current) return;
+
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouse = new THREE.Vector2();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycasterRef.current.setFromCamera(mouse, cameraRef.current);
+
+      // Only raycast against the ground plane and static geometry (buildings/roads)
+      // This prevents placing buildings on cars or in the air
+      const targetObjects = [
+        ...groupsRef.current.environment.children,
+        ...groupsRef.current.staticGeometry.children
+      ];
+      const intersects = raycasterRef.current.intersectObjects(targetObjects, true);
+
+      // Check if ghost exists inside the handler (it might load after this effect runs)
+      if (intersects.length > 0 && ghostModelRef.current) {
+        const point = intersects[0].point;
+        ghostModelRef.current.position.set(point.x, point.y, point.z);
+        ghostModelRef.current.visible = true;
+        setGhostPosition(point);
+      } else if (ghostModelRef.current) {
+        // Hide ghost when not hovering over valid placement surface
+        ghostModelRef.current.visible = false;
+      }
+    }
+
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.addEventListener('mousemove', handleMouseMove);
+      return () => canvas.removeEventListener('mousemove', handleMouseMove);
+    }
+  }, [isPlacementMode]);
 
   return (
     <div className={`relative ${className}`}>

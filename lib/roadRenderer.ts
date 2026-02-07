@@ -1,6 +1,6 @@
-import * as THREE from 'three';
-import { CityProjection } from './projection';
-import { RoadEdge } from './roadNetwork';
+import * as THREE from "three";
+import { CityProjection } from "./projection";
+import { RoadEdge } from "./roadNetwork";
 
 /**
  * Render roads from RoadEdge data into a Three.js scene
@@ -15,7 +15,7 @@ import { RoadEdge } from './roadNetwork';
 export function renderRoads(
   edges: RoadEdge[],
   projection: typeof CityProjection,
-  scene: THREE.Scene
+  scene: THREE.Scene,
 ): void {
   console.log(`Rendering ${edges.length} roads...`);
 
@@ -27,11 +27,15 @@ export function renderRoads(
 
     // Project coordinates to 3D world space
     const points = edge.geometry.map((coord) =>
-      projection.projectToWorld(coord)
+      projection.projectToWorld(coord),
     );
 
-    // Calculate road width based on lanes (5 meters per lane for better visibility)
-    const width = edge.lanes * 5.0;
+    // Calculate road width based on lanes
+    // Apply the same scale factor used for buildings (10/1.4 ≈ 7.14)
+    // to maintain proper proportions in the scaled world
+    const SCALE_FACTOR = 10 / 1.4;
+    const baseWidthPerLane = 6.0; // meters per lane
+    const width = edge.lanes * baseWidthPerLane * SCALE_FACTOR;
 
     // Create road mesh
     const roadMesh = createRoadMesh(points, width);
@@ -43,7 +47,7 @@ export function renderRoads(
     scene.add(roadMesh);
   });
 
-  console.log('✅ Roads rendered');
+  console.log("✅ Roads rendered");
 }
 
 /**
@@ -71,12 +75,14 @@ function createRoadMesh(points: THREE.Vector3[], width: number): THREE.Mesh {
 function createStraightRoad(
   start: THREE.Vector3,
   end: THREE.Vector3,
-  width: number
+  width: number,
 ): THREE.Mesh {
   // Calculate length and direction
   const direction = new THREE.Vector3().subVectors(end, start);
   const length = direction.length();
-  const midpoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+  const midpoint = new THREE.Vector3()
+    .addVectors(start, end)
+    .multiplyScalar(0.5);
 
   // Create geometry
   const geometry = new THREE.PlaneGeometry(width, length);
@@ -115,37 +121,23 @@ function createCurvedRoad(points: THREE.Vector3[], width: number): THREE.Mesh {
 
     // Calculate perpendicular direction for road width
     const forward = new THREE.Vector3().subVectors(p2, p1).normalize();
-    const right = new THREE.Vector3(-forward.z, 0, forward.x).multiplyScalar(width / 2);
+    const right = new THREE.Vector3(-forward.z, 0, forward.x).multiplyScalar(
+      width / 2,
+    );
 
     // Create quad vertices (left and right side of road)
     const startIdx = i * 2;
 
     // Left side
-    vertices.push(
-      p1.x - right.x,
-      p1.y,
-      p1.z - right.z
-    );
+    vertices.push(p1.x - right.x, p1.y, p1.z - right.z);
 
     // Right side
-    vertices.push(
-      p1.x + right.x,
-      p1.y,
-      p1.z + right.z
-    );
+    vertices.push(p1.x + right.x, p1.y, p1.z + right.z);
 
     // Add last segment's end points
     if (i === points.length - 2) {
-      vertices.push(
-        p2.x - right.x,
-        p2.y,
-        p2.z - right.z
-      );
-      vertices.push(
-        p2.x + right.x,
-        p2.y,
-        p2.z + right.z
-      );
+      vertices.push(p2.x - right.x, p2.y, p2.z - right.z);
+      vertices.push(p2.x + right.x, p2.y, p2.z + right.z);
     }
 
     // Create triangles for this segment
@@ -158,7 +150,10 @@ function createCurvedRoad(points: THREE.Vector3[], width: number): THREE.Mesh {
     }
   }
 
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(vertices, 3),
+  );
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
 
@@ -181,7 +176,7 @@ function createCurvedRoad(points: THREE.Vector3[], width: number): THREE.Mesh {
 export function renderRoadsWithTubes(
   edges: RoadEdge[],
   projection: typeof CityProjection,
-  scene: THREE.Scene
+  scene: THREE.Scene,
 ): void {
   console.log(`Rendering ${edges.length} roads with tube geometry...`);
 
@@ -191,7 +186,7 @@ export function renderRoadsWithTubes(
     }
 
     const points = edge.geometry.map((coord) =>
-      projection.projectToWorld(coord)
+      projection.projectToWorld(coord),
     );
 
     const width = edge.lanes * 5.0;
@@ -202,7 +197,7 @@ export function renderRoadsWithTubes(
     scene.add(roadMesh);
   });
 
-  console.log('✅ Roads rendered with tubes');
+  console.log("✅ Roads rendered with tubes");
 }
 
 /**
@@ -218,7 +213,7 @@ function createTubeRoad(points: THREE.Vector3[], width: number): THREE.Mesh {
     Math.max(points.length * 2, 32), // segments
     width / 2, // radius (half width for diameter)
     8, // radial segments
-    false // closed
+    false, // closed
   );
 
   const material = new THREE.MeshBasicMaterial({

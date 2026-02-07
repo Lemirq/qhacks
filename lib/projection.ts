@@ -12,6 +12,11 @@ export class CityProjection {
   // Earth's radius in meters (WGS84 semi-major axis)
   private static readonly EARTH_RADIUS = 6378137;
 
+  // Global scale factor to match imported 3D models
+  // Building model at scale (1.4, 1.4, 1.4) fits correctly with map
+  // To make default scale (10, 10, 10) work, scale map by 10/1.4 ≈ 7.14
+  private static readonly SCALE_FACTOR = 10 / 1.4;
+
   // Queen's University coordinates - center point for our projection
   private static readonly CENTER_LNG = -76.4951;
   private static readonly CENTER_LAT = 44.2253;
@@ -50,8 +55,12 @@ export class CityProjection {
     const worldX = x - this.CENTER_X;
     const worldY = y - this.CENTER_Y;
 
+    // Apply global scale factor to match imported 3D models
+    const scaledX = worldX * this.SCALE_FACTOR;
+    const scaledY = worldY * this.SCALE_FACTOR;
+
     // Return as Three.js vector (x, z, y) - note: y is up in Three.js
-    return new THREE.Vector3(worldX, 0, -worldY);
+    return new THREE.Vector3(scaledX, 0, -scaledY);
   }
 
   /**
@@ -62,8 +71,12 @@ export class CityProjection {
    */
   static unprojectFromWorld(position: THREE.Vector3): [number, number] {
     // Convert back from Three.js coordinates (x, z, y)
-    const worldX = position.x;
-    const worldY = -position.z;
+    const scaledX = position.x;
+    const scaledY = -position.z;
+
+    // Reverse the global scale factor
+    const worldX = scaledX / this.SCALE_FACTOR;
+    const worldY = scaledY / this.SCALE_FACTOR;
 
     // Add center point back
     const x = worldX + this.CENTER_X;
