@@ -13,7 +13,10 @@ interface BuildingWrapperProps {
 
 export function BuildingWrapper({ building, isSelected, onSelect }: BuildingWrapperProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const { placementMode, addBuilding } = useBuildings();
+  const { placementMode, addBuilding, mergeMode, toggleBuildingSelection, selectedBuildingIds } = useBuildings();
+
+  // Check if this building is selected in merge mode
+  const isMergeSelected = mergeMode && selectedBuildingIds.includes(building.id);
 
   const handleClick = (e: any) => {
     e.stopPropagation();
@@ -27,6 +30,9 @@ export function BuildingWrapper({ building, isSelected, onSelect }: BuildingWrap
         y: newY,
         z: building.position.z
       });
+    } else if (mergeMode) {
+      // In merge mode, toggle selection
+      toggleBuildingSelection(building.id);
     } else {
       onSelect();
     }
@@ -40,7 +46,7 @@ export function BuildingWrapper({ building, isSelected, onSelect }: BuildingWrap
       onClick={handleClick}
     >
       <Building spec={building.spec} />
-      {isSelected && <SelectionIndicator spec={building.spec} />}
+      {(isSelected || isMergeSelected) && <SelectionIndicator spec={building.spec} isMergeMode={isMergeSelected} />}
     </group>
   );
 }

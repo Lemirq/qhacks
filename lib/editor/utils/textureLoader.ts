@@ -9,11 +9,14 @@ export interface TextureInfo {
 
 // Predefined textures
 export const WALL_TEXTURES: TextureInfo[] = [
-  { name: 'brick', displayName: 'Brick', path: '/textures/walls/brick.jpg', category: 'wall' },
+  { name: 'brick', displayName: 'Brick', path: '/textures/walls/brick.jpeg', category: 'wall' },
   { name: 'concrete', displayName: 'Concrete', path: '/textures/walls/concrete.jpg', category: 'wall' },
-  { name: 'glass-curtain', displayName: 'Glass Curtain', path: '/textures/walls/glass-curtain.jpg', category: 'wall' },
   { name: 'stucco', displayName: 'Stucco', path: '/textures/walls/stucco.jpg', category: 'wall' },
-  { name: 'wood-panel', displayName: 'Wood Panel', path: '/textures/walls/wood-panel.jpg', category: 'wall' },
+  { name: 'wood', displayName: 'Wood', path: '/textures/walls/wood.jpg', category: 'wall' },
+  { name: 'wood2', displayName: 'Wood Panel', path: '/textures/walls/wood2.jpg', category: 'wall' },
+  { name: 'ceramic', displayName: 'Ceramic', path: '/textures/walls/ceramic.jpg', category: 'wall' },
+  { name: 'gold', displayName: 'Gold', path: '/textures/walls/gold.jpg', category: 'wall' },
+  { name: 'terrazzo', displayName: 'Terrazzo', path: '/textures/walls/terrazzo.png', category: 'wall' },
 ];
 
 export const ROOF_TEXTURES: TextureInfo[] = [
@@ -84,9 +87,12 @@ export function loadTextureFromDataURL(dataUrl: string): THREE.Texture {
 const TEXTURE_COLORS: Record<string, number> = {
   'brick': 0x8B4513,      // Brown
   'concrete': 0x808080,    // Gray
-  'glass-curtain': 0x87CEEB, // Sky blue
   'stucco': 0xF5DEB3,     // Wheat
-  'wood-panel': 0xDEB887,  // Burlywood
+  'wood': 0xDEB887,       // Burlywood
+  'wood2': 0xD2691E,      // Chocolate
+  'ceramic': 0xFFFAF0,    // Floral white
+  'gold': 0xFFD700,       // Gold
+  'terrazzo': 0xD3D3D3,   // Light gray
   'shingle': 0x2F4F4F,    // Dark slate gray
   'metal': 0xC0C0C0,      // Silver
   'tile': 0xCD853F,       // Peru

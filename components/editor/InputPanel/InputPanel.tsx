@@ -7,7 +7,7 @@ import { BuildingList } from './BuildingList';
 import { DEFAULT_BUILDING_SPEC } from '@/lib/editor/types/buildingSpec';
 
 export function InputPanel() {
-  const { getSelectedBuilding, updateBuilding } = useBuildings();
+  const { getSelectedBuilding, updateBuilding, updateBuildingRotation } = useBuildings();
   const selectedBuilding = getSelectedBuilding();
 
   const handleUpdate = (updates: Partial<typeof DEFAULT_BUILDING_SPEC>) => {
@@ -55,7 +55,13 @@ export function InputPanel() {
 
             <div className="space-y-6">
               <div className="bg-white p-6 rounded-xl border-2 border-gray-200 shadow-sm">
-                <DimensionsForm spec={selectedBuilding.spec} onUpdate={handleUpdate} buildingId={selectedBuilding.id} />
+                <DimensionsForm
+                  spec={selectedBuilding.spec}
+                  onUpdate={handleUpdate}
+                  buildingId={selectedBuilding.id}
+                  rotation={selectedBuilding.rotation}
+                  onRotationChange={(rotation) => updateBuildingRotation(selectedBuilding.id, rotation)}
+                />
               </div>
 
               <div className="bg-white p-6 rounded-xl border-2 border-gray-200 shadow-sm">
