@@ -39,3 +39,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+model/.next/dev/build/chunks/[root-of-the-server]__992036af._.js.map
