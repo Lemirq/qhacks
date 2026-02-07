@@ -81,6 +81,7 @@ export interface BuildingInstance {
   position: { x: number; z: number };
   rotation: number;
   spec: BuildingSpecification;
+  gltfPath?: string; // Path to saved GLTF model (e.g., /models/building-123.gltf)
 }
 
 export interface MultiBuildingExportData {

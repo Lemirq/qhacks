@@ -1,5 +1,17 @@
+'use client';
+
 import Link from 'next/link';
-import Map from '@/components/Map';
+import dynamic from 'next/dynamic';
+
+// Dynamic import with SSR disabled to avoid initialization issues
+const Map = dynamic(() => import('@/components/Map'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full bg-gray-100 dark:bg-gray-900">
+      <p className="text-gray-600 dark:text-gray-400">Loading map...</p>
+    </div>
+  ),
+});
 
 export default function Home() {
   return (
@@ -22,7 +34,7 @@ export default function Home() {
           </Link>
         </div>
       </header>
-      <main className="flex-1 relative">
+      <main className="flex-1 relative overflow-hidden">
         <Map />
       </main>
     </div>

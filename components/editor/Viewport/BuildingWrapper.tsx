@@ -24,6 +24,7 @@ export function BuildingWrapper({ building, isSelected, onSelect }: BuildingWrap
       position={[building.position.x, 0, building.position.z]}
       rotation={[0, building.rotation, 0]}
       onClick={handleClick}
+      userData={{ buildingId: building.id }}
     >
       <Building spec={building.spec} />
       {isSelected && <SelectionIndicator spec={building.spec} />}
