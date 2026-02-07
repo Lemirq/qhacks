@@ -44,7 +44,7 @@ export function BuildingList() {
               <div className="flex-1">
                 <div className="font-medium text-gray-900">{building.name}</div>
                 <div className="text-xs text-gray-500 mt-1">
-                  Position: ({building.position.x.toFixed(1)}, {building.position.z.toFixed(1)})
+                  Position: ({building.position.x.toFixed(1)}, {building.position.y.toFixed(1)}, {building.position.z.toFixed(1)})
                 </div>
                 <div className="text-xs text-gray-500">
                   Size: {building.spec.width}m × {building.spec.depth}m × {building.spec.numberOfFloors} floors
@@ -53,11 +53,7 @@ export function BuildingList() {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (buildings.length > 1) {
-                    removeBuilding(building.id);
-                  } else {
-                    alert('Cannot delete the last building');
-                  }
+                  removeBuilding(building.id);
                 }}
                 className="ml-2 p-2 rounded-full border-2 border-red-400/40 text-red-600 hover:bg-red-500 hover:border-red-400 hover:text-white transition-all duration-200 ease-out"
                 title="Delete building"

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Building } from './Building';
 import { SelectionIndicator } from './SelectionIndicator';
 import type { BuildingInstance } from '@/lib/editor/types/buildingSpec';
+import { useBuildings } from '@/lib/editor/contexts/BuildingsContext';
 
 interface BuildingWrapperProps {
   building: BuildingInstance;
@@ -12,16 +13,29 @@ interface BuildingWrapperProps {
 
 export function BuildingWrapper({ building, isSelected, onSelect }: BuildingWrapperProps) {
   const groupRef = useRef<THREE.Group>(null);
+  const { placementMode, addBuilding } = useBuildings();
 
   const handleClick = (e: any) => {
     e.stopPropagation();
-    onSelect();
+
+    if (placementMode) {
+      // In placement mode, stack a new building on top of this one
+      const buildingHeight = building.spec.floorHeight * building.spec.numberOfFloors;
+      const newY = building.position.y + buildingHeight;
+      addBuilding({
+        x: building.position.x,
+        y: newY,
+        z: building.position.z
+      });
+    } else {
+      onSelect();
+    }
   };
 
   return (
     <group
       ref={groupRef}
-      position={[building.position.x, 0, building.position.z]}
+      position={[building.position.x, building.position.y, building.position.z]}
       rotation={[0, building.rotation, 0]}
       onClick={handleClick}
     >
