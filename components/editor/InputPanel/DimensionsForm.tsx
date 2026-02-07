@@ -125,116 +125,124 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
     <div className="space-y-6">
       <h3 className="text-xl font-bold text-gray-800 mb-2">Dimensions</h3>
 
-      <div className="space-y-3">
-        <label className="block text-sm font-semibold text-gray-700 mb-2">
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-gray-700">
           Width (meters): <span className="text-amber-600">{spec.width}</span>
-          {maxWidth < 50 && <span className="text-orange-500 text-xs ml-2">(max: {maxWidth.toFixed(1)}m - collision limit)</span>}
+          {maxWidth < 50 && <span className="text-orange-500 text-xs ml-2">(max: {maxWidth.toFixed(1)}m)</span>}
         </label>
-        <input
-          type="range"
-          min="5"
-          max={maxWidth}
-          step="0.5"
-          value={Math.min(spec.width, maxWidth)}
-          onChange={(e) => onUpdate({ width: parseFloat(e.target.value) })}
-          className="w-full h-2.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-400 [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(245,158,11,0.5)] [&::-webkit-slider-thumb]:transition-all"
-        />
-        <input
-          type="number"
-          min="5"
-          max={maxWidth}
-          step="0.5"
-          value={spec.width}
-          onChange={(e) => {
-            const val = parseFloat(e.target.value);
-            onUpdate({ width: Math.min(val, maxWidth) });
-          }}
-          className="mt-2 w-full px-4 py-2.5 border-2 border-gray-300 rounded-full text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:shadow-[0_0_15px_rgba(245,158,11,0.2)] transition-all duration-200"
-        />
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min="5"
+            max={maxWidth}
+            step="0.5"
+            value={Math.min(spec.width, maxWidth)}
+            onChange={(e) => onUpdate({ width: parseFloat(e.target.value) })}
+            className="flex-4 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+          />
+          <input
+            type="number"
+            min="5"
+            max={maxWidth}
+            step="0.5"
+            value={spec.width}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              onUpdate({ width: Math.min(val, maxWidth) });
+            }}
+            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg text-sm text-center focus:border-amber-400 focus:outline-none transition-colors duration-200"
+          />
+        </div>
       </div>
 
-      <div className="space-y-3">
-        <label className="block text-sm font-semibold text-gray-700 mb-2">
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-gray-700">
           Depth (meters): <span className="text-amber-600">{spec.depth}</span>
-          {maxDepth < 50 && <span className="text-orange-500 text-xs ml-2">(max: {maxDepth.toFixed(1)}m - collision limit)</span>}
+          {maxDepth < 50 && <span className="text-orange-500 text-xs ml-2">(max: {maxDepth.toFixed(1)}m)</span>}
         </label>
-        <input
-          type="range"
-          min="5"
-          max={maxDepth}
-          step="0.5"
-          value={Math.min(spec.depth, maxDepth)}
-          onChange={(e) => onUpdate({ depth: parseFloat(e.target.value) })}
-          className="w-full h-2.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-400 [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(245,158,11,0.5)] [&::-webkit-slider-thumb]:transition-all"
-        />
-        <input
-          type="number"
-          min="5"
-          max={maxDepth}
-          step="0.5"
-          value={spec.depth}
-          onChange={(e) => {
-            const val = parseFloat(e.target.value);
-            onUpdate({ depth: Math.min(val, maxDepth) });
-          }}
-          className="mt-2 w-full px-4 py-2.5 border-2 border-gray-300 rounded-full text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:shadow-[0_0_15px_rgba(245,158,11,0.2)] transition-all duration-200"
-        />
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min="5"
+            max={maxDepth}
+            step="0.5"
+            value={Math.min(spec.depth, maxDepth)}
+            onChange={(e) => onUpdate({ depth: parseFloat(e.target.value) })}
+            className="flex-4 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+          />
+          <input
+            type="number"
+            min="5"
+            max={maxDepth}
+            step="0.5"
+            value={spec.depth}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              onUpdate({ depth: Math.min(val, maxDepth) });
+            }}
+            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg text-sm text-center focus:border-amber-400 focus:outline-none transition-colors duration-200"
+          />
+        </div>
       </div>
 
-      <div className="space-y-3">
-        <label className="block text-sm font-semibold text-gray-700 mb-2">
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-gray-700">
           Number of Floors: <span className="text-amber-600">{spec.numberOfFloors}</span>
-          {hasBuildingAbove && maxFloors < 20 && <span className="text-orange-500 text-xs ml-2">(max: {maxFloors} - building above)</span>}
+          {hasBuildingAbove && maxFloors < 20 && <span className="text-orange-500 text-xs ml-2">(max: {maxFloors})</span>}
         </label>
-        <input
-          type="range"
-          min="1"
-          max={maxFloors}
-          step="1"
-          value={Math.min(spec.numberOfFloors, maxFloors)}
-          onChange={(e) => onUpdate({ numberOfFloors: parseInt(e.target.value) })}
-          className="w-full h-2.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-400 [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(245,158,11,0.5)] [&::-webkit-slider-thumb]:transition-all"
-        />
-        <input
-          type="number"
-          min="1"
-          max={maxFloors}
-          step="1"
-          value={spec.numberOfFloors}
-          onChange={(e) => {
-            const val = parseInt(e.target.value);
-            onUpdate({ numberOfFloors: Math.min(val, maxFloors) });
-          }}
-          className="mt-2 w-full px-4 py-2.5 border-2 border-gray-300 rounded-full text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:shadow-[0_0_15px_rgba(245,158,11,0.2)] transition-all duration-200"
-        />
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min="1"
+            max={maxFloors}
+            step="1"
+            value={Math.min(spec.numberOfFloors, maxFloors)}
+            onChange={(e) => onUpdate({ numberOfFloors: parseInt(e.target.value) })}
+            className="flex-4 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+          />
+          <input
+            type="number"
+            min="1"
+            max={maxFloors}
+            step="1"
+            value={spec.numberOfFloors}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              onUpdate({ numberOfFloors: Math.min(val, maxFloors) });
+            }}
+            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg text-sm text-center focus:border-amber-400 focus:outline-none transition-colors duration-200"
+          />
+        </div>
       </div>
 
-      <div className="space-y-3">
-        <label className="block text-sm font-semibold text-gray-700 mb-2">
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-gray-700">
           Floor Height (meters): <span className="text-amber-600">{spec.floorHeight}</span>
-          {hasBuildingAbove && maxFloorHeight < 6 && <span className="text-orange-500 text-xs ml-2">(max: {maxFloorHeight.toFixed(1)}m - building above)</span>}
+          {hasBuildingAbove && maxFloorHeight < 6 && <span className="text-orange-500 text-xs ml-2">(max: {maxFloorHeight.toFixed(1)}m)</span>}
         </label>
-        <input
-          type="range"
-          min="2.5"
-          max={maxFloorHeight}
-          step="0.1"
-          value={Math.min(spec.floorHeight, maxFloorHeight)}
-          onChange={(e) => onUpdate({ floorHeight: parseFloat(e.target.value) })}
-          className="w-full h-2.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-400 [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(245,158,11,0.5)] [&::-webkit-slider-thumb]:transition-all"
-        />
-        <input
-          type="number"
-          min="2.5"
-          max={maxFloorHeight}
-          step="0.1"
-          value={spec.floorHeight}
-          onChange={(e) => {
-            const val = parseFloat(e.target.value);
-            onUpdate({ floorHeight: Math.min(val, maxFloorHeight) });
-          }}
-          className="mt-2 w-full px-4 py-2.5 border-2 border-gray-300 rounded-full text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:shadow-[0_0_15px_rgba(245,158,11,0.2)] transition-all duration-200"
-        />
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min="2.5"
+            max={maxFloorHeight}
+            step="0.1"
+            value={Math.min(spec.floorHeight, maxFloorHeight)}
+            onChange={(e) => onUpdate({ floorHeight: parseFloat(e.target.value) })}
+            className="flex-4 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+          />
+          <input
+            type="number"
+            min="2.5"
+            max={maxFloorHeight}
+            step="0.1"
+            value={spec.floorHeight}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              onUpdate({ floorHeight: Math.min(val, maxFloorHeight) });
+            }}
+            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg text-sm text-center focus:border-amber-400 focus:outline-none transition-colors duration-200"
+          />
+        </div>
       </div>
 
       <div className="pt-4 mt-6 border-t-2 border-gray-200">

@@ -4,17 +4,19 @@ import { TransformForm } from './TransformForm';
 import { DimensionsForm } from './DimensionsForm';
 import { TextureSelector } from './TextureSelector';
 import { WindowForm } from './WindowForm';
+import { TreeForm } from './TreeForm';
 import { BlueprintUploader } from './BlueprintUploader';
 import { BuildingList } from './BuildingList';
 import { DEFAULT_BUILDING_SPEC } from '@/lib/editor/types/buildingSpec';
 
-type SettingsTab = 'transform' | 'dimensions' | 'textures' | 'windows';
+type SettingsTab = 'transform' | 'dimensions' | 'textures' | 'windows' | 'trees';
 
 const TABS: { id: SettingsTab; label: string; icon: string }[] = [
   { id: 'transform', label: 'Transform', icon: '' },
   { id: 'dimensions', label: 'Dimensions', icon: '' },
   { id: 'textures', label: 'Textures', icon: '' },
   { id: 'windows', label: 'Windows', icon: '' },
+  { id: 'trees', label: 'Trees', icon: '' },
 ];
 
 export function InputPanel() {
@@ -58,7 +60,7 @@ export function InputPanel() {
             </h3>
             <button
               onClick={handleReset}
-              className="px-4 py-2 rounded-full font-medium text-xs border-2 bg-gray-100 border-amber-400/60 text-amber-700 hover:bg-amber-500 hover:border-amber-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out"
+              className="px-4 py-2 rounded-full font-medium text-xs border-2 bg-amber-200 border-amber-300 text-amber-700 hover:bg-amber-300 hover:border-amber-400 transition-colors duration-200"
             >
               Reset
             </button>
@@ -108,6 +110,9 @@ export function InputPanel() {
               )}
               {activeTab === 'windows' && (
                 <WindowForm spec={selectedBuilding.spec} onUpdate={handleUpdate} />
+              )}
+              {activeTab === 'trees' && (
+                <TreeForm spec={selectedBuilding.spec} onUpdate={handleUpdate} />
               )}
             </div>
           </div>

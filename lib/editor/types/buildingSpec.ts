@@ -1,6 +1,28 @@
 export type RoofType = 'flat' | 'gabled' | 'hipped' | 'pyramid';
 export type WindowPattern = 'grid' | 'ribbon' | 'none';
 export type WindowShape = 'rectangular' | 'arched' | 'circular' | 'triangular';
+export type TreeType =
+  | 'autumn-blaze-maple'
+  | 'canadian-serviceberry'
+  | 'colorado-blue-spruce'
+  | 'cortland-apple'
+  | 'eastern-redbud'
+  | 'eastern-white-pine'
+  | 'mcintosh-apple'
+  | 'northern-red-oak'
+  | 'paper-birch'
+  | 'sugar-maple'
+  | 'white-spruce';
+
+export interface TreeConfig {
+  enabled: boolean;
+  density: number; // 1-10, affects number of trees
+  radius: number; // distance from building edge
+  types: TreeType[]; // which tree types to include
+  minScale: number;
+  maxScale: number;
+  seed: number; // for consistent randomization
+}
 
 export interface BuildingSpecification {
   // Dimensions
@@ -37,6 +59,9 @@ export interface BuildingSpecification {
   // Blueprint (optional)
   footprint?: Array<[number, number]>;  // polygon vertices [x, z]
   blueprintImage?: string;  // data URL
+
+  // Trees/Landscaping
+  treeConfig?: TreeConfig;
 }
 
 export interface BuildingExportData {
@@ -54,6 +79,16 @@ export interface BuildingExportData {
     createdAt?: string;
   };
 }
+
+export const DEFAULT_TREE_CONFIG: TreeConfig = {
+  enabled: false,
+  density: 5,
+  radius: 8,
+  types: ['sugar-maple', 'northern-red-oak', 'white-spruce'],
+  minScale: 0.8,
+  maxScale: 1.4,
+  seed: 12345,
+};
 
 export const DEFAULT_BUILDING_SPEC: BuildingSpecification = {
   width: 20,
@@ -73,6 +108,7 @@ export const DEFAULT_BUILDING_SPEC: BuildingSpecification = {
   doorWidth: 1.5,
   doorHeight: 2.4,
   doorPosition: 0.5,
+  treeConfig: DEFAULT_TREE_CONFIG,
 };
 
 // Multi-building support types
