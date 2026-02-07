@@ -2,7 +2,6 @@ import { useBuildings } from '@/lib/editor/contexts/BuildingsContext';
 import { DimensionsForm } from './DimensionsForm';
 import { TextureSelector } from './TextureSelector';
 import { WindowForm } from './WindowForm';
-import { RoofForm } from './RoofForm';
 import { BlueprintUploader } from './BlueprintUploader';
 import { BuildingList } from './BuildingList';
 import { DEFAULT_BUILDING_SPEC } from '@/lib/editor/types/buildingSpec';
@@ -56,11 +55,7 @@ export function InputPanel() {
 
             <div className="space-y-6">
               <div className="bg-white p-6 rounded-xl border-2 border-gray-200 shadow-sm">
-                <DimensionsForm spec={selectedBuilding.spec} onUpdate={handleUpdate} />
-              </div>
-
-              <div className="bg-white p-6 rounded-xl border-2 border-gray-200 shadow-sm">
-                <RoofForm spec={selectedBuilding.spec} onUpdate={handleUpdate} />
+                <DimensionsForm spec={selectedBuilding.spec} onUpdate={handleUpdate} buildingId={selectedBuilding.id} />
               </div>
 
               <div className="bg-white p-6 rounded-xl border-2 border-gray-200 shadow-sm">

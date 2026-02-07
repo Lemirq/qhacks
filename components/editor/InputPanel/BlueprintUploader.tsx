@@ -95,17 +95,6 @@ export function BlueprintUploader() {
           </button>
         </div>
       )}
-
-      {!blueprintImage && (
-        <div className="text-sm text-gray-600 bg-white border-2 border-blue-200 p-4 rounded-lg shadow-sm">
-          <p className="font-bold mb-3 text-blue-800">How to use:</p>
-          <ul className="space-y-2 list-disc list-inside text-gray-700">
-            <li>Upload a blueprint image</li>
-            <li>Click to trace building outlines</li>
-            <li>Each traced shape creates a new building</li>
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

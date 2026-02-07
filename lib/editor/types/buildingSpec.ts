@@ -78,7 +78,7 @@ export type BuildingId = string;
 export interface BuildingInstance {
   id: BuildingId;
   name: string;
-  position: { x: number; z: number };
+  position: { x: number; y: number; z: number };
   rotation: number;
   spec: BuildingSpecification;
 }
