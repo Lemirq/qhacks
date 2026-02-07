@@ -1,4 +1,4 @@
-import { useMemo, forwardRef, useEffect, useRef } from 'react';
+import { useMemo } from 'react';
 import * as THREE from 'three';
 import { BuildingSpecification } from '../../types/buildingSpec';
 import {
@@ -12,16 +12,7 @@ interface BuildingProps {
   spec: BuildingSpecification;
 }
 
-export const Building = forwardRef<THREE.Group, BuildingProps>(({ spec }, ref) => {
-  const groupRef = useRef<THREE.Group>(null);
-
-  // Sync the ref with the internal ref
-  useEffect(() => {
-    if (ref && 'current' in ref) {
-      ref.current = groupRef.current;
-    }
-  }, [ref]);
-
+export function Building({ spec }: BuildingProps) {
   const buildingGroup = useMemo(() => {
     const group = new THREE.Group();
 
@@ -58,7 +49,5 @@ export const Building = forwardRef<THREE.Group, BuildingProps>(({ spec }, ref) =
     return group;
   }, [spec]);
 
-  return <primitive object={buildingGroup} ref={groupRef} />;
-});
-
-Building.displayName = 'Building';
+  return <primitive object={buildingGroup} />;
+}

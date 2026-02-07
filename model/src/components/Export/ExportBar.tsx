@@ -1,27 +1,27 @@
 import { useState } from 'react';
 import * as THREE from 'three';
-import { BuildingSpecification } from '../../types/buildingSpec';
-import { exportToGLB, exportToJSON, copyToClipboard } from '../../utils/exportUtils';
+import { useBuildings } from '../../contexts/BuildingsContext';
+import { exportMultiBuildingsToGLB, exportMultiBuildingsToJSON, copyMultiBuildingsToClipboard } from '../../utils/exportUtils';
 
 interface ExportBarProps {
-  spec: BuildingSpecification;
-  buildingRef: React.MutableRefObject<THREE.Group | null>;
+  sceneRef: React.MutableRefObject<THREE.Scene | null>;
 }
 
-export function ExportBar({ spec, buildingRef }: ExportBarProps) {
+export function ExportBar({ sceneRef }: ExportBarProps) {
+  const { buildings } = useBuildings();
   const [exporting, setExporting] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleExportGLB = async () => {
-    if (!buildingRef.current) {
-      alert('Building not ready for export');
+    if (!sceneRef.current) {
+      alert('Scene not ready for export');
       return;
     }
 
     setExporting(true);
     try {
-      await exportToGLB(buildingRef.current);
-      alert('Building exported as GLB successfully!');
+      await exportMultiBuildingsToGLB(sceneRef.current);
+      alert(`Successfully exported ${buildings.length} building${buildings.length > 1 ? 's' : ''} as GLB!`);
     } catch (error) {
       console.error('Export failed:', error);
       alert('Failed to export GLB. Check console for details.');
@@ -31,12 +31,12 @@ export function ExportBar({ spec, buildingRef }: ExportBarProps) {
   };
 
   const handleExportJSON = () => {
-    exportToJSON(spec);
+    exportMultiBuildingsToJSON(buildings);
   };
 
   const handleCopyJSON = async () => {
     try {
-      await copyToClipboard(spec);
+      await copyMultiBuildingsToClipboard(buildings);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
@@ -50,6 +50,9 @@ export function ExportBar({ spec, buildingRef }: ExportBarProps) {
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <div className="text-sm">
           <span className="font-semibold">Export Options</span>
+          <span className="ml-3 text-gray-400">
+            {buildings.length} building{buildings.length > 1 ? 's' : ''}
+          </span>
         </div>
 
         <div className="flex items-center gap-3">

@@ -71,3 +71,23 @@ export const DEFAULT_BUILDING_SPEC: BuildingSpecification = {
   doorHeight: 2.4,
   doorPosition: 0.5,
 };
+
+// Multi-building support types
+export type BuildingId = string;
+
+export interface BuildingInstance {
+  id: BuildingId;
+  name: string;
+  position: { x: number; z: number };
+  rotation: number;
+  spec: BuildingSpecification;
+}
+
+export interface MultiBuildingExportData {
+  version: string;
+  buildings: BuildingInstance[];
+  metadata?: {
+    name?: string;
+    createdAt?: string;
+  };
+}
