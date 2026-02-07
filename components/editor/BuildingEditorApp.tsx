@@ -22,7 +22,7 @@ export default function BuildingEditorApp() {
           </div>
           <Link
             href="/"
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-800 text-white text-sm rounded-lg transition-colors"
+            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-100 border-slate-400/60 text-slate-700 hover:bg-slate-500 hover:border-slate-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(71,85,105,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out"
           >
             ← Back to Campus Map
           </Link>

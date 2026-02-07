@@ -198,14 +198,14 @@ export function BlueprintTracer({ blueprintImage, onFootprintComplete }: Bluepri
         <button
           onClick={completeFootprint}
           disabled={points.length < 3}
-          className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors shadow-sm"
+          className="flex-1 px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-100 border-emerald-400/60 text-emerald-700 hover:bg-emerald-500 hover:border-emerald-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(16,185,129,0.35)] hover:-translate-y-0.5 active:translate-y-0 disabled:bg-gray-100 disabled:border-gray-300 disabled:text-gray-500 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none transition-all duration-200 ease-out"
         >
           Complete Building ({points.length} points)
         </button>
         <button
           onClick={handleReset}
           disabled={points.length === 0}
-          className="px-5 py-3 bg-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+          className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-100 border-gray-400/60 text-gray-700 hover:bg-gray-500 hover:border-gray-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(107,114,128,0.35)] hover:-translate-y-0.5 active:translate-y-0 disabled:bg-gray-100 disabled:border-gray-300 disabled:text-gray-500 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none transition-all duration-200 ease-out"
         >
           Reset
         </button>

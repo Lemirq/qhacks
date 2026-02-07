@@ -61,12 +61,13 @@ export function BlueprintUploader() {
             accept="image/*"
             onChange={handleBlueprintUpload}
             className="block w-full text-sm text-gray-600
-              file:mr-4 file:py-3 file:px-5
-              file:rounded-lg file:border-0
-              file:text-sm file:font-semibold
-              file:bg-green-600 file:text-white
-              hover:file:bg-green-700 file:cursor-pointer
-              file:transition-colors file:shadow-sm"
+              file:mr-4 file:py-2.5 file:px-5
+              file:rounded-full file:border-2
+              file:text-sm file:font-medium
+              file:bg-gray-100 file:border-emerald-400/60 file:text-emerald-700
+              hover:file:bg-emerald-500 hover:file:border-emerald-400 hover:file:text-white
+              file:cursor-pointer file:transition-all file:duration-200
+              file:shadow-md hover:file:shadow-[0_8px_25px_-5px_rgba(16,185,129,0.35)] hover:file:-translate-y-0.5"
           />
         </label>
       </div>
@@ -88,7 +89,7 @@ export function BlueprintUploader() {
 
           <button
             onClick={clearBlueprint}
-            className="w-full px-4 py-3 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors shadow-sm"
+            className="w-full px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-100 border-red-400/60 text-red-700 hover:bg-red-500 hover:border-red-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(239,68,68,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out"
           >
             Clear Blueprint
           </button>

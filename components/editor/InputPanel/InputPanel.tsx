@@ -48,7 +48,7 @@ export function InputPanel() {
               </h3>
               <button
                 onClick={handleReset}
-                className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-100 border-amber-400/60 text-amber-700 hover:bg-amber-500 hover:border-amber-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out"
               >
                 Reset
               </button>
