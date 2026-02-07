@@ -4,7 +4,7 @@ export interface TextureInfo {
   name: string;
   displayName: string;
   path: string;
-  category: 'wall' | 'roof' | 'ground';
+  category: 'wall' | 'roof' | 'ground' | 'window';
 }
 
 // Predefined textures
@@ -21,6 +21,11 @@ export const ROOF_TEXTURES: TextureInfo[] = [
   { name: 'metal', displayName: 'Metal', path: '/textures/roofs/metal.jpg', category: 'roof' },
   { name: 'tile', displayName: 'Tile', path: '/textures/roofs/tile.jpg', category: 'roof' },
   { name: 'green-roof', displayName: 'Green Roof', path: '/textures/roofs/green-roof.jpg', category: 'roof' },
+];
+
+export const WINDOW_TEXTURES: TextureInfo[] = [
+  { name: 'clear', displayName: 'Clear Glass', path: '', category: 'window' },
+  { name: 'glass', displayName: 'Glass', path: '/textures/walls/glass.jpg', category: 'window' },
 ];
 
 // Texture cache to avoid reloading
@@ -46,6 +51,7 @@ export function loadTexture(path: string): THREE.Texture {
 
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
 
   textureCache.set(path, texture);
   return texture;
@@ -61,6 +67,7 @@ export function loadTextureFromDataURL(dataUrl: string): THREE.Texture {
 
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
 
   textureCache.set(dataUrl, texture);
   return texture;
@@ -80,8 +87,12 @@ export function createMaterialWithTexture(
   });
 }
 
-export function getTexturePath(textureName: string, category: 'wall' | 'roof'): string {
-  const textures = category === 'wall' ? WALL_TEXTURES : ROOF_TEXTURES;
+export function getTexturePath(textureName: string, category: 'wall' | 'roof' | 'window'): string {
+  const textures = category === 'wall'
+    ? WALL_TEXTURES
+    : category === 'roof'
+      ? ROOF_TEXTURES
+      : WINDOW_TEXTURES;
   const textureInfo = textures.find(t => t.name === textureName);
   return textureInfo?.path || textures[0].path;
 }

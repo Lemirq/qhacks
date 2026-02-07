@@ -3,9 +3,8 @@ import * as THREE from 'three';
 import { BuildingSpecification } from '../../types/buildingSpec';
 import {
   createBuildingBody,
-  createFloorSeparators,
-  createRoof,
   createWindows,
+  createDoor,
 } from '../../utils/geometryBuilders';
 import { getTexturePath, loadTexture, loadTextureFromDataURL } from '../../utils/textureLoader';
 
@@ -48,34 +47,13 @@ export const Building = forwardRef<THREE.Group, BuildingProps>(({ spec }, ref) =
 
     group.add(body);
 
-    // Create floor separators
-    const floors = createFloorSeparators(spec);
-    group.add(floors);
-
-    // Create roof
-    const roof = createRoof(spec);
-
-    // Apply roof texture
-    let roofTexture: THREE.Texture;
-    if (spec.customRoofTexture) {
-      roofTexture = loadTextureFromDataURL(spec.customRoofTexture);
-    } else {
-      const roofTexturePath = getTexturePath(spec.roofTexture, 'roof');
-      roofTexture = loadTexture(roofTexturePath);
-    }
-
-    roofTexture.repeat.set(spec.width / 2, spec.depth / 2);
-
-    if (roof.material instanceof THREE.Material) {
-      (roof.material as THREE.MeshStandardMaterial).map = roofTexture;
-      (roof.material as THREE.MeshStandardMaterial).needsUpdate = true;
-    }
-
-    group.add(roof);
-
     // Create windows
     const windows = createWindows(spec);
     group.add(windows);
+
+    // Create door
+    const door = createDoor(spec);
+    group.add(door);
 
     return group;
   }, [spec]);

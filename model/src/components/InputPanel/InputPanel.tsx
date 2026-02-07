@@ -1,6 +1,5 @@
 import { BuildingSpecification } from '../../types/buildingSpec';
 import { DimensionsForm } from './DimensionsForm';
-import { RoofForm } from './RoofForm';
 import { TextureSelector } from './TextureSelector';
 import { WindowForm } from './WindowForm';
 import { BlueprintUploader } from './BlueprintUploader';
@@ -28,10 +27,6 @@ export function InputPanel({ spec, onUpdate, onReset }: InputPanelProps) {
         <div className="space-y-6">
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
             <DimensionsForm spec={spec} onUpdate={onUpdate} />
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <RoofForm spec={spec} onUpdate={onUpdate} />
           </div>
 
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">

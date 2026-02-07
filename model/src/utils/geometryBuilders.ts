@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { BuildingSpecification, RoofType } from '../types/buildingSpec';
+import type { BuildingSpecification } from '../types/buildingSpec';
+import { getTexturePath, loadTexture, loadTextureFromDataURL } from './textureLoader';
 
 export function createBuildingBody(spec: BuildingSpecification): THREE.Mesh {
   const totalHeight = spec.floorHeight * spec.numberOfFloors;
@@ -30,7 +31,7 @@ export function createBuildingBody(spec: BuildingSpecification): THREE.Mesh {
   }
 
   const material = new THREE.MeshStandardMaterial({
-    color: 0xcccccc,
+    color: 0xffffff,  // White base so texture shows correctly
   });
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -102,7 +103,7 @@ export function createRoof(spec: BuildingSpecification): THREE.Mesh {
   }
 
   const material = new THREE.MeshStandardMaterial({
-    color: 0x8b4513,
+    color: 0xffffff,  // White base so texture shows correctly
   });
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -149,6 +150,16 @@ function createHippedRoof(width: number, depth: number, height: number): THREE.B
     width/4, height, 0,
   ]);
 
+  const uvs = new Float32Array([
+    // UV coordinates for each vertex
+    0, 0,
+    1, 0,
+    1, 1,
+    0, 1,
+    0.25, 0.5,
+    0.75, 0.5,
+  ]);
+
   const indices = [
     // Front face
     0, 1, 5,
@@ -164,6 +175,7 @@ function createHippedRoof(width: number, depth: number, height: number): THREE.B
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
 
@@ -177,21 +189,20 @@ export function createWindows(spec: BuildingSpecification): THREE.Group {
     return group;
   }
 
-  const windowWidth = 1.2;
-  const windowHeight = 1.8;
-  const windowDepth = 0.1;
+  const windowWidth = spec.windowWidth || 1.2;
+  const windowHeight = spec.windowHeight || 1.8;
+  const windowDepth = 0.02;  // Reduced depth for flatter windows
 
-  const glassMaterial = new THREE.MeshPhysicalMaterial({
-    color: 0x88ccff,
-    transmission: 0.9,
-    roughness: 0.1,
-    metalness: 0.0,
+  const glassMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,  // White glass
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.6,
+    roughness: 0.1,
+    metalness: 0.1,
   });
 
   const frameMaterial = new THREE.MeshStandardMaterial({
-    color: 0x333333,
+    color: 0xffffff,  // White frame
   });
 
   // Calculate window spacing
@@ -207,7 +218,7 @@ export function createWindows(spec: BuildingSpecification): THREE.Group {
       const glass = new THREE.Mesh(glassGeometry, glassMaterial);
 
       // Frame
-      const frameGeometry = new THREE.BoxGeometry(windowWidth + 0.1, windowHeight + 0.1, windowDepth + 0.05);
+      const frameGeometry = new THREE.BoxGeometry(windowWidth + 0.05, windowHeight + 0.05, windowDepth + 0.01);
       const frame = new THREE.Mesh(frameGeometry, frameMaterial);
 
       windowGroup.add(frame);
@@ -232,6 +243,68 @@ export function createWindows(spec: BuildingSpecification): THREE.Group {
       }
     }
   }
+
+  return group;
+}
+
+export function createDoor(spec: BuildingSpecification): THREE.Group {
+  const group = new THREE.Group();
+
+  const doorWidth = spec.doorWidth || 1.5;
+  const doorHeight = spec.doorHeight || 2.4;
+  const doorDepth = 0.05;
+  const doorPosition = spec.doorPosition ?? 0.5;  // 0-1 around perimeter
+
+  const doorMaterial = new THREE.MeshStandardMaterial({
+    color: 0x8B4513,  // Brown door
+  });
+
+  const frameMaterial = new THREE.MeshStandardMaterial({
+    color: 0x654321,  // Darker brown frame
+  });
+
+  // Door panel
+  const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, doorDepth);
+  const door = new THREE.Mesh(doorGeometry, doorMaterial);
+
+  // Frame
+  const frameGeometry = new THREE.BoxGeometry(doorWidth + 0.1, doorHeight + 0.05, doorDepth + 0.02);
+  const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+
+  group.add(frame);
+  group.add(door);
+
+  // Calculate position around building perimeter
+  // Perimeter: front (0-0.25), right (0.25-0.5), back (0.5-0.75), left (0.75-1)
+  const perimeter = 2 * (spec.width + spec.depth);
+  const perimeterPos = doorPosition * perimeter;
+
+  let x = 0, z = 0, rotation = 0;
+
+  if (perimeterPos < spec.width) {
+    // Front face
+    x = -spec.width / 2 + perimeterPos;
+    z = spec.depth / 2 + doorDepth / 2;
+    rotation = 0;
+  } else if (perimeterPos < spec.width + spec.depth) {
+    // Right face
+    x = spec.width / 2 + doorDepth / 2;
+    z = spec.depth / 2 - (perimeterPos - spec.width);
+    rotation = Math.PI / 2;
+  } else if (perimeterPos < 2 * spec.width + spec.depth) {
+    // Back face
+    x = spec.width / 2 - (perimeterPos - spec.width - spec.depth);
+    z = -spec.depth / 2 - doorDepth / 2;
+    rotation = Math.PI;
+  } else {
+    // Left face
+    x = -spec.width / 2 - doorDepth / 2;
+    z = -spec.depth / 2 + (perimeterPos - 2 * spec.width - spec.depth);
+    rotation = -Math.PI / 2;
+  }
+
+  group.position.set(x, doorHeight / 2, z);
+  group.rotation.y = rotation;
 
   return group;
 }

@@ -15,13 +15,22 @@ export interface BuildingSpecification {
   // Textures
   wallTexture: string;      // texture name or 'custom'
   roofTexture: string;      // texture name or 'custom'
+  windowTexture: string;    // texture name or 'custom'
   customWallTexture?: string;  // data URL if custom
   customRoofTexture?: string;  // data URL if custom
+  customWindowTexture?: string; // data URL if custom
 
   // Windows
   windowPattern: WindowPattern;
   windowRows: number;       // windows per floor horizontally
   windowColumns?: number;   // auto-calculated from numberOfFloors
+  windowWidth: number;      // meters
+  windowHeight: number;     // meters
+
+  // Door
+  doorWidth: number;        // meters
+  doorHeight: number;       // meters
+  doorPosition: number;     // 0-1, position around building perimeter
 
   // Blueprint (optional)
   footprint?: Array<[number, number]>;  // polygon vertices [x, z]
@@ -53,6 +62,12 @@ export const DEFAULT_BUILDING_SPEC: BuildingSpecification = {
   roofHeight: 3,
   wallTexture: 'brick',
   roofTexture: 'shingle',
+  windowTexture: 'glass',
   windowPattern: 'grid',
   windowRows: 4,
+  windowWidth: 1.2,
+  windowHeight: 1.8,
+  doorWidth: 1.5,
+  doorHeight: 2.4,
+  doorPosition: 0.5,
 };

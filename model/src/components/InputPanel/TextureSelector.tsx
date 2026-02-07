@@ -1,5 +1,5 @@
 import { BuildingSpecification } from '../../types/buildingSpec';
-import { WALL_TEXTURES, ROOF_TEXTURES } from '../../utils/textureLoader';
+import { WALL_TEXTURES } from '../../utils/textureLoader';
 
 interface TextureSelectorProps {
   spec: BuildingSpecification;
@@ -14,18 +14,6 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string;
         onUpdate({ wallTexture: 'custom', customWallTexture: dataUrl });
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleRoofTextureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        onUpdate({ roofTexture: 'custom', customRoofTexture: dataUrl });
       };
       reader.readAsDataURL(file);
     }
@@ -72,48 +60,6 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
             />
           </label>
           {spec.customWallTexture && (
-            <p className="mt-1 text-xs text-green-600">Custom texture loaded</p>
-          )}
-        </div>
-      </div>
-
-      {/* Roof Texture */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Roof Texture
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          {ROOF_TEXTURES.map((texture) => (
-            <button
-              key={texture.name}
-              onClick={() => onUpdate({ roofTexture: texture.name, customRoofTexture: undefined })}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                spec.roofTexture === texture.name && !spec.customRoofTexture
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {texture.displayName}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-2">
-          <label className="block">
-            <span className="sr-only">Upload roof texture</span>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleRoofTextureUpload}
-              className="block w-full text-sm text-gray-500
-                file:mr-4 file:py-2 file:px-4
-                file:rounded-md file:border-0
-                file:text-sm file:font-semibold
-                file:bg-blue-50 file:text-blue-700
-                hover:file:bg-blue-100"
-            />
-          </label>
-          {spec.customRoofTexture && (
             <p className="mt-1 text-xs text-green-600">Custom texture loaded</p>
           )}
         </div>
