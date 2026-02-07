@@ -12,12 +12,7 @@ import { createSceneManager, handleResize } from "@/lib/sceneManager";
 import { fetchBuildings } from "@/lib/buildingData";
 import { renderBuildings } from "@/lib/buildingRenderer";
 import { renderRoads } from "@/lib/roadRenderer";
-import {
-  createSky,
-  setupFog,
-  createGround,
-  fetchSatelliteImagery
-} from "@/lib/environmentRenderer";
+import { createGround } from "@/lib/environmentRenderer";
 
 // Projection and camera
 import { CityProjection } from "@/lib/projection";
@@ -298,58 +293,13 @@ export default function ThreeMap({
           enablePan: controls.enablePan
         });
 
-        // Add sky and fog
+        // Environment setup (sky and fog removed for clearer view)
         setLoadingStatus("Setting up environment...");
-        const sky = createSky();
-        groups.environment.add(sky);
-        setupFog(scene);
 
         // Define bounding box for Kingston/Queen's area
         const bbox: [number, number, number, number] = [44.220, -76.510, 44.240, -76.480];
 
-        // Fetch and apply satellite imagery
-        setLoadingStatus("Fetching satellite imagery...");
-        const satelliteImageUrl = await fetchSatelliteImagery(bbox);
-
-        let satelliteTexture: THREE.Texture | undefined;
-        if (satelliteImageUrl) {
-          const textureLoader = new THREE.TextureLoader();
-          satelliteTexture = await new Promise<THREE.Texture>((resolve, reject) => {
-            textureLoader.load(
-              satelliteImageUrl,
-              (texture) => {
-                // Enable proper texture filtering for better quality at all distances
-                texture.wrapS = THREE.ClampToEdgeWrapping;
-                texture.wrapT = THREE.ClampToEdgeWrapping;
-
-                // Use mipmaps for better quality at distance
-                texture.minFilter = THREE.LinearMipmapLinearFilter;
-                texture.magFilter = THREE.LinearFilter;
-
-                // Enable anisotropic filtering for better quality at oblique angles
-                if (rendererRef.current) {
-                  const maxAnisotropy = rendererRef.current.capabilities.getMaxAnisotropy();
-                  texture.anisotropy = Math.min(16, maxAnisotropy);
-                  console.log(`✅ Satellite texture loaded with anisotropy: ${texture.anisotropy}`);
-                }
-
-                // Generate mipmaps for better LOD
-                texture.generateMipmaps = true;
-                texture.needsUpdate = true;
-
-                console.log('✅ Satellite texture loaded successfully');
-                resolve(texture);
-              },
-              undefined,
-              (error) => {
-                console.warn('Failed to load satellite texture:', error);
-                reject(error);
-              }
-            );
-          }).catch(() => undefined);
-        }
-
-        // Create ground with satellite texture
+        // Create ground plane (plain white, no texture)
         setLoadingStatus("Creating ground plane...");
         const ground = createGround(
           {
@@ -359,7 +309,7 @@ export default function ThreeMap({
             maxLng: bbox[3]
           },
           CityProjection,
-          satelliteTexture
+          undefined // No texture - plain white ground
         );
         groups.environment.add(ground);
         groundMeshRef.current = ground;
@@ -692,9 +642,7 @@ export default function ThreeMap({
     };
   }, []);
 
-  // Keyboard controls for adjusting ground position, rotation, and scale - Disabled after calibration
-  // Uncomment to re-enable for recalibration
-  /*
+  // Keyboard controls for adjusting ground position, rotation, and scale
   useEffect(() => {
     function handleKeyPress(event: KeyboardEvent) {
       if (!groundMeshRef.current) return;
@@ -770,7 +718,6 @@ export default function ThreeMap({
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
-  */
 
   return (
     <div className={`relative ${className}`}>
@@ -818,8 +765,8 @@ export default function ThreeMap({
         </div>
       )}
 
-      {/* Ground position adjustment UI - Disabled after calibration */}
-      {/* {isReady && (
+      {/* Ground position adjustment UI */}
+      {isReady && (
         <div className="absolute top-20 left-4 bg-black/80 text-white px-4 py-3 rounded-lg shadow-lg z-20 font-mono text-sm max-w-md">
           <div className="font-bold mb-2">🎮 Ground Adjustment Controls</div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
@@ -842,7 +789,7 @@ export default function ThreeMap({
             </div>
           </div>
         </div>
-      )} */}
+      )}
     </div>
   );
 }

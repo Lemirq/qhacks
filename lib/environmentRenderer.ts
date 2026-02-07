@@ -1,63 +1,76 @@
-import * as THREE from 'three';
+import * as THREE from "three";
 
 /**
- * Fetches satellite imagery for a bounding box
- * Uses Mapbox Static Images API with fallback to OpenStreetMap
+ * Fetches map imagery for a bounding box from OSM-based sources
+ * Uses the same data source as buildings/roads for perfect alignment
  * @param bbox - [south, west, north, east] bounding box
- * @returns Promise resolving to satellite image URL or null
+ * @returns Promise resolving to map image URL or null
  */
 export async function fetchSatelliteImagery(
-  bbox: [number, number, number, number]
+  bbox: [number, number, number, number],
 ): Promise<string | null> {
   const [south, west, north, east] = bbox;
 
-  // Try Mapbox first (best quality)
+  // Try Mapbox Streets (OSM-based) for perfect alignment with 3D data
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
   if (mapboxToken) {
     try {
-      // Use Mapbox Static Images API with bbox
-      // Format: /[minLng,minLat,maxLng,maxLat]/[width]x[height]@2x
-      // Max size is 1280x1280 without @2x, or 640x640 with @2x (giving 1280x1280 retina)
-      // We'll use the max retina resolution for best quality
+      // Use Mapbox Static Images API with OSM-based streets style
+      // This uses the same OSM data as our buildings/roads, ensuring perfect alignment
       const width = 1280;
       const height = 1280;
-      const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/[${west},${south},${east},${north}]/${width}x${height}@2x?access_token=${mapboxToken}`;
 
-      console.log('🛰️  Fetching Mapbox satellite imagery (2560x2560 retina)...');
-      const response = await fetch(url, { method: 'HEAD' }); // Quick check
-      if (response.ok) {
-        console.log('✅ Mapbox satellite imagery URL ready');
-        return url;
+      // Try satellite first for realistic imagery
+      const satelliteUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/[${west},${south},${east},${north}]/${width}x${height}@2x?access_token=${mapboxToken}`;
+
+      console.log("🗺️  Fetching Mapbox satellite-streets (OSM + satellite hybrid)...");
+      const satelliteResponse = await fetch(satelliteUrl, { method: "HEAD" });
+      if (satelliteResponse.ok) {
+        console.log("✅ Mapbox satellite-streets imagery URL ready");
+        return satelliteUrl;
       }
     } catch (error) {
-      console.warn('Mapbox satellite imagery failed, trying alternative...', error);
+      console.warn("Mapbox satellite-streets failed, trying streets-only...", error);
+    }
+
+    try {
+      // Fallback to pure streets style (OSM-based map without satellite)
+      const width = 1280;
+      const height = 1280;
+      const streetsUrl = `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/[${west},${south},${east},${north}]/${width}x${height}@2x?access_token=${mapboxToken}`;
+
+      console.log("🗺️  Fetching Mapbox streets (pure OSM rendering)...");
+      const streetsResponse = await fetch(streetsUrl, { method: "HEAD" });
+      if (streetsResponse.ok) {
+        console.log("✅ Mapbox streets imagery URL ready");
+        return streetsUrl;
+      }
+    } catch (error) {
+      console.warn("Mapbox streets failed", error);
     }
   }
 
-  // Fallback: Use ESRI World Imagery (free, good quality)
+  // Fallback: Use OpenStreetMap static map API
   try {
-    // Calculate center and zoom level
     const centerLat = (south + north) / 2;
     const centerLng = (west + east) / 2;
 
-    // For static imagery, we can construct a tile URL
-    // Using OpenStreetMap's Esri World Imagery tiles
-    const zoom = 15; // Good detail level for campus
-    const tileSize = 512;
+    // Calculate appropriate zoom level for the bbox
+    const latDiff = north - south;
+    const zoom = Math.floor(Math.log2(360 / latDiff)) - 1;
 
-    console.log('🛰️  Using ESRI World Imagery...');
+    console.log("🗺️  Using StaticMap OSM renderer...");
 
-    // Note: For production, you'd want to properly tile and stitch images
-    // For now, we'll use a simple center-based approach
-    const esriUrl = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${west},${south},${east},${north}&bboxSR=4326&imageSR=4326&size=2048,2048&format=png&f=image`;
+    // Use staticmap service with OSM tiles
+    const osmUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${centerLat},${centerLng}&zoom=${zoom}&size=2048x2048&maptype=mapnik`;
 
-    console.log('✅ ESRI satellite imagery URL generated');
-    return esriUrl;
+    console.log("✅ OSM static map URL generated");
+    return osmUrl;
   } catch (error) {
-    console.warn('ESRI satellite imagery failed', error);
+    console.warn("OSM static map failed", error);
   }
 
-  console.log('⚠️  No satellite imagery available, using fallback color');
+  console.log("⚠️  No map imagery available, using fallback color");
   return null;
 }
 
@@ -71,7 +84,7 @@ export async function fetchSatelliteImagery(
 export function createGround(
   bbox: { minLat: number; maxLat: number; minLng: number; maxLng: number },
   projection: { projectToWorld: (coord: [number, number]) => THREE.Vector3 },
-  satelliteTexture?: THREE.Texture
+  satelliteTexture?: THREE.Texture,
 ): THREE.Mesh {
   // Calculate bounds in world coordinates
   const topLeft = projection.projectToWorld([bbox.minLng, bbox.maxLat]);
@@ -84,7 +97,9 @@ export function createGround(
   const centerX = (topLeft.x + bottomRight.x) / 2;
   const centerZ = (topLeft.z + bottomRight.z) / 2;
 
-  console.log(`Ground dimensions: ${width.toFixed(1)}m x ${depth.toFixed(1)}m at (${centerX.toFixed(1)}, 0, ${centerZ.toFixed(1)})`);
+  console.log(
+    `Ground dimensions: ${width.toFixed(1)}m x ${depth.toFixed(1)}m at (${centerX.toFixed(1)}, 0, ${centerZ.toFixed(1)})`,
+  );
 
   // Create ground geometry - add padding for seamless appearance
   const padding = 1.2;
@@ -93,10 +108,10 @@ export function createGround(
   // Rotate geometry to be horizontal (in XZ plane) BEFORE creating mesh
   geometry.rotateX(-Math.PI / 2);
 
-  // Create material - use satellite texture if available, otherwise grass color
+  // Create material - plain white ground
   const material = new THREE.MeshStandardMaterial({
     map: satelliteTexture || null,
-    color: satelliteTexture ? 0xffffff : 0x88cc88, // White with texture, or grass green
+    color: satelliteTexture ? 0xffffff : 0xffffff, // White
     roughness: 0.9,
     metalness: 0.0,
     side: THREE.DoubleSide,
@@ -106,10 +121,11 @@ export function createGround(
 
   // Position with calibrated offset for proper alignment with buildings
   // These values were manually adjusted to align satellite imagery with 3D buildings
-  ground.position.set(centerX + 22.2, -10.0, centerZ - 800.6);
+  // Calibrated values: Position (33.3, -10.0, -750.9), Scale (0.980, 1.000, 0.920)
+  ground.position.set(centerX + 33.3, -10.0, centerZ - 750.9);
 
   // Scale calibration for perfect alignment
-  ground.scale.set(0.910, 1.000, 0.950);
+  ground.scale.set(0.980, 1.000, 0.920);
 
   ground.receiveShadow = true;
 
@@ -122,7 +138,15 @@ export function createGround(
  */
 export function createSky(): THREE.Mesh {
   // Create hemisphere for sky dome
-  const geometry = new THREE.SphereGeometry(5000, 32, 15, 0, Math.PI * 2, 0, Math.PI / 2);
+  const geometry = new THREE.SphereGeometry(
+    5000,
+    32,
+    15,
+    0,
+    Math.PI * 2,
+    0,
+    Math.PI / 2,
+  );
 
   // Gradient shader: blue at top fading to white at horizon
   const material = new THREE.ShaderMaterial({
@@ -173,7 +197,7 @@ export function setupFog(scene: THREE.Scene): void {
  */
 export function setupShadows(
   renderer: THREE.WebGLRenderer,
-  light: THREE.DirectionalLight
+  light: THREE.DirectionalLight,
 ): void {
   // Enable shadow mapping on renderer
   renderer.shadowMap.enabled = true;
