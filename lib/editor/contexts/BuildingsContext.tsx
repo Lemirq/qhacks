@@ -8,7 +8,7 @@ interface BuildingsContextType {
   placementMode: boolean;
 
   // Building management
-  addBuilding: (position: { x: number; z: number }) => void;
+  addBuilding: (position: { x: number; z: number }, spec?: Partial<BuildingSpecification>) => BuildingId;
   removeBuilding: (id: BuildingId) => void;
   updateBuilding: (id: BuildingId, updates: Partial<BuildingSpecification>) => void;
   selectBuilding: (id: BuildingId | null) => void;
@@ -39,7 +39,7 @@ export function BuildingsProvider({ children }: BuildingsProviderProps) {
   const [selectedBuildingId, setSelectedBuildingId] = useState<BuildingId | null>('building-1');
   const [placementMode, setPlacementMode] = useState(false);
 
-  const addBuilding = useCallback((position: { x: number; z: number }) => {
+  const addBuilding = useCallback((position: { x: number; z: number }, spec?: Partial<BuildingSpecification>) => {
     const newId = `building-${Date.now()}`;
     const buildingNumber = buildings.length + 1;
 
@@ -48,12 +48,14 @@ export function BuildingsProvider({ children }: BuildingsProviderProps) {
       name: `Building ${buildingNumber}`,
       position,
       rotation: 0,
-      spec: { ...DEFAULT_BUILDING_SPEC },
+      spec: { ...DEFAULT_BUILDING_SPEC, ...spec },
     };
 
     setBuildings(prev => [...prev, newBuilding]);
     setSelectedBuildingId(newId);
     setPlacementMode(false);
+
+    return newId;
   }, [buildings.length]);
 
   const removeBuilding = useCallback((id: BuildingId) => {
