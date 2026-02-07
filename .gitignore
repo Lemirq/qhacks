@@ -1,8 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
-/.pnp
+node_modules/
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -14,11 +14,12 @@
 /coverage
 
 # next.js
-/.next/
-/out/
+.next/
+out/
 
 # production
-/build
+build/
+dist/
 
 # misc
 .DS_Store
@@ -40,3 +41,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 model/.next/dev/build/chunks/[root-of-the-server]__992036af._.js.map
+model/.next/

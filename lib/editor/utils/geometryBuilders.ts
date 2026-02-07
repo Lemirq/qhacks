@@ -1,0 +1,324 @@
+import * as THREE from 'three';
+import type { BuildingSpecification } from '@/lib/editor/types/buildingSpec';
+import { getTexturePath, loadTexture, loadTextureFromDataURL } from '@/lib/editor/utils/textureLoader';
+
+export function createBuildingBody(spec: BuildingSpecification): THREE.Mesh {
+  const totalHeight = spec.floorHeight * spec.numberOfFloors;
+
+  let geometry: THREE.BufferGeometry;
+
+  if (spec.footprint && spec.footprint.length > 2) {
+    // Use extruded geometry from polygon footprint
+    const shape = new THREE.Shape();
+    spec.footprint.forEach((point, index) => {
+      if (index === 0) {
+        shape.moveTo(point[0], point[1]);
+      } else {
+        shape.lineTo(point[0], point[1]);
+      }
+    });
+
+    geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: totalHeight,
+      bevelEnabled: false,
+    });
+
+    // Rotate so extrusion goes upward along Y axis
+    geometry.rotateX(Math.PI / 2);
+  } else {
+    // Simple box geometry
+    geometry = new THREE.BoxGeometry(spec.width, totalHeight, spec.depth);
+  }
+
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffffff,  // White base so texture shows correctly
+  });
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.y = totalHeight / 2;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  return mesh;
+}
+
+export function createFloorSeparators(spec: BuildingSpecification): THREE.Group {
+  const group = new THREE.Group();
+  const slabHeight = 0.15;
+  const slabOverhang = 0.2;
+
+  for (let i = 1; i < spec.numberOfFloors; i++) {
+    const y = i * spec.floorHeight;
+
+    const geometry = new THREE.BoxGeometry(
+      spec.width + slabOverhang,
+      slabHeight,
+      spec.depth + slabOverhang
+    );
+
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x888888,
+    });
+
+    const slab = new THREE.Mesh(geometry, material);
+    slab.position.y = y;
+    slab.castShadow = true;
+    slab.receiveShadow = true;
+
+    group.add(slab);
+  }
+
+  return group;
+}
+
+export function createRoof(spec: BuildingSpecification): THREE.Mesh {
+  const baseY = spec.floorHeight * spec.numberOfFloors;
+
+  let geometry: THREE.BufferGeometry;
+
+  switch (spec.roofType) {
+    case 'flat':
+      geometry = new THREE.BoxGeometry(spec.width, 0.3, spec.depth);
+      break;
+
+    case 'gabled':
+      geometry = createGabledRoof(spec.width, spec.depth, spec.roofHeight);
+      break;
+
+    case 'hipped':
+      geometry = createHippedRoof(spec.width, spec.depth, spec.roofHeight);
+      break;
+
+    case 'pyramid':
+      geometry = new THREE.ConeGeometry(
+        Math.max(spec.width, spec.depth) * 0.7,
+        spec.roofHeight,
+        4
+      );
+      geometry.rotateY(Math.PI / 4);
+      break;
+
+    default:
+      geometry = new THREE.BoxGeometry(spec.width, 0.3, spec.depth);
+  }
+
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffffff,  // White base so texture shows correctly
+  });
+
+  const mesh = new THREE.Mesh(geometry, material);
+
+  if (spec.roofType === 'flat') {
+    mesh.position.y = baseY + 0.15;
+  } else {
+    mesh.position.y = baseY + spec.roofHeight / 2;
+  }
+
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  return mesh;
+}
+
+function createGabledRoof(width: number, depth: number, height: number): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  shape.moveTo(-width / 2, 0);
+  shape.lineTo(0, height);
+  shape.lineTo(width / 2, 0);
+  shape.lineTo(-width / 2, 0);
+
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: depth,
+    bevelEnabled: false,
+  });
+
+  geometry.rotateX(Math.PI / 2);
+  geometry.translate(0, 0, -depth / 2);
+
+  return geometry;
+}
+
+function createHippedRoof(width: number, depth: number, height: number): THREE.BufferGeometry {
+  const vertices = new Float32Array([
+    // Base rectangle
+    -width/2, 0, -depth/2,
+    width/2, 0, -depth/2,
+    width/2, 0, depth/2,
+    -width/2, 0, depth/2,
+    // Ridge line
+    -width/4, height, 0,
+    width/4, height, 0,
+  ]);
+
+  const uvs = new Float32Array([
+    // UV coordinates for each vertex
+    0, 0,
+    1, 0,
+    1, 1,
+    0, 1,
+    0.25, 0.5,
+    0.75, 0.5,
+  ]);
+
+  const indices = [
+    // Front face
+    0, 1, 5,
+    0, 5, 4,
+    // Right face
+    1, 2, 5,
+    // Back face
+    2, 3, 4,
+    2, 4, 5,
+    // Left face
+    3, 0, 4,
+  ];
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+
+  return geometry;
+}
+
+export function createWindows(spec: BuildingSpecification): THREE.Group {
+  const group = new THREE.Group();
+
+  if (spec.windowPattern === 'none') {
+    return group;
+  }
+
+  const windowWidth = spec.windowWidth || 1.2;
+  const windowHeight = spec.windowHeight || 1.8;
+  const windowDepth = 0.02;  // Reduced depth for flatter windows
+
+  const glassMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,  // White glass
+    transparent: true,
+    opacity: 0.6,
+    roughness: 0.1,
+    metalness: 0.1,
+  });
+
+  const frameMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,  // White frame
+  });
+
+  // Calculate window spacing
+  const horizontalSpacing = (spec.width - windowWidth) / (spec.windowRows + 1);
+  const verticalSpacing = spec.floorHeight;
+
+  for (let floor = 0; floor < spec.numberOfFloors; floor++) {
+    for (let col = 0; col < spec.windowRows; col++) {
+      const windowGroup = new THREE.Group();
+
+      // Glass pane
+      const glassGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowDepth);
+      const glass = new THREE.Mesh(glassGeometry, glassMaterial);
+
+      // Frame
+      const frameGeometry = new THREE.BoxGeometry(windowWidth + 0.05, windowHeight + 0.05, windowDepth + 0.01);
+      const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+
+      windowGroup.add(frame);
+      windowGroup.add(glass);
+
+      // Position window on front face
+      const x = -spec.width / 2 + horizontalSpacing * (col + 1) + windowWidth / 2;
+      const y = floor * verticalSpacing + verticalSpacing / 2;
+      const z = spec.depth / 2 + windowDepth / 2;
+
+      windowGroup.position.set(x, y, z);
+
+      group.add(windowGroup);
+
+      // Add windows to other sides (simplified for MVP)
+      if (spec.windowPattern === 'grid') {
+        // Back face
+        const backWindow = windowGroup.clone();
+        backWindow.position.z = -spec.depth / 2 - windowDepth / 2;
+        backWindow.rotation.y = Math.PI;
+        group.add(backWindow);
+      }
+    }
+  }
+
+  return group;
+}
+
+export function createDoor(spec: BuildingSpecification): THREE.Group {
+  const group = new THREE.Group();
+
+  const doorWidth = spec.doorWidth || 1.5;
+  const doorHeight = spec.doorHeight || 2.4;
+  const doorDepth = 0.05;
+  const doorPosition = spec.doorPosition ?? 0.5;  // 0-1 around perimeter
+
+  const doorMaterial = new THREE.MeshStandardMaterial({
+    color: 0x8B4513,  // Brown door
+  });
+
+  const frameMaterial = new THREE.MeshStandardMaterial({
+    color: 0x654321,  // Darker brown frame
+  });
+
+  // Door panel
+  const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, doorDepth);
+  const door = new THREE.Mesh(doorGeometry, doorMaterial);
+
+  // Frame
+  const frameGeometry = new THREE.BoxGeometry(doorWidth + 0.1, doorHeight + 0.05, doorDepth + 0.02);
+  const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+
+  group.add(frame);
+  group.add(door);
+
+  // Calculate position around building perimeter
+  // Perimeter: front (0-0.25), right (0.25-0.5), back (0.5-0.75), left (0.75-1)
+  const perimeter = 2 * (spec.width + spec.depth);
+  const perimeterPos = doorPosition * perimeter;
+
+  let x = 0, z = 0, rotation = 0;
+
+  if (perimeterPos < spec.width) {
+    // Front face
+    x = -spec.width / 2 + perimeterPos;
+    z = spec.depth / 2 + doorDepth / 2;
+    rotation = 0;
+  } else if (perimeterPos < spec.width + spec.depth) {
+    // Right face
+    x = spec.width / 2 + doorDepth / 2;
+    z = spec.depth / 2 - (perimeterPos - spec.width);
+    rotation = Math.PI / 2;
+  } else if (perimeterPos < 2 * spec.width + spec.depth) {
+    // Back face
+    x = spec.width / 2 - (perimeterPos - spec.width - spec.depth);
+    z = -spec.depth / 2 - doorDepth / 2;
+    rotation = Math.PI;
+  } else {
+    // Left face
+    x = -spec.width / 2 - doorDepth / 2;
+    z = -spec.depth / 2 + (perimeterPos - 2 * spec.width - spec.depth);
+    rotation = -Math.PI / 2;
+  }
+
+  group.position.set(x, doorHeight / 2, z);
+  group.rotation.y = rotation;
+
+  return group;
+}
+
+export function createGround(): THREE.Mesh {
+  const geometry = new THREE.PlaneGeometry(200, 200);
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x3a5f3a,
+    roughness: 0.8,
+  });
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.receiveShadow = true;
+
+  return mesh;
+}
