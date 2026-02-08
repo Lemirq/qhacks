@@ -8,7 +8,15 @@
       "Bash(curl:*)",
       "Bash(npx tsx:*)",
       "Bash(python3:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebFetch(domain:elevenlabs.io)",
+      "Bash(node scripts/generate-sounds.mjs:*)",
+      "Bash(dir:*)",
+      "Bash(npx tsc:*)",
+      "Bash(del:*)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\phine\\OneDrive\\Laptop\\HACKATHON\\qhacks\\qhacks\\public\\sounds"
     ]
   }
 }
