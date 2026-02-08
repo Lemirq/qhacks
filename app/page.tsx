@@ -58,88 +58,73 @@ export default function Landing() {
           </Link>
         </div>
       </section>
+{/* ───── STATEMENT ───── */}
+<section className="lp-statement">
+  <span className="lp-stmt-rule lp-fade" style={{ animationDelay: '0.1s' }} />
 
-      {/* ───── STATEMENT ───── */}
-      <section className="lp-statement">
-        <p className="lp-stmt-line">
-          Cities grow faster than we can plan for them.
-        </p>
-        <p className="lp-stmt-line lp-stmt-large">
-          Before breaking ground on a new building,<br />
-          Kingston deserves to see what it will look like,<br />
-          how traffic will shift, and what it <em>costs the air.</em>
-        </p>
-      </section>
+  <p className="lp-stmt-small lp-fade" style={{ animationDelay: '0.25s' }}>
+    Cities rise in moments. Legacies last for generations.
+  </p>
 
-      {/* ───── HOW IT WORKS ───── */}
-      <section className="bg-[#f4efe6]">
-        <FeatureSteps
-          features={[
-            {
-              step: 'Step 1',
-              title: 'Build a 3D Building From Any Input',
-              content:
-                'Create accurate 3D buildings from blueprints or simple specs in minutes, then adjust floors, height, roof type, and materials in a live preview.',
-              image:
-                'https://images.unsplash.com/photo-1686164748261-33e13eef70b6?q=80&w=2070&auto=format&fit=crop',
-            },
-            {
-              step: 'Step 2',
-              title: 'Place It Anywhere in Kingston',
-              content:
-                'Drop your building onto a real Kingston location and export it as GeoJSON or GLB for seamless use in planning and mapping workflows.',
-              image:
-                'https://images.unsplash.com/photo-1598897270268-f7091c801c3d?q=80&w=2070&auto=format&fit=crop',
-            },
-            {
-              step: 'Step 3',
-              title: 'Simulate Impact Before Construction Starts',
-              content:
-                'Visualize construction progress over time while tracking CO₂, noise, air quality, and traffic impacts before anything is built.',
-              image:
-                'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?q=80&w=2070&auto=format&fit=crop',
-            },
-          ]}
-          title="Your Journey Starts Here"
-          autoPlayInterval={4000}
-          imageHeight="h-[500px]"
-        />
-      </section>
+  <div className="lp-stmt-block lp-fade" style={{ animationDelay: '0.5s' }}>
+    <h2 className="lp-stmt-line">Before we build the future,</h2>
+    <h2 className="lp-stmt-line">Kingston deserves to see it.</h2>
+  </div>
 
-      {/* ───── DETAILS ───── */}
-      <section className="lp-details">
-        <div className="lp-detail">
-          <span className="lp-detail-num">I</span>
-          <h3>The City in 3D</h3>
-          <p>
-            Kingston&apos;s buildings pulled from OpenStreetMap, extruded into
-            real geometry with satellite-textured roads and live traffic
-            simulation — 30 AI vehicles navigating signals in real time.
-          </p>
-          <Link href="/map" className="lp-detail-link">Enter the city &rarr;</Link>
-        </div>
+  <p className="lp-stmt-sub lp-fade" style={{ animationDelay: '0.75s' }}>
+    Design smarter. Build responsibly.
+  </p>
 
-        <div className="lp-detail">
-          <span className="lp-detail-num">II</span>
-          <h3>Design &amp; Place</h3>
-          <p>
-            Create buildings from blueprints or from scratch — floors, roofs,
-            windows, textures — then drop them onto the map and export as
-            GLB models for any 3D workflow.
-          </p>
-          <Link href="/editor" className="lp-detail-link">Open the editor &rarr;</Link>
-        </div>
+  <h2 className="lp-stmt-main lp-fade" style={{ animationDelay: '0.95s' }}>
+    Shape a new <span className="lp-stmt-gold">Golden Age.</span>
+  </h2>
 
-        <div className="lp-detail">
-          <span className="lp-detail-num">III</span>
-          <h3>Measure the Impact</h3>
-          <p>
-            Simulate the construction timeline. Watch traffic reroute around
-            closures. Track CO&#8322; emissions, noise levels, and air quality
-            before the first shovel hits the ground.
-          </p>
-        </div>
-      </section>
+  <Link
+    href="/map"
+    className="lp-stmt-cta lp-fade"
+    style={{ animationDelay: '1.35s' }}
+  >
+    Explore the Future&ensp;&rarr;
+  </Link>
+</section>
+
+{/* ───── YOUR JOURNEY ───── */}
+<section className="bg-[#f4efe6]">
+  <FeatureSteps
+    title="Your Journey Starts Here"
+    subtitle="Kingston is entering a new golden age. New housing, hotels, and public spaces are creating jobs, attracting investment, and strengthening the local economy. Real progress is not about building fast. It is about building wisely and planning for the years ahead."
+    features={[
+      {
+        step: 'Step 1',
+        title: 'Build With Purpose',
+        content:
+          'Transform blueprints and ideas into accurate 3D buildings in minutes. Design spaces that support economic growth, community needs, and long-term stability.',
+        image:
+          'https://images.unsplash.com/photo-1686164748261-33e13eef70b6?q=80&w=2070&auto=format&fit=crop',
+      },
+      {
+        step: 'Step 2',
+        title: 'Place With Intention',
+        content:
+          'Position your building in real Kingston locations. Evaluate how new projects fit into neighborhoods, transit systems, and long-term development plans.',
+        image:
+          'https://images.unsplash.com/photo-1598897270268-f7091c801c3d?q=80&w=2070&auto=format&fit=crop',
+      },
+      {
+        step: 'Step 3',
+        title: 'Grow Responsibly',
+        content:
+          'Simulate environmental, traffic, and community impacts before construction begins. Use data to refine designs and protect Kingston’s future.',
+        image:
+          'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?q=80&w=2070&auto=format&fit=crop',
+      },
+    ]}
+    autoPlayInterval={4000}
+    imageHeight="h-[500px]"
+  />
+</section>
+
+
 
       {/* ───── CLOSING ───── */}
       <section className="lp-closing">
