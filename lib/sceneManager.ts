@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from "three";
 
 /**
  * Scene groups for organizing objects hierarchically
@@ -76,7 +76,7 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
     60, // FOV
     canvas.clientWidth / canvas.clientHeight, // Aspect ratio
     1, // Near plane
-    100000 // Far plane
+    100000, // Far plane
   );
 
   // Initial position for zoomed out Kingston view
@@ -126,7 +126,7 @@ export function handleResize(
   camera: THREE.PerspectiveCamera,
   renderer: THREE.WebGLRenderer,
   width: number,
-  height: number
+  height: number,
 ): void {
   camera.aspect = width / height;
   camera.updateProjectionMatrix();

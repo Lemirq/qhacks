@@ -10,25 +10,25 @@
  * Implements a state machine for realistic vehicle behavior.
  */
 
-import * as turf from '@turf/turf';
-import { SpawnedCar } from '../spawning';
-import { CollisionSystem } from './collisionSystem';
+import * as turf from "@turf/turf";
+import { SpawnedCar } from "../spawning";
+import { CollisionSystem } from "./collisionSystem";
 import {
   TrafficInfrastructureManager,
   TrafficSignal,
   StopSign,
   SignalState,
-} from '../trafficInfrastructure';
+} from "../trafficInfrastructure";
 
 export type VehicleBehaviorState =
-  | 'cruising' // Normal driving at target speed
-  | 'approaching_signal' // Slowing down for red/yellow light
-  | 'stopped_at_signal' // Waiting at red light
-  | 'approaching_stop_sign' // Approaching stop sign
-  | 'stopped_at_sign' // Stopped at stop sign
-  | 'yielding' // Waiting for right-of-way
-  | 'following' // Following another vehicle
-  | 'emergency_braking'; // Collision avoidance
+  | "cruising" // Normal driving at target speed
+  | "approaching_signal" // Slowing down for red/yellow light
+  | "stopped_at_signal" // Waiting at red light
+  | "approaching_stop_sign" // Approaching stop sign
+  | "stopped_at_sign" // Stopped at stop sign
+  | "yielding" // Waiting for right-of-way
+  | "following" // Following another vehicle
+  | "emergency_braking"; // Collision avoidance
 
 export interface BehaviorContext {
   infrastructureManager: TrafficInfrastructureManager;
@@ -90,7 +90,7 @@ export class VehicleBehaviorController {
     // Initialize state if needed
     if (!this.vehicleStates.has(car.id)) {
       this.vehicleStates.set(car.id, {
-        behaviorState: 'cruising',
+        behaviorState: "cruising",
         targetSpeed: car.maxSpeed,
         stoppedTime: 0,
         waitingForClearance: false,
@@ -155,17 +155,19 @@ export class VehicleBehaviorController {
    */
   private checkEmergencyBraking(
     car: SpawnedCar,
-    context: BehaviorContext
+    context: BehaviorContext,
   ): BehaviorResult | null {
-    if (context.collisionSystem.requiresEmergencyBrake(car, context.allVehicles)) {
+    if (
+      context.collisionSystem.requiresEmergencyBrake(car, context.allVehicles)
+    ) {
       const state = this.vehicleStates.get(car.id)!;
-      state.behaviorState = 'emergency_braking';
+      state.behaviorState = "emergency_braking";
 
       return {
         targetSpeed: 0,
         acceleration: -BEHAVIOR_CONFIG.EMERGENCY_DECELERATION,
-        state: 'emergency_braking',
-        reason: 'Imminent collision detected',
+        state: "emergency_braking",
+        reason: "Imminent collision detected",
       };
     }
 
@@ -183,7 +185,7 @@ export class VehicleBehaviorController {
   private checkStopSign(
     car: SpawnedCar,
     state: VehicleState,
-    context: BehaviorContext
+    context: BehaviorContext,
   ): BehaviorResult | null {
     const stopSigns = context.infrastructureManager.getStopSigns();
 
@@ -195,13 +197,16 @@ export class VehicleBehaviorController {
       const distance = turf.distance(
         turf.point(car.position),
         turf.point(stopSign.position),
-        { units: 'meters' }
+        { units: "meters" },
       );
 
       if (distance > BEHAVIOR_CONFIG.STOP_SIGN_DETECTION_DISTANCE) continue;
 
       // Check if stop sign is ahead (not behind)
-      const bearing = turf.bearing(turf.point(car.position), turf.point(stopSign.position));
+      const bearing = turf.bearing(
+        turf.point(car.position),
+        turf.point(stopSign.position),
+      );
       const bearingDiff = Math.abs(((bearing - car.bearing + 180) % 360) - 180);
 
       if (bearingDiff < 90 && distance < minDistance) {
@@ -212,8 +217,8 @@ export class VehicleBehaviorController {
 
     if (!nearestStopSign) {
       // No stop sign ahead, clear state if previously stopped
-      if (state.behaviorState === 'stopped_at_sign') {
-        state.behaviorState = 'cruising';
+      if (state.behaviorState === "stopped_at_sign") {
+        state.behaviorState = "cruising";
         state.stoppedTime = 0;
         state.lastStopSignId = undefined;
         state.waitingForClearance = false;
@@ -228,24 +233,32 @@ export class VehicleBehaviorController {
     }
 
     // Approaching stop sign
-    if (minDistance > BEHAVIOR_CONFIG.STOP_SIGN_STOP_DISTANCE && state.behaviorState !== 'stopped_at_sign') {
-      state.behaviorState = 'approaching_stop_sign';
+    if (
+      minDistance > BEHAVIOR_CONFIG.STOP_SIGN_STOP_DISTANCE &&
+      state.behaviorState !== "stopped_at_sign"
+    ) {
+      state.behaviorState = "approaching_stop_sign";
 
       // Calculate target speed based on distance
-      const brakingDistance = Math.max(0, minDistance - BEHAVIOR_CONFIG.STOP_SIGN_STOP_DISTANCE);
-      const targetSpeed = Math.sqrt(2 * BEHAVIOR_CONFIG.COMFORT_DECELERATION * brakingDistance / 3.6);
+      const brakingDistance = Math.max(
+        0,
+        minDistance - BEHAVIOR_CONFIG.STOP_SIGN_STOP_DISTANCE,
+      );
+      const targetSpeed = Math.sqrt(
+        (2 * BEHAVIOR_CONFIG.COMFORT_DECELERATION * brakingDistance) / 3.6,
+      );
 
       return {
         targetSpeed: Math.min(targetSpeed, car.speed),
         acceleration: -BEHAVIOR_CONFIG.COMFORT_DECELERATION,
-        state: 'approaching_stop_sign',
+        state: "approaching_stop_sign",
         reason: `Approaching stop sign ${nearestStopSign.id} (${minDistance.toFixed(1)}m)`,
       };
     }
 
     // At stop sign
     if (car.speed < 1) {
-      state.behaviorState = 'stopped_at_sign';
+      state.behaviorState = "stopped_at_sign";
       state.lastStopSignId = nearestStopSign.id;
 
       // Increment stopped time
@@ -256,34 +269,37 @@ export class VehicleBehaviorController {
         return {
           targetSpeed: 0,
           acceleration: 0,
-          state: 'stopped_at_sign',
+          state: "stopped_at_sign",
           reason: `Stopped at sign, waiting ${((BEHAVIOR_CONFIG.STOP_SIGN_MIN_WAIT - state.stoppedTime) / 1000).toFixed(1)}s`,
         };
       }
 
       // Check for cross-traffic
-      const isClear = this.checkIntersectionClearance(nearestStopSign.position, context);
+      const isClear = this.checkIntersectionClearance(
+        nearestStopSign.position,
+        context,
+      );
 
       if (!isClear) {
         state.waitingForClearance = true;
         return {
           targetSpeed: 0,
           acceleration: 0,
-          state: 'yielding',
-          reason: 'Waiting for cross-traffic to clear',
+          state: "yielding",
+          reason: "Waiting for cross-traffic to clear",
         };
       }
 
       // All clear, proceed
-      state.behaviorState = 'cruising';
+      state.behaviorState = "cruising";
       state.stoppedTime = 0;
       state.waitingForClearance = false;
 
       return {
         targetSpeed: car.maxSpeed,
         acceleration: BEHAVIOR_CONFIG.COMFORT_ACCELERATION,
-        state: 'cruising',
-        reason: 'Proceeding through stop sign',
+        state: "cruising",
+        reason: "Proceeding through stop sign",
       };
     }
 
@@ -301,7 +317,7 @@ export class VehicleBehaviorController {
   private checkTrafficSignal(
     car: SpawnedCar,
     state: VehicleState,
-    context: BehaviorContext
+    context: BehaviorContext,
   ): BehaviorResult | null {
     const signals = context.infrastructureManager.getSignals();
 
@@ -313,13 +329,16 @@ export class VehicleBehaviorController {
       const distance = turf.distance(
         turf.point(car.position),
         turf.point(signal.position),
-        { units: 'meters' }
+        { units: "meters" },
       );
 
       if (distance > BEHAVIOR_CONFIG.SIGNAL_DETECTION_DISTANCE) continue;
 
       // Check if signal is ahead
-      const bearing = turf.bearing(turf.point(car.position), turf.point(signal.position));
+      const bearing = turf.bearing(
+        turf.point(car.position),
+        turf.point(signal.position),
+      );
       const bearingDiff = Math.abs(((bearing - car.bearing + 180) % 360) - 180);
 
       if (bearingDiff < 90 && distance < minDistance) {
@@ -330,8 +349,8 @@ export class VehicleBehaviorController {
 
     if (!nearestSignal) {
       // No signal ahead
-      if (state.behaviorState === 'stopped_at_signal') {
-        state.behaviorState = 'cruising';
+      if (state.behaviorState === "stopped_at_signal") {
+        state.behaviorState = "cruising";
         state.stoppedTime = 0;
         state.lastSignalId = undefined;
       }
@@ -347,69 +366,82 @@ export class VehicleBehaviorController {
     const signalState = nearestSignal.state;
 
     // Green light - proceed
-    if (signalState === 'green') {
-      if (state.behaviorState === 'stopped_at_signal' || state.behaviorState === 'approaching_signal') {
-        state.behaviorState = 'cruising';
+    if (signalState === "green") {
+      if (
+        state.behaviorState === "stopped_at_signal" ||
+        state.behaviorState === "approaching_signal"
+      ) {
+        state.behaviorState = "cruising";
         state.lastSignalId = nearestSignal.id;
       }
       return null; // Continue with normal behavior
     }
 
     // Yellow light
-    if (signalState === 'yellow') {
+    if (signalState === "yellow") {
       // If close to intersection, proceed through
       if (minDistance < BEHAVIOR_CONFIG.YELLOW_DECISION_DISTANCE) {
         state.lastSignalId = nearestSignal.id;
         return {
           targetSpeed: car.maxSpeed,
           acceleration: BEHAVIOR_CONFIG.COMFORT_ACCELERATION,
-          state: 'cruising',
-          reason: 'Proceeding through yellow light (too close to stop)',
+          state: "cruising",
+          reason: "Proceeding through yellow light (too close to stop)",
         };
       }
 
       // Otherwise, brake for red
-      state.behaviorState = 'approaching_signal';
+      state.behaviorState = "approaching_signal";
 
-      const brakingDistance = Math.max(0, minDistance - BEHAVIOR_CONFIG.SIGNAL_STOP_DISTANCE);
-      const targetSpeed = Math.sqrt(2 * BEHAVIOR_CONFIG.COMFORT_DECELERATION * brakingDistance / 3.6);
+      const brakingDistance = Math.max(
+        0,
+        minDistance - BEHAVIOR_CONFIG.SIGNAL_STOP_DISTANCE,
+      );
+      const targetSpeed = Math.sqrt(
+        (2 * BEHAVIOR_CONFIG.COMFORT_DECELERATION * brakingDistance) / 3.6,
+      );
 
       return {
         targetSpeed: Math.min(targetSpeed, car.speed),
         acceleration: -BEHAVIOR_CONFIG.COMFORT_DECELERATION,
-        state: 'approaching_signal',
+        state: "approaching_signal",
         reason: `Braking for yellow light (${minDistance.toFixed(1)}m)`,
       };
     }
 
     // Red light
-    if (signalState === 'red') {
+    if (signalState === "red") {
       // Approaching red light
       if (minDistance > BEHAVIOR_CONFIG.SIGNAL_STOP_DISTANCE && car.speed > 1) {
-        state.behaviorState = 'approaching_signal';
+        state.behaviorState = "approaching_signal";
 
-        const brakingDistance = Math.max(0, minDistance - BEHAVIOR_CONFIG.SIGNAL_STOP_DISTANCE);
-        const targetSpeed = Math.sqrt(2 * BEHAVIOR_CONFIG.COMFORT_DECELERATION * brakingDistance / 3.6);
+        const brakingDistance = Math.max(
+          0,
+          minDistance - BEHAVIOR_CONFIG.SIGNAL_STOP_DISTANCE,
+        );
+        const targetSpeed = Math.sqrt(
+          (2 * BEHAVIOR_CONFIG.COMFORT_DECELERATION * brakingDistance) / 3.6,
+        );
 
         return {
           targetSpeed: Math.min(targetSpeed, car.speed),
           acceleration: -BEHAVIOR_CONFIG.COMFORT_DECELERATION,
-          state: 'approaching_signal',
+          state: "approaching_signal",
           reason: `Braking for red light (${minDistance.toFixed(1)}m)`,
         };
       }
 
       // Stopped at red light
       if (car.speed < 1) {
-        state.behaviorState = 'stopped_at_signal';
+        state.behaviorState = "stopped_at_signal";
         state.lastSignalId = nearestSignal.id;
         state.stoppedTime += context.deltaTime * 1000;
 
         return {
           targetSpeed: 0,
           acceleration: 0,
-          state: 'stopped_at_signal',
-          reason: 'Stopped at red light',
+          state: "stopped_at_signal",
+          reason: "Stopped at red light",
         };
       }
     }
@@ -423,14 +455,14 @@ export class VehicleBehaviorController {
   private checkFollowing(
     car: SpawnedCar,
     state: VehicleState,
-    context: BehaviorContext
+    context: BehaviorContext,
   ): BehaviorResult | null {
     // Find lead vehicle directly ahead
     const leadVehicle = this.findLeadVehicle(car, context);
 
     if (!leadVehicle) {
-      if (state.behaviorState === 'following') {
-        state.behaviorState = 'cruising';
+      if (state.behaviorState === "following") {
+        state.behaviorState = "cruising";
       }
       return null;
     }
@@ -438,15 +470,17 @@ export class VehicleBehaviorController {
     const distance = turf.distance(
       turf.point(car.position),
       turf.point(leadVehicle.position),
-      { units: 'meters' }
+      { units: "meters" },
     );
 
     // Calculate safe following distance based on current speed
-    const safeDistance = context.collisionSystem.getSafeFollowingDistance(car.speed);
+    const safeDistance = context.collisionSystem.getSafeFollowingDistance(
+      car.speed,
+    );
 
     // If we're too close, slow down
     if (distance < safeDistance) {
-      state.behaviorState = 'following';
+      state.behaviorState = "following";
 
       // Match speed of lead vehicle or slow down
       const targetSpeed = Math.min(leadVehicle.speed, car.speed - 5);
@@ -454,36 +488,40 @@ export class VehicleBehaviorController {
       return {
         targetSpeed: Math.max(0, targetSpeed),
         acceleration: -BEHAVIOR_CONFIG.COMFORT_DECELERATION,
-        state: 'following',
+        state: "following",
         reason: `Following vehicle ${leadVehicle.id} (${distance.toFixed(1)}m, safe: ${safeDistance.toFixed(1)}m)`,
       };
     }
 
     // If we're at a good distance but following, match speed
-    if (state.behaviorState === 'following' && distance < safeDistance * 1.5) {
+    if (state.behaviorState === "following" && distance < safeDistance * 1.5) {
       // Speed matching
-      if (Math.abs(car.speed - leadVehicle.speed) < BEHAVIOR_CONFIG.SPEED_MATCH_THRESHOLD) {
+      if (
+        Math.abs(car.speed - leadVehicle.speed) <
+        BEHAVIOR_CONFIG.SPEED_MATCH_THRESHOLD
+      ) {
         return {
           targetSpeed: leadVehicle.speed,
           acceleration: 0,
-          state: 'following',
+          state: "following",
           reason: `Matching speed of ${leadVehicle.id} at ${leadVehicle.speed.toFixed(0)} km/h`,
         };
       }
 
       return {
         targetSpeed: leadVehicle.speed,
-        acceleration: leadVehicle.speed > car.speed
-          ? BEHAVIOR_CONFIG.COMFORT_ACCELERATION * 0.5
-          : -BEHAVIOR_CONFIG.COMFORT_DECELERATION * 0.5,
-        state: 'following',
+        acceleration:
+          leadVehicle.speed > car.speed
+            ? BEHAVIOR_CONFIG.COMFORT_ACCELERATION * 0.5
+            : -BEHAVIOR_CONFIG.COMFORT_DECELERATION * 0.5,
+        state: "following",
         reason: `Adjusting to match ${leadVehicle.id}`,
       };
     }
 
     // Far enough, can cruise
-    if (state.behaviorState === 'following') {
-      state.behaviorState = 'cruising';
+    if (state.behaviorState === "following") {
+      state.behaviorState = "cruising";
     }
 
     return null;
@@ -492,8 +530,12 @@ export class VehicleBehaviorController {
   /**
    * Normal cruising behavior
    */
-  private cruise(car: SpawnedCar, state: VehicleState, context: BehaviorContext): BehaviorResult {
-    state.behaviorState = 'cruising';
+  private cruise(
+    car: SpawnedCar,
+    state: VehicleState,
+    context: BehaviorContext,
+  ): BehaviorResult {
+    state.behaviorState = "cruising";
     state.stoppedTime = 0;
 
     // Accelerate to max speed
@@ -501,8 +543,8 @@ export class VehicleBehaviorController {
       return {
         targetSpeed: car.maxSpeed,
         acceleration: BEHAVIOR_CONFIG.COMFORT_ACCELERATION,
-        state: 'cruising',
-        reason: 'Accelerating to cruising speed',
+        state: "cruising",
+        reason: "Accelerating to cruising speed",
       };
     }
 
@@ -510,8 +552,8 @@ export class VehicleBehaviorController {
     return {
       targetSpeed: car.maxSpeed,
       acceleration: 0,
-      state: 'cruising',
-      reason: 'Cruising at target speed',
+      state: "cruising",
+      reason: "Cruising at target speed",
     };
   }
 
@@ -522,7 +564,7 @@ export class VehicleBehaviorController {
    */
   private checkIntersectionClearance(
     intersectionPos: [number, number],
-    context: BehaviorContext
+    context: BehaviorContext,
   ): boolean {
     const { allVehicles } = context;
 
@@ -530,11 +572,14 @@ export class VehicleBehaviorController {
       const distance = turf.distance(
         turf.point(intersectionPos),
         turf.point(vehicle.position),
-        { units: 'meters' }
+        { units: "meters" },
       );
 
       // If another vehicle is within clearance radius and moving, intersection is not clear
-      if (distance < BEHAVIOR_CONFIG.STOP_SIGN_CLEARANCE_RADIUS && vehicle.speed > 5) {
+      if (
+        distance < BEHAVIOR_CONFIG.STOP_SIGN_CLEARANCE_RADIUS &&
+        vehicle.speed > 5
+      ) {
         return false;
       }
     }
@@ -545,11 +590,14 @@ export class VehicleBehaviorController {
   /**
    * Find the lead vehicle directly ahead
    */
-  private findLeadVehicle(car: SpawnedCar, context: BehaviorContext): SpawnedCar | null {
+  private findLeadVehicle(
+    car: SpawnedCar,
+    context: BehaviorContext,
+  ): SpawnedCar | null {
     const nearby = context.collisionSystem.getNearbyVehicles(
       car,
       BEHAVIOR_CONFIG.DETECTION_RADIUS,
-      context.allVehicles
+      context.allVehicles,
     );
 
     let leadVehicle: SpawnedCar | null = null;
@@ -557,7 +605,10 @@ export class VehicleBehaviorController {
 
     for (const other of nearby) {
       // Check if vehicle is ahead (not behind or beside)
-      const bearing = turf.bearing(turf.point(car.position), turf.point(other.position));
+      const bearing = turf.bearing(
+        turf.point(car.position),
+        turf.point(other.position),
+      );
       const bearingDiff = Math.abs(((bearing - car.bearing + 180) % 360) - 180);
 
       // Vehicle is ahead if bearing difference is < 45 degrees
@@ -565,7 +616,7 @@ export class VehicleBehaviorController {
         const distance = turf.distance(
           turf.point(car.position),
           turf.point(other.position),
-          { units: 'meters' }
+          { units: "meters" },
         );
 
         if (distance < minDistance) {
@@ -581,7 +632,11 @@ export class VehicleBehaviorController {
   /**
    * Apply behavior result to car (updates speed)
    */
-  applyBehavior(car: SpawnedCar, result: BehaviorResult, deltaTime: number): void {
+  applyBehavior(
+    car: SpawnedCar,
+    result: BehaviorResult,
+    deltaTime: number,
+  ): void {
     // Apply acceleration
     if (result.acceleration !== 0) {
       const deltaSpeed = result.acceleration * deltaTime;

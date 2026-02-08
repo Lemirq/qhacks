@@ -77,14 +77,16 @@ interface PlacedBuilding {
 interface ThreeMapProps {
   initialCenter?: [number, number];
   className?: string;
-  onCoordinateClick?: (coordinate: {
-    lat: number;
-    lng: number;
-    worldX: number;
-    worldY: number;
-    worldZ: number;
-    ghostRotationY?: number; // Current rotation of ghost preview
-  } | null) => void;
+  onCoordinateClick?: (
+    coordinate: {
+      lat: number;
+      lng: number;
+      worldX: number;
+      worldY: number;
+      worldZ: number;
+      ghostRotationY?: number; // Current rotation of ghost preview
+    } | null,
+  ) => void;
   placedBuildings?: PlacedBuilding[];
   isPlacementMode?: boolean;
   buildingScale?: { x: number; y: number; z: number };
@@ -209,7 +211,7 @@ function createTrafficLightModel(): THREE.Group {
   const poleMaterial = new THREE.MeshPhongMaterial({
     color: 0x444444,
     emissive: 0x222222,
-    emissiveIntensity: 0.5
+    emissiveIntensity: 0.5,
   });
   const pole = new THREE.Mesh(poleGeometry, poleMaterial);
   pole.position.y = 12.5;
@@ -220,7 +222,7 @@ function createTrafficLightModel(): THREE.Group {
   const housingMaterial = new THREE.MeshPhongMaterial({
     color: 0x222222,
     emissive: 0x111111,
-    emissiveIntensity: 0.3
+    emissiveIntensity: 0.3,
   });
   const housing = new THREE.Mesh(housingGeometry, housingMaterial);
   housing.position.y = 25;
@@ -564,7 +566,7 @@ export default function ThreeMap({
               const dist = turf.distance(
                 turf.point(intersection.position),
                 turf.point(signal.position),
-                { units: 'meters' }
+                { units: "meters" },
               );
 
               if (dist < minDist) {
@@ -580,22 +582,29 @@ export default function ThreeMap({
 
             // 4. Place one traffic light for each approach direction
             approachingEdges.forEach((edge, idx) => {
-              const bearing = roadNetwork.getEdgeBearingAtNode(edge, intersection.id);
+              const bearing = roadNetwork.getEdgeBearingAtNode(
+                edge,
+                intersection.id,
+              );
 
               // Create mesh for this approach
               const mesh = createTrafficLightModel();
-              const worldPos = CityProjection.projectToWorld(intersection.position);
+              const worldPos = CityProjection.projectToWorld(
+                intersection.position,
+              );
 
               // Place light on the FAR side of intersection (where traffic goes)
               // Offset 20m in the direction the traffic is heading (50% of original)
               const offsetDistance = 20; // meters in world units
-              const offsetX = Math.sin((bearing * Math.PI) / 180) * offsetDistance;
-              const offsetZ = Math.cos((bearing * Math.PI) / 180) * offsetDistance;
+              const offsetX =
+                Math.sin((bearing * Math.PI) / 180) * offsetDistance;
+              const offsetZ =
+                Math.cos((bearing * Math.PI) / 180) * offsetDistance;
 
               mesh.position.set(
                 worldPos.x + offsetX,
                 worldPos.y,
-                worldPos.z + offsetZ
+                worldPos.z + offsetZ,
               );
 
               // Rotate to face oncoming traffic
@@ -610,7 +619,9 @@ export default function ThreeMap({
             });
           });
 
-          console.log(`✅ Placed traffic lights at ${intersections.length} intersections`);
+          console.log(
+            `✅ Placed traffic lights at ${intersections.length} intersections`,
+          );
 
           // Initialize Signal Coordinator for green wave coordination
           if (signalCoordinatorRef.current) {
@@ -1199,21 +1210,21 @@ export default function ThreeMap({
 
     function handleKeyDown(event: KeyboardEvent) {
       // Don't interfere with text inputs
-      if ((event.target as HTMLElement).tagName === 'INPUT') return;
+      if ((event.target as HTMLElement).tagName === "INPUT") return;
 
       const rotationStep = event.shiftKey ? Math.PI / 4 : Math.PI / 12; // 45° or 15°
 
-      if (event.key === 'ArrowLeft') {
+      if (event.key === "ArrowLeft") {
         event.preventDefault();
-        setGhostRotationY(prev => prev + rotationStep); // Counter-clockwise
-      } else if (event.key === 'ArrowRight') {
+        setGhostRotationY((prev) => prev + rotationStep); // Counter-clockwise
+      } else if (event.key === "ArrowRight") {
         event.preventDefault();
-        setGhostRotationY(prev => prev - rotationStep); // Clockwise
+        setGhostRotationY((prev) => prev - rotationStep); // Clockwise
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isPlacementMode]);
 
   // Apply rotation to ghost model when ghostRotationY changes
@@ -1240,7 +1251,7 @@ export default function ThreeMap({
       // Call API to remove from buildings.json (unless skipped for batch operations)
       if (!skipApiCall) {
         const response = await fetch(`/api/map/buildings/${buildingId}`, {
-          method: 'DELETE',
+          method: "DELETE",
         });
 
         if (response.ok) {
@@ -1250,7 +1261,7 @@ export default function ThreeMap({
             onOsmBuildingDelete(buildingId);
           }
         } else {
-          console.error('Failed to delete building from server');
+          console.error("Failed to delete building from server");
         }
       }
 
@@ -1261,7 +1272,9 @@ export default function ThreeMap({
   };
 
   // Check for collisions between a loaded 3D model and all OSM buildings
-  const checkAndDeleteCollidingBuildings = async (loadedModel: THREE.Object3D) => {
+  const checkAndDeleteCollidingBuildings = async (
+    loadedModel: THREE.Object3D,
+  ) => {
     if (!groupsRef.current || osmBuildingMeshesRef.current.size === 0) return;
 
     const collidingIds: string[] = [];
@@ -1272,7 +1285,7 @@ export default function ThreeMap({
     console.log(`📦 Checking collisions for placed building. Bounding box:`, {
       min: placedBox.min,
       max: placedBox.max,
-      size: placedBox.getSize(new THREE.Vector3())
+      size: placedBox.getSize(new THREE.Vector3()),
     });
 
     // Check each OSM building for collision
@@ -1288,7 +1301,9 @@ export default function ThreeMap({
     });
 
     if (collidingIds.length > 0) {
-      console.log(`🔄 Found ${collidingIds.length} colliding OSM buildings, removing all...`);
+      console.log(
+        `🔄 Found ${collidingIds.length} colliding OSM buildings, removing all...`,
+      );
 
       // Delete all colliding buildings from scene immediately
       for (const buildingId of collidingIds) {
@@ -1306,18 +1321,20 @@ export default function ThreeMap({
 
       // Batch delete from server
       try {
-        const response = await fetch('/api/map/buildings/batch-delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await fetch("/api/map/buildings/batch-delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ids: collidingIds }),
         });
 
         if (response.ok) {
           const result = await response.json();
-          console.log(`✅ Batch deleted ${result.deletedCount} buildings from server`);
+          console.log(
+            `✅ Batch deleted ${result.deletedCount} buildings from server`,
+          );
         }
       } catch (error) {
-        console.error('Error batch deleting buildings:', error);
+        console.error("Error batch deleting buildings:", error);
       }
     } else {
       console.log(`✅ No collisions detected`);
@@ -1384,7 +1401,9 @@ export default function ThreeMap({
           groupsRef.current?.dynamicObjects.add(model);
           buildingModelsRef.current.set(building.id, model);
 
-          console.log(`✅ Loaded building ${building.id} at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`);
+          console.log(
+            `✅ Loaded building ${building.id} at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`,
+          );
 
           // Check for and delete colliding OSM buildings after model is loaded
           // Need to update matrix world for accurate bounding box calculation
