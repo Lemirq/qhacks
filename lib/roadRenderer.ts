@@ -15,7 +15,7 @@ import { RoadEdge } from "./roadNetwork";
 export function renderRoads(
   edges: RoadEdge[],
   projection: typeof CityProjection,
-  scene: THREE.Scene,
+  scene: THREE.Object3D,
 ): void {
   console.log(`Rendering ${edges.length} roads...`);
 

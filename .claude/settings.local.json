@@ -16,7 +16,10 @@
       "Bash(del:*)"
     ],
     "additionalDirectories": [
-      "c:\\Users\\phine\\OneDrive\\Laptop\\HACKATHON\\qhacks\\qhacks\\public\\sounds"
+      "c:\\Users\\phine\\OneDrive\\Laptop\\HACKATHON\\qhacks\\qhacks\\public\\sounds",
+      "Bash(sort:*)",
+      "Bash(npx tsc:*)",
+      "Bash(timeout 15 npm run dev:*)",
     ]
   }
 }

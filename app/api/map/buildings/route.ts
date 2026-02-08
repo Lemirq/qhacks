@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import buildingsData from '@/public/map-data/buildings.json';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 interface Building {
   id: string;
@@ -15,12 +16,20 @@ interface Building {
  */
 export async function GET() {
   try {
-    // Serve pre-processed static data
-    const buildings = buildingsData as Building[];
+    // Read the file dynamically so changes take effect without restart
+    const filePath = join(process.cwd(), 'public', 'map-data', 'buildings.json');
+    const fileContent = readFileSync(filePath, 'utf-8');
+    const buildings = JSON.parse(fileContent) as Building[];
+
+    // In development, use short cache. In production, cache longer.
+    const isDev = process.env.NODE_ENV === 'development';
+    const cacheControl = isDev
+      ? 'no-cache, no-store, must-revalidate'
+      : 'public, max-age=3600, stale-while-revalidate=86400';
 
     return NextResponse.json(buildings, {
       headers: {
-        'Cache-Control': 'public, max-age=31536000, immutable', // Cache forever since it's static
+        'Cache-Control': cacheControl,
       },
     });
   } catch (error) {
