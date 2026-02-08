@@ -3,7 +3,9 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ThreeMap from '@/components/ThreeMap';
-import { Landmark, SlidersHorizontal, Building2, TrafficCone, Leaf, FileText, PlayCircle, Clock, Settings, MapPin, Copy, X, Plus, Trash2, Upload, ChevronDown, Check } from 'lucide-react';
+import { BuildingPlacementForm, type BuildingPlacementDetails } from '@/components/BuildingPlacementForm';
+import { Landmark, SlidersHorizontal, Building2, FileText, PlayCircle, Clock, MapPin, Copy, X, Plus, Trash2, Upload, ChevronDown, Check, Volume2, Smile, Frown, Pause } from 'lucide-react';
+import { computeHappinessScore } from '@/lib/constructionNoise';
 import { prefetchMapData } from '@/lib/prefetchMapData';
 
 interface PlacedBuilding {
@@ -14,6 +16,11 @@ interface PlacedBuilding {
   scale: { x: number; y: number; z: number };
   lat: number;
   lng: number;
+  timeline?: {
+    zoneType?: string;
+    startDate?: string;
+    durationDays?: number;
+  };
 }
 
 function MapPageContent() {
@@ -25,6 +32,20 @@ function MapPageContent() {
     worldY: number;
     worldZ: number;
   } | null>(null);
+
+  const [pendingPlacement, setPendingPlacement] = useState<{
+    lat: number;
+    lng: number;
+    worldX: number;
+    worldY: number;
+    worldZ: number;
+    ghostRotationY?: number;
+  } | null>(null);
+
+  const [timelineDate, setTimelineDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [isTimelinePlaying, setIsTimelinePlaying] = useState(false);
 
   const [placedBuildings, setPlacedBuildings] = useState<PlacedBuilding[]>([]);
   const [isPlacementMode, setIsPlacementMode] = useState(false);
@@ -46,6 +67,65 @@ function MapPageContent() {
   const [availableBuildings, setAvailableBuildings] = useState<AvailableBuilding[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [showBuildingSelector, setShowBuildingSelector] = useState(false);
+  const [showNoiseRipple, setShowNoiseRipple] = useState(true);
+
+  // Population happiness from construction noise (computed from placed buildings + timeline)
+  const { score: populationHappiness, avgDb, activeCount } = computeHappinessScore(
+    placedBuildings,
+    timelineDate
+  );
+
+  // Dynamic timeline range from placed buildings with timeline data
+  const timelineRange = (() => {
+    const withTimeline = placedBuildings.filter(
+      (b) => b.timeline?.startDate && b.timeline?.durationDays
+    );
+    if (withTimeline.length === 0) {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(start.getDate() - 30);
+      const end = new Date(today);
+      end.setFullYear(end.getFullYear() + 1);
+      return { minDate: start, maxDate: end };
+    }
+    let min = new Date(withTimeline[0].timeline!.startDate!);
+    let max = new Date(withTimeline[0].timeline!.startDate!);
+    max.setDate(max.getDate() + (withTimeline[0].timeline!.durationDays ?? 0));
+    withTimeline.forEach((b) => {
+      const start = new Date(b.timeline!.startDate!);
+      const end = new Date(start);
+      end.setDate(end.getDate() + (b.timeline!.durationDays ?? 0));
+      if (start < min) min = start;
+      if (end > max) max = end;
+    });
+    return { minDate: min, maxDate: max };
+  })();
+
+  // Clamp timeline date when range changes (e.g. after deleting buildings)
+  const minDateStr = timelineRange.minDate.toISOString().slice(0, 10);
+  const maxDateStr = timelineRange.maxDate.toISOString().slice(0, 10);
+  useEffect(() => {
+    if (timelineDate < minDateStr) setTimelineDate(minDateStr);
+    else if (timelineDate > maxDateStr) setTimelineDate(maxDateStr);
+  }, [minDateStr, maxDateStr, timelineDate]);
+
+  // Play timeline animation - advance by 1 week every 150ms
+  useEffect(() => {
+    if (!isTimelinePlaying) return;
+    const interval = setInterval(() => {
+      setTimelineDate((d) => {
+        const next = new Date(d);
+        next.setDate(next.getDate() + 7);
+        const nextStr = next.toISOString().slice(0, 10);
+        if (nextStr > maxDateStr) {
+          setIsTimelinePlaying(false);
+          return maxDateStr;
+        }
+        return nextStr;
+      });
+    }, 150);
+    return () => clearInterval(interval);
+  }, [isTimelinePlaying, maxDateStr]);
 
   // Pre-fetch map data and available buildings on mount
   useEffect(() => {
@@ -121,34 +201,45 @@ function MapPageContent() {
   } | null) => {
     if (coordinate) {
       if (isPlacementMode) {
-        // Use custom model path if available, otherwise use first available building or default
-        let modelPath = customModelPath;
-        if (!modelPath && availableBuildings.length > 0) {
-          modelPath = availableBuildings[0].path;
-        }
-        if (!modelPath) {
-          modelPath = '/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf';
-        }
-
-        // Place a building at the clicked location with the ghost rotation
-        const newBuilding: PlacedBuilding = {
-          id: `building-${Date.now()}`,
-          modelPath,
-          position: { x: coordinate.worldX, y: coordinate.worldY, z: coordinate.worldZ },
-          rotation: { x: 0, y: coordinate.ghostRotationY || 0, z: 0 },
-          scale: { x: buildingScale.x, y: buildingScale.y, z: buildingScale.z },
-          lat: coordinate.lat,
-          lng: coordinate.lng,
-        };
-        setPlacedBuildings([...placedBuildings, newBuilding]);
-
-        // Stay in placement mode so user can place multiple buildings
-        // User can click "Cancel Placement" to exit
+        setPendingPlacement(coordinate);
       } else {
-        // Just show the coordinate
         setClickedCoordinate(coordinate);
       }
     }
+  };
+
+  const handlePlacementSubmit = (details: BuildingPlacementDetails) => {
+    if (!pendingPlacement) return;
+
+    let modelPath = customModelPath;
+    if (!modelPath && availableBuildings.length > 0) {
+      modelPath = availableBuildings[0].path;
+    }
+    if (!modelPath) {
+      modelPath = '/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf';
+    }
+
+    const newBuilding: PlacedBuilding = {
+      id: `building-${Date.now()}`,
+      modelPath,
+      position: {
+        x: pendingPlacement.worldX,
+        y: pendingPlacement.worldY,
+        z: pendingPlacement.worldZ,
+      },
+      rotation: { x: 0, y: pendingPlacement.ghostRotationY || 0, z: 0 },
+      scale: { x: buildingScale.x, y: buildingScale.y, z: buildingScale.z },
+      lat: pendingPlacement.lat,
+      lng: pendingPlacement.lng,
+      timeline: {
+        zoneType: details.zoneType,
+        startDate: details.startDate,
+        durationDays: details.durationDays,
+      },
+    };
+    setPlacedBuildings([...placedBuildings, newBuilding]);
+    setPendingPlacement(null);
+    setTimelineDate(details.startDate);
   };
 
   const clearImportedBuilding = () => {
@@ -267,9 +358,19 @@ function MapPageContent() {
           selectedBuildingId={selectedBuildingId}
           onBuildingSelect={setSelectedBuildingId}
           customModelPath={customModelPath}
+          timelineDate={timelineDate}
+          showNoiseRipple={showNoiseRipple}
         />
         {/* Map gradient overlay for better UI contrast */}
         <div className="absolute inset-0 map-gradient pointer-events-none"></div>
+
+        {/* Building placement form modal */}
+        {pendingPlacement && (
+          <BuildingPlacementForm
+            onSubmit={handlePlacementSubmit}
+            onCancel={() => setPendingPlacement(null)}
+          />
+        )}
 
         {/* Placement Mode Indicator */}
         {isPlacementMode && (
@@ -342,54 +443,66 @@ function MapPageContent() {
               </button>
             </div>
 
-            {/* Layer List */}
+            {/* Single Layer: Construction Noise (DB) Ripple */}
             <div className="space-y-2 overflow-y-auto custom-scrollbar pr-1">
-              {/* Proposed Structural Layer - Active */}
-              <div className="p-2.5 rounded-md border border-slate-200 bg-white group cursor-pointer">
+              <div
+                className={`p-2.5 rounded-md border transition-all cursor-pointer group ${
+                  showNoiseRipple ? 'border-slate-200 bg-white' : 'border-slate-100 hover:border-slate-200 bg-white/50'
+                }`}
+                onClick={() => setShowNoiseRipple(!showNoiseRipple)}
+              >
                 <div className="flex items-center gap-3">
-                  <div className="w-7 h-7 rounded bg-slate-50 border border-slate-100 flex items-center justify-center text-accent-blue">
-                    <Building2 size={14} />
+                  <div className={`w-7 h-7 rounded bg-slate-50 border border-slate-100 flex items-center justify-center transition-colors ${
+                    showNoiseRipple ? 'text-accent-blue' : 'text-slate-400 group-hover:text-accent-blue'
+                  }`}>
+                    <Volume2 size={14} />
                   </div>
                   <div className="flex-1">
-                    <p className="text-[11px] font-bold text-slate-900">Proposed Structural</p>
-                    <p className="text-[9px] text-slate-500">Count: 08 active</p>
+                    <p className="text-[11px] font-bold text-slate-900">Construction Noise (DB)</p>
+                    <p className="text-[9px] text-slate-500">
+                      Ripple: {activeCount} active site{activeCount !== 1 ? 's' : ''} · ~{avgDb} dB avg
+                    </p>
                   </div>
                   <div className="flex items-center">
-                    <input type="checkbox" defaultChecked className="accent-accent-blue h-3.5 w-3.5" />
+                    <input
+                      type="checkbox"
+                      checked={showNoiseRipple}
+                      onChange={(e) => setShowNoiseRipple(e.target.checked)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="accent-accent-blue h-3.5 w-3.5"
+                    />
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Infrastructure Zones Layer */}
-              <div className="p-2.5 rounded-md border border-slate-100 hover:border-slate-200 bg-white/50 transition-all cursor-pointer group">
-                <div className="flex items-center gap-3">
-                  <div className="w-7 h-7 rounded bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-accent-blue transition-colors">
-                    <TrafficCone size={14} />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-[11px] font-bold text-slate-800">Infrastructure Zones</p>
-                    <p className="text-[9px] text-slate-500">Public Utility</p>
-                  </div>
-                  <div className="flex items-center">
-                    <input type="checkbox" className="accent-accent-blue h-3.5 w-3.5" />
-                  </div>
+            {/* Population Happiness Score */}
+            <div className="mt-6">
+              <h3 className="ui-label mb-3">Population Sentiment</h3>
+              <div className="rounded-md p-3 border border-slate-200 bg-white">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase">Happy / Sad Score</span>
+                  {populationHappiness >= 50 ? (
+                    <Smile size={16} className="text-emerald-500" />
+                  ) : (
+                    <Frown size={16} className="text-rose-500" />
+                  )}
                 </div>
-              </div>
-
-              {/* Ecological Impact Layer */}
-              <div className="p-2.5 rounded-md border border-slate-100 hover:border-slate-200 bg-white/50 transition-all cursor-pointer group">
-                <div className="flex items-center gap-3">
-                  <div className="w-7 h-7 rounded bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-accent-blue transition-colors">
-                    <Leaf size={14} />
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        populationHappiness >= 70 ? 'bg-emerald-500' :
+                        populationHappiness >= 40 ? 'bg-amber-500' : 'bg-rose-500'
+                      }`}
+                      style={{ width: `${populationHappiness}%` }}
+                    />
                   </div>
-                  <div className="flex-1">
-                    <p className="text-[11px] font-bold text-slate-800">Ecological Impact</p>
-                    <p className="text-[9px] text-slate-500">CO2 Heatmap</p>
-                  </div>
-                  <div className="flex items-center">
-                    <input type="checkbox" className="accent-accent-blue h-3.5 w-3.5" />
-                  </div>
+                  <span className="text-[11px] font-bold text-slate-900 w-8">{populationHappiness}/100</span>
                 </div>
+                <p className="text-[9px] text-slate-500 mt-1.5">
+                  Based on construction noise disturbance
+                </p>
               </div>
             </div>
 
@@ -703,14 +816,18 @@ function MapPageContent() {
                               : 'border-slate-200 hover:border-slate-300'
                           }`}
                         >
-                          <div className="flex-1">
-                            <p className={`text-[10px] font-bold ${
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-[10px] font-bold truncate ${
                               selectedBuildingId === building.id ? 'text-accent-blue' : 'text-slate-900'
                             }`}>
-                              {building.lat.toFixed(5)}°, {building.lng.toFixed(5)}°
+                              {building.timeline?.zoneType
+                                ? `${building.timeline.zoneType} – ${building.lat.toFixed(4)}°`
+                                : `${building.lat.toFixed(5)}°, ${building.lng.toFixed(5)}°`}
                             </p>
                             <p className="text-[8px] text-slate-500">
-                              X: {building.position.x.toFixed(1)}m, Z: {building.position.z.toFixed(1)}m
+                              {building.timeline?.durationDays
+                                ? `${building.timeline.durationDays} days`
+                                : `X: ${building.position.x.toFixed(1)}m, Z: ${building.position.z.toFixed(1)}m`}
                             </p>
                           </div>
                           <button
@@ -1039,29 +1156,98 @@ function MapPageContent() {
       <div className="absolute bottom-0 left-0 right-0 z-50 glass border-t border-slate-300 px-8 py-4 flex items-center gap-10 shadow-lg">
         {/* Simulation Controls */}
         <div className="flex items-center gap-4 shrink-0 border-r border-slate-200 pr-10">
-          <button className="w-10 h-10 rounded bg-accent-blue flex items-center justify-center text-white hover:bg-slate-900 transition-colors shadow-sm">
-            <PlayCircle size={20} />
+          <button
+            onClick={() => setIsTimelinePlaying((p) => !p)}
+            className={`w-10 h-10 rounded flex items-center justify-center transition-colors shadow-sm ${
+              isTimelinePlaying
+                ? 'bg-amber-500 text-white hover:bg-amber-600'
+                : 'bg-accent-blue text-white hover:bg-slate-900'
+            }`}
+            title={isTimelinePlaying ? 'Pause' : 'Play timeline'}
+          >
+            {isTimelinePlaying ? <Pause size={20} /> : <PlayCircle size={20} />}
           </button>
           <div>
-            <p className="text-xs font-black text-slate-900 uppercase tracking-tight font-serif">Simulation Core</p>
-            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Phase: Site Preparation</p>
+            <p className="text-xs font-black text-slate-900 uppercase tracking-tight font-serif">Construction Timeline</p>
+            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">View building progress</p>
           </div>
         </div>
 
-        {/* Timeline Slider */}
+        {/* Timeline Slider - week-based, dynamic range */}
         <div className="flex-1 flex flex-col gap-3">
-          <div className="relative h-1.5 w-full bg-slate-200 rounded-sm cursor-pointer">
-            <div className="absolute left-0 top-0 h-full w-[25%] bg-accent-blue rounded-sm transition-all"></div>
-            <div className="absolute left-[25%] top-1/2 -translate-y-1/2 w-4 h-4 rounded-sm bg-white border border-slate-400 shadow-sm"></div>
-          </div>
-          <div className="flex justify-between px-0.5 text-[9px] text-slate-500 font-black uppercase">
-            <span className="text-accent-blue">Fiscal Q1 2025</span>
-            <span>Q2 2025</span>
-            <span>Q3 2025</span>
-            <span>Q4 2025</span>
-            <span>Projected 2026</span>
-            <span>Projected 2027</span>
-          </div>
+          {(() => {
+            const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+            const minT = timelineRange.minDate.getTime();
+            const maxT = timelineRange.maxDate.getTime();
+            const rangeMs = maxT - minT || 1;
+            const currentVal = new Date(timelineDate).getTime();
+            const clampedVal = Math.max(minT, Math.min(maxT, currentVal));
+            const pct = ((clampedVal - minT) / rangeMs) * 100;
+
+            const weekCount = Math.ceil(rangeMs / WEEK_MS);
+            const tickStep = Math.max(1, Math.floor(weekCount / 8));
+            const ticks: { t: number; label: string }[] = [];
+            for (let i = 0; i <= weekCount; i += tickStep) {
+              const t = minT + i * WEEK_MS;
+              if (t <= maxT) {
+                const d = new Date(t);
+                ticks.push({
+                  t,
+                  label: `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`,
+                });
+              }
+            }
+            if (ticks[ticks.length - 1]?.t !== maxT) {
+              const d = new Date(maxT);
+              ticks.push({
+                t: maxT,
+                label: `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`,
+              });
+            }
+
+            return (
+              <>
+                <div className="relative">
+                  <input
+                    type="range"
+                    min={minT}
+                    max={maxT}
+                    step={WEEK_MS}
+                    value={clampedVal}
+                    onChange={(e) => {
+                      const t = parseInt(e.target.value, 10);
+                      setTimelineDate(new Date(t).toISOString().slice(0, 10));
+                    }}
+                    className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab"
+                    style={{
+                      background: `linear-gradient(to right, #003F7C 0%, #003F7C ${pct}%, #e2e8f0 ${pct}%, #e2e8f0 100%)`,
+                    }}
+                  />
+                  <div className="absolute top-4 left-0 right-0 h-4 pointer-events-none">
+                    {ticks.map(({ t, label }) => {
+                      const tickPct = ((t - minT) / rangeMs) * 100;
+                      return (
+                        <span
+                          key={t}
+                          className="absolute text-[8px] text-slate-500 font-mono whitespace-nowrap"
+                          style={{
+                            left: `calc(${tickPct}% - 1px)`,
+                            transform: 'translateX(-50%)',
+                          }}
+                        >
+                          {label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex justify-between px-0.5 text-[8px] text-slate-400 font-bold uppercase">
+                  <span>Wk 1</span>
+                  <span>Week {weekCount}</span>
+                </div>
+              </>
+            );
+          })()}
         </div>
 
         {/* Timestamp & Settings */}
@@ -1071,13 +1257,24 @@ function MapPageContent() {
             <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded border border-slate-200">
               <Clock className="text-slate-400" size={14} />
               <span className="text-[10px] font-black text-slate-700 uppercase">
-                {new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()}
+                {new Date(timelineDate).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()}
               </span>
             </div>
           </div>
           <div className="flex flex-col gap-1">
-            <button className="p-1.5 bg-white border border-slate-200 rounded text-slate-500 hover:text-slate-900 transition-colors">
-              <Settings size={16} />
+            <button
+              onClick={() => {
+                const today = new Date().toISOString().slice(0, 10);
+                if (today >= minDateStr && today <= maxDateStr) {
+                  setTimelineDate(today);
+                } else {
+                  setTimelineDate(minDateStr);
+                }
+              }}
+              className="text-[9px] font-bold text-accent-blue border border-accent-blue px-2 py-1 rounded hover:bg-blue-50 transition-colors uppercase"
+              title="Go to today, or start of project if today is outside range"
+            >
+              Today
             </button>
           </div>
         </div>

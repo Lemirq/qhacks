@@ -35,9 +35,9 @@ export interface CollisionSystemConfig {
 
 const DEFAULT_CONFIG: CollisionSystemConfig = {
   gridCellSize: 50, // 50m x 50m cells
-  safetyBubbleRadius: 5, // 5m safety bubble
-  predictionTimeHorizon: 2.0, // 2 seconds ahead
-  emergencyBrakeThreshold: 1.5, // Emergency brake if collision within 1.5s
+  safetyBubbleRadius: 4, // 4m safety bubble (tighter to avoid overlap)
+  predictionTimeHorizon: 2.5, // 2.5 seconds ahead
+  emergencyBrakeThreshold: 2.0, // Emergency brake if collision within 2s (react earlier)
 };
 
 export class CollisionSystem {
@@ -260,10 +260,16 @@ export class CollisionSystem {
   /**
    * Check if emergency braking is required
    * Returns true if a collision is imminent (within emergency threshold)
+   * or if cars are already too close (overlap / near overlap)
    */
   requiresEmergencyBrake(car: SpawnedCar, allVehicles: Map<string, SpawnedCar>): boolean {
-    const prediction = this.checkPredictiveCollision(car, allVehicles);
+    // Already overlapping or very close — brake immediately
+    const immediate = this.checkImmediateCollision(car, allVehicles);
+    if (immediate.detected && immediate.nearestDistance < this.config.safetyBubbleRadius * 2.5) {
+      return true;
+    }
 
+    const prediction = this.checkPredictiveCollision(car, allVehicles);
     if (!prediction.detected || prediction.timeToCollision === null) {
       return false;
     }

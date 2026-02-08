@@ -64,8 +64,8 @@ export interface SpawnerConfig {
 }
 
 const DEFAULT_CONFIG: SpawnerConfig = {
-  maxCars: 50,
-  globalSpawnRate: 1.0,
+  maxCars: 120,
+  globalSpawnRate: 1.5,
   despawnRadius: 20,
   defaultCarSpeed: 40,
   carTypeDistribution: {
@@ -183,6 +183,43 @@ export class Spawner {
   }
 
   /**
+   * Add spawn points across the road network so cars appear on many streets.
+   * Picks random edges and uses their start as a spawn point.
+   * @param maxPoints - Max number of network spawn points to add (default 40)
+   */
+  initializeFromRoadNetwork(maxPoints: number = 40): void {
+    const edges = this.roadNetwork.getEdges();
+    if (edges.length === 0) return;
+
+    // Filter to edges with valid geometry (at least 2 points)
+    const validEdges = edges.filter((e) => e.geometry && e.geometry.length >= 2);
+    if (validEdges.length === 0) return;
+
+    // Shuffle and take up to maxPoints to get good spatial distribution
+    const shuffled = [...validEdges].sort(() => Math.random() - 0.5);
+    const toAdd = shuffled.slice(0, Math.min(maxPoints, shuffled.length));
+    const now = Date.now();
+
+    toAdd.forEach((edge, i) => {
+      const pos = edge.geometry[0] as [number, number];
+      const id = `network-${edge.id}`;
+      if (this.spawnPoints.has(id)) return;
+      this.addSpawnPoint({
+        id,
+        position: pos,
+        roadNodeId: edge.from,
+        spawnRate: 1.8,
+        lastSpawnTime: now,
+        active: true,
+      });
+    });
+
+    console.log(
+      `✅ Added ${toAdd.length} network spawn points (total: ${this.spawnPoints.size})`,
+    );
+  }
+
+  /**
    * Add a spawn point
    */
   addSpawnPoint(spawnPoint: SpawnPoint): void {
@@ -242,22 +279,14 @@ export class Spawner {
       return null;
     }
 
-    console.log(
-      `🚀 Attempting to spawn car from ${spawnPoint.id} [${spawnPoint.position}] to ${destination.name} [${destination.position}]`,
-    );
-
     // Find route from spawn point to destination
     let route = this.pathfinder.findRoute(
       spawnPoint.position,
       destination.position,
     );
 
-    // FALLBACK: If pathfinding fails, create a simple route with just the spawn position
+    // FALLBACK: If pathfinding fails, create a simple route on a random edge
     if (!route) {
-      console.warn(
-        `⚠️ Could not find route, creating fallback route at spawn point`,
-      );
-      // Create a minimal route that just stays at the spawn point for now
       const edges = this.roadNetwork.getEdges();
       if (edges.length > 0) {
         const randomEdge = edges[Math.floor(Math.random() * edges.length)];
@@ -268,15 +297,9 @@ export class Spawner {
           estimatedTime: randomEdge.length / 10, // ~10 m/s
           waypoints: randomEdge.geometry,
         };
-        console.log(`✅ Created fallback route on edge ${randomEdge.id}`);
       } else {
-        console.error(`❌ No edges available for fallback route`);
         return null;
       }
-    } else {
-      console.log(
-        `✅ Route found! ${route.waypoints.length} waypoints, ${route.edges.length} edges`,
-      );
     }
 
     // Select car type based on distribution
@@ -330,10 +353,6 @@ export class Spawner {
     }
 
     this.activeCars.set(car.id, car);
-    console.log(
-      `🚗 Spawned ${car.type} (${car.id}) at ${spawnPoint.id} → ${destination.name}`,
-    );
-
     return car;
   }
 
@@ -421,32 +440,38 @@ export class Spawner {
   }
 
   /**
-   * Check for cars that reached their destination and despawn them
+   * Check for cars that reached their destination or end of route and despawn them
    */
   private checkForDespawns(): void {
     const toDespawn: string[] = [];
 
     this.activeCars.forEach((car) => {
+      // Despawn when close to destination
       const distanceToDestination = turf.distance(
         turf.point(car.position),
         turf.point(car.destination.position),
         { units: "meters" },
       );
-
       if (distanceToDestination < this.config.despawnRadius) {
         toDespawn.push(car.id);
+        return;
+      }
+
+      // Despawn when at end of route (no next edge) — e.g. end of road, dead end
+      if (car.route?.edges?.length && car.currentEdgeId) {
+        const currentIndex = car.route.edges.indexOf(car.currentEdgeId);
+        const isLastEdge =
+          currentIndex === car.route.edges.length - 1 && currentIndex >= 0;
+        if (isLastEdge) {
+          const edge = this.roadNetwork.getEdge(car.currentEdgeId);
+          if (edge && car.distanceOnEdge >= edge.length - 0.5) {
+            toDespawn.push(car.id);
+          }
+        }
       }
     });
 
-    toDespawn.forEach((carId) => {
-      const car = this.activeCars.get(carId);
-      if (car) {
-        console.log(
-          `✅ Car ${carId} reached destination: ${car.destination.name}`,
-        );
-        this.despawnCar(carId);
-      }
-    });
+    toDespawn.forEach((carId) => this.despawnCar(carId));
   }
 
   /**
@@ -504,7 +529,8 @@ export class Spawner {
         car.currentEdgeId = nextEdgeId;
         car.distanceOnEdge = 0;
       } else {
-        // Route complete, at destination
+        // End of route / end of road — despawn so car doesn't just stop
+        this.despawnCar(car.id);
         return;
       }
     }

@@ -66,14 +66,14 @@ const BEHAVIOR_CONFIG = {
   YELLOW_DECISION_DISTANCE: 15, // If closer than 15m to yellow, proceed
 
   // Following behavior
-  FOLLOWING_TIME_GAP: 2.0, // 2-second following distance
-  FOLLOWING_MIN_DISTANCE: 10, // Minimum 10m following distance
-  DETECTION_RADIUS: 50, // Look ahead 50m for lead vehicles
+  FOLLOWING_TIME_GAP: 2.2, // 2.2-second following distance (slightly more gap)
+  FOLLOWING_MIN_DISTANCE: 12, // Minimum 12m following distance
+  DETECTION_RADIUS: 60, // Look ahead 60m for lead vehicles
 
   // Comfort acceleration/braking
-  COMFORT_ACCELERATION: 30, // 30 km/h per second
-  COMFORT_DECELERATION: 40, // 40 km/h per second
-  EMERGENCY_DECELERATION: 100, // 100 km/h per second (emergency brake)
+  COMFORT_ACCELERATION: 28, // 28 km/h per second
+  COMFORT_DECELERATION: 50, // 50 km/h per second (brake a bit harder when following)
+  EMERGENCY_DECELERATION: 120, // 120 km/h per second (strong emergency brake)
 
   // Speed matching
   SPEED_MATCH_THRESHOLD: 5, // Match speed if within 5 km/h

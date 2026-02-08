@@ -63,6 +63,10 @@ import {
 import { TrafficAnalytics } from "@/lib/analytics";
 import DebugOverlay from "./DebugOverlay";
 import AnalyticsDashboard from "./AnalyticsDashboard";
+import {
+  isUnderConstruction,
+  getConstructionSourceDb,
+} from "@/lib/constructionNoise";
 
 interface PlacedBuilding {
   id: string;
@@ -72,6 +76,11 @@ interface PlacedBuilding {
   scale?: { x: number; y: number; z: number };
   lat: number;
   lng: number;
+  timeline?: {
+    zoneType?: string;
+    startDate?: string;
+    durationDays?: number;
+  };
 }
 
 interface ThreeMapProps {
@@ -94,6 +103,8 @@ interface ThreeMapProps {
   onBuildingSelect?: (id: string | null) => void;
   customModelPath?: string | null;
   onOsmBuildingDelete?: (buildingId: string) => void;
+  timelineDate?: string;
+  showNoiseRipple?: boolean;
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -314,6 +325,8 @@ export default function ThreeMap({
   onBuildingSelect,
   customModelPath = null,
   onOsmBuildingDelete,
+  timelineDate = new Date().toISOString().slice(0, 10),
+  showNoiseRipple = false,
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -340,6 +353,8 @@ export default function ThreeMap({
     string | null
   >(null);
   const [ghostRotationY, setGhostRotationY] = useState(0); // Rotation for ghost preview
+  const noiseRippleGroupRef = useRef<THREE.Group | null>(null);
+  const rippleTimeRef = useRef(0);
 
   // Analytics state
   const analyticsRef = useRef<TrafficAnalytics | null>(null);
@@ -461,8 +476,8 @@ export default function ThreeMap({
         // Initialize spawner
         setLoadingStatus("Initializing traffic simulation...");
         spawner = new Spawner(roadNetwork, {
-          maxCars: 200, // Way more cars!
-          globalSpawnRate: 10.0, // Spawn 10x faster!
+          maxCars: 380, // High cap so streets stay busy
+          globalSpawnRate: 3.0, // Spawn quickly to fill the map
           despawnRadius: 25,
           defaultCarSpeed: 40,
           carTypeDistribution: {
@@ -474,6 +489,7 @@ export default function ThreeMap({
         });
 
         spawner.initializeQueensSpawnPoints();
+        spawner.initializeFromRoadNetwork(45); // Spawn from many edges so cars appear everywhere
         console.log(
           `✅ Spawner initialized with ${spawner.getSpawnPoints().length} spawn points`,
         );
@@ -848,13 +864,7 @@ export default function ThreeMap({
               }
             }
 
-            // SIMPLIFIED FOR DEBUGGING - JUST MAKE CARS MOVE!
-            // Skip all the complex behavior and physics, just set speed
-            if (spawnedCar.speed === 0) {
-              spawnedCar.speed = spawnedCar.maxSpeed; // Start moving immediately!
-            }
-
-            // INTEGRATED SIMULATION PIPELINE (currently simplified):
+            // INTEGRATED SIMULATION PIPELINE:
             // 1. Behavior evaluation (traffic rules, signals, following)
             // 2. Physics update (acceleration, velocity)
             // 3. Collision detection
@@ -996,6 +1006,28 @@ export default function ThreeMap({
 
         // Update tweens
         updateTweens();
+
+        // Update construction noise ripple animation
+        const rippleGroup = noiseRippleGroupRef.current;
+        if (rippleGroup) {
+          rippleTimeRef.current += deltaTime;
+          const RIPPLE_DURATION = 2.5;
+          const BASE_MAX_SCALE = 450 / 15;
+          rippleGroup.children.forEach((child) => {
+            const mesh = child as THREE.Mesh;
+            const phaseOffset = mesh.userData?.phaseOffset as number | undefined;
+            const intensity = (mesh.userData?.intensity as number) ?? 1;
+            if (phaseOffset == null) return;
+            const phase =
+              ((rippleTimeRef.current + phaseOffset) % RIPPLE_DURATION) /
+              RIPPLE_DURATION;
+            const maxScale = BASE_MAX_SCALE * intensity;
+            const scale = phase * maxScale;
+            mesh.scale.set(scale, scale, scale);
+            const mat = mesh.material as THREE.MeshBasicMaterial;
+            if (mat.transparent) mat.opacity = (0.5 + 0.2 * intensity) * (1 - phase);
+          });
+        }
 
         // Update controls
         controlsRef.current.update();
@@ -1376,6 +1408,7 @@ export default function ThreeMap({
           const model = gltf.scene;
           model.userData.isCustomBuilding = true;
           model.userData.buildingId = building.id;
+          model.userData.timeline = building.timeline;
 
           // Position the model
           model.position.set(
@@ -1397,18 +1430,48 @@ export default function ThreeMap({
           const scale = building.scale || buildingScale;
           model.scale.set(scale.x, scale.y, scale.z);
 
-          // Add to scene
-          groupsRef.current?.dynamicObjects.add(model);
-          buildingModelsRef.current.set(building.id, model);
+          let toAdd: THREE.Object3D = model;
+
+          if (building.timeline?.startDate && building.timeline?.durationDays) {
+            const wrapper = new THREE.Group();
+            wrapper.position.copy(model.position);
+            wrapper.rotation.copy(model.rotation);
+            wrapper.scale.copy(model.scale);
+            model.position.set(0, 0, 0);
+            model.rotation.set(0, 0, 0);
+            model.scale.set(1, 1, 1);
+            wrapper.add(model);
+
+            const wireframe = model.clone(true);
+            wireframe.traverse((child) => {
+              if (child instanceof THREE.Mesh && child.material) {
+                const mat = new THREE.MeshBasicMaterial({
+                  color: 0x003f7c,
+                  wireframe: true,
+                  transparent: true,
+                  opacity: 0.6,
+                  depthTest: true,
+                  depthWrite: false,
+                });
+                child.material = mat;
+              }
+            });
+            wrapper.add(wireframe);
+            wrapper.userData.solidModel = model;
+            wrapper.userData.buildingId = building.id;
+            wrapper.userData.timeline = building.timeline;
+            toAdd = wrapper;
+          }
+
+          groupsRef.current?.dynamicObjects.add(toAdd);
+          buildingModelsRef.current.set(building.id, toAdd);
+
+          toAdd.updateMatrixWorld(true);
+          checkAndDeleteCollidingBuildings(toAdd);
 
           console.log(
             `✅ Loaded building ${building.id} at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`,
           );
-
-          // Check for and delete colliding OSM buildings after model is loaded
-          // Need to update matrix world for accurate bounding box calculation
-          model.updateMatrixWorld(true);
-          checkAndDeleteCollidingBuildings(model);
         },
         undefined,
         (error) => {
@@ -1560,9 +1623,137 @@ export default function ThreeMap({
         }
         const scale = building.scale || buildingScale;
         model.scale.set(scale.x, scale.y, scale.z);
+        model.userData.timeline = building.timeline;
       }
     });
   }, [placedBuildings, buildingScale]);
+
+  // Cross-section clipping for buildings with timeline
+  useEffect(() => {
+    const dateStr = timelineDate;
+    const currentTime = new Date(dateStr).getTime();
+
+    placedBuildings.forEach((building) => {
+      const obj = buildingModelsRef.current.get(building.id);
+      if (!obj || !building.timeline?.startDate || !building.timeline?.durationDays)
+        return;
+
+      const solidModel =
+        obj.userData.solidModel ?? (obj as THREE.Group);
+      const startTime = new Date(building.timeline.startDate).getTime();
+      const elapsedDays = (currentTime - startTime) / (1000 * 60 * 60 * 24);
+      const progress = Math.max(0, Math.min(1, elapsedDays / building.timeline.durationDays));
+
+      solidModel.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(solidModel);
+      const bottomY = box.min.y;
+      const fullHeight = box.max.y - box.min.y;
+      const visibleTop = bottomY + progress * fullHeight;
+      const clipPlane = new THREE.Plane(
+        new THREE.Vector3(0, -1, 0),
+        visibleTop
+      );
+
+      const applyClip = (target: THREE.Object3D) => {
+        target.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material) {
+            const mats = Array.isArray(child.material)
+              ? child.material
+              : [child.material];
+            mats.forEach((m) => {
+              const mat = m as THREE.Material & { clipShading?: number };
+              mat.clippingPlanes = [clipPlane];
+              mat.clipShading = THREE.DoubleSide;
+            });
+          }
+        });
+      };
+
+      const clearClip = (target: THREE.Object3D) => {
+        target.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material) {
+            const mats = Array.isArray(child.material)
+              ? child.material
+              : [child.material];
+            mats.forEach((m) => {
+              (m as THREE.Material).clippingPlanes = [];
+            });
+          }
+        });
+      };
+
+      if (progress >= 1) {
+        clearClip(solidModel);
+      } else {
+        applyClip(solidModel);
+      }
+    });
+  }, [placedBuildings, timelineDate]);
+
+  // Construction noise ripple layer – continuous expanding ripple animation
+  const RIPPLE_DURATION = 2.5;
+  const RIPPLE_WAVES_PER_SITE = 4;
+
+  useEffect(() => {
+    if (!groupsRef.current || !isReady) return;
+
+    if (noiseRippleGroupRef.current) {
+      groupsRef.current.dynamicObjects.remove(noiseRippleGroupRef.current);
+      noiseRippleGroupRef.current = null;
+    }
+
+    if (!showNoiseRipple) return;
+
+    const activeSites = placedBuildings.filter(
+      (b) =>
+        b.timeline?.startDate &&
+        b.timeline?.durationDays &&
+        isUnderConstruction(
+          b.timeline.startDate,
+          b.timeline.durationDays,
+          timelineDate
+        )
+    );
+
+    const group = new THREE.Group();
+    group.name = "noiseRippleLayer";
+
+    activeSites.forEach((site) => {
+      const px = site.position.x;
+      const pz = site.position.z;
+      const baseY = 0.5;
+      const sourceDb = getConstructionSourceDb(site, timelineDate);
+      const intensity = sourceDb / 90;
+
+      for (let w = 0; w < RIPPLE_WAVES_PER_SITE; w++) {
+        const phaseOffset = (w / RIPPLE_WAVES_PER_SITE) * RIPPLE_DURATION;
+        const ringGeom = new THREE.RingGeometry(0, 15, 32);
+        const material = new THREE.MeshBasicMaterial({
+          color: 0xe74c3c,
+          transparent: true,
+          opacity: 0.5 + 0.2 * intensity,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        });
+        const ring = new THREE.Mesh(ringGeom, material);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(px, baseY, pz);
+        ring.scale.set(0, 0, 0);
+        ring.renderOrder = 1;
+        ring.userData.phaseOffset = phaseOffset;
+        ring.userData.intensity = intensity;
+        group.add(ring);
+      }
+    });
+
+    noiseRippleGroupRef.current = group;
+    groupsRef.current.dynamicObjects.add(group);
+  }, [
+    showNoiseRipple,
+    placedBuildings,
+    timelineDate,
+    isReady,
+  ]);
 
   // Update ghost position on mouse move
   useEffect(() => {
@@ -1607,23 +1798,16 @@ export default function ThreeMap({
 
         // Change ghost color based on validity
         ghostModelRef.current.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
+          if (child instanceof THREE.Mesh && child.material) {
+            const mat = child.material as THREE.MeshBasicMaterial & {
+              emissive?: { set: (c: number) => void };
+            };
             if (isOverBuilding) {
-              // Red for invalid placement
-              (child.material as THREE.MeshStandardMaterial).color.set(
-                0xff0000,
-              );
-              (child.material as THREE.MeshStandardMaterial).emissive.set(
-                0x330000,
-              );
+              mat.color.set(0xff0000);
+              if (mat.emissive) mat.emissive.set(0x330000);
             } else {
-              // Green for valid placement
-              (child.material as THREE.MeshStandardMaterial).color.set(
-                0x00ff00,
-              );
-              (child.material as THREE.MeshStandardMaterial).emissive.set(
-                0x003300,
-              );
+              mat.color.set(0x00ff00);
+              if (mat.emissive) mat.emissive.set(0x003300);
             }
           }
         });

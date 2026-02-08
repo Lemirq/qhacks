@@ -98,6 +98,9 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+  // Enable local clipping for building cross-section timeline
+  renderer.localClippingEnabled = true;
+
   return {
     scene,
     camera,
