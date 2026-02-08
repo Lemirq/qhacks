@@ -7,6 +7,9 @@ body {
 }
 
 @layer components {
+  .instrument {
+    font-family: var(--font-script), "Instrument Serif", serif;
+  }
   .lp {
     min-height: 100vh;
     background: #f4efe6;
@@ -55,7 +58,9 @@ body {
     border-radius: 9999px;
     border: 2px solid transparent;
     outline: none;
-    transition: color 0.2s, border-color 0.2s;
+    transition:
+      color 0.2s,
+      border-color 0.2s;
   }
 
   .lp-nav-links a:hover {
@@ -182,6 +187,11 @@ body {
   .lp-hero-cta:hover {
     background: rgba(255, 255, 255, 0.18);
     transform: translateY(-2px);
+  }
+
+  .lp-content-sticky {
+    /* Sticky so content appears in view as overlay finishes, then scrolls normally */
+    min-height: 0;
   }
 
   .lp-statement {
@@ -463,7 +473,8 @@ body {
 }
 
 @keyframes goldShimmer {
-  0%, 100% {
+  0%,
+  100% {
     background-position: 0% 50%;
   }
   50% {

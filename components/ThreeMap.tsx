@@ -375,6 +375,10 @@ export default function ThreeMap({
   const collisionSystemRef = useRef<CollisionSystem | null>(null);
   const configManagerRef = useRef<ConfigurationManager | null>(null);
 
+  // Traffic spawner and road network refs (for building-vicinity spawning and lane blocks)
+  const spawnerRef = useRef<Spawner | null>(null);
+  const roadNetworkRef = useRef<RoadNetwork | null>(null);
+
   // Performance optimization managers
   const vehiclePoolRef = useRef<VehiclePool | null>(null);
   const lodManagerRef = useRef<LODManager | null>(null);
@@ -494,6 +498,8 @@ export default function ThreeMap({
 
         spawner.initializeQueensSpawnPoints();
         spawner.initializeFromRoadNetwork(45); // Spawn from many edges so cars appear everywhere
+        spawnerRef.current = spawner;
+        roadNetworkRef.current = roadNetwork;
         console.log(
           `✅ Spawner initialized with ${spawner.getSpawnPoints().length} spawn points`,
         );
@@ -1015,8 +1021,8 @@ export default function ThreeMap({
         const rippleGroup = noiseRippleGroupRef.current;
         if (rippleGroup) {
           rippleTimeRef.current += deltaTime;
-          const RIPPLE_DURATION = 2.5;
-          const BASE_MAX_SCALE = 450 / 15;
+          const RIPPLE_DURATION = 3;
+          const BASE_MAX_SCALE = 1400 / 50;
           rippleGroup.children.forEach((child) => {
             const mesh = child as THREE.Mesh;
             const phaseOffset = mesh.userData?.phaseOffset as number | undefined;
@@ -1029,7 +1035,7 @@ export default function ThreeMap({
             const scale = phase * maxScale;
             mesh.scale.set(scale, scale, scale);
             const mat = mesh.material as THREE.MeshBasicMaterial;
-            if (mat.transparent) mat.opacity = (0.5 + 0.2 * intensity) * (1 - phase);
+            if (mat.transparent) mat.opacity = (0.65 + 0.3 * intensity) * (1 - phase);
           });
         }
 
@@ -1102,6 +1108,38 @@ export default function ThreeMap({
       }
     };
   }, []);
+
+  // Sync placed buildings to traffic: more spawns near buildings + block one lane per building
+  useEffect(() => {
+    const spawner = spawnerRef.current;
+    const roadNetwork = roadNetworkRef.current;
+    if (!spawner || !roadNetwork || !placedBuildings?.length) {
+      if (spawner && (!placedBuildings || placedBuildings.length === 0)) {
+        spawner.setBlockedEdges(new Set());
+        spawner.setBuildingVicinitySpawning([]);
+      }
+      return;
+    }
+
+    const BUILDING_BLOCK_RADIUS_M = 55;
+    const blockedIds = new Set<string>();
+
+    placedBuildings.forEach((b) => {
+      const pos: [number, number] = [b.lng, b.lat];
+      const nearEdges = roadNetwork.findEdgesNearPosition(
+        pos,
+        BUILDING_BLOCK_RADIUS_M,
+      );
+      if (nearEdges.length > 0) {
+        blockedIds.add(nearEdges[0].id);
+      }
+    });
+
+    spawner.setBlockedEdges(blockedIds);
+    spawner.setBuildingVicinitySpawning(
+      placedBuildings.map((b) => ({ id: b.id, position: [b.lng, b.lat] })),
+    );
+  }, [placedBuildings]);
 
   // Click handler to find coordinates or select buildings
   useEffect(() => {
@@ -1736,8 +1774,8 @@ export default function ThreeMap({
   }, [placedBuildings, timelineDate]);
 
   // Construction noise ripple layer – continuous expanding ripple animation
-  const RIPPLE_DURATION = 2.5;
-  const RIPPLE_WAVES_PER_SITE = 4;
+  const RIPPLE_DURATION = 3;
+  const RIPPLE_WAVES_PER_SITE = 5;
 
   useEffect(() => {
     if (!groupsRef.current || !isReady) return;
@@ -1767,28 +1805,44 @@ export default function ThreeMap({
       const px = site.position.x;
       const pz = site.position.z;
       const baseY = 0.5;
+      const scale = site.scale || buildingScale;
+      const hx = scale.x * 0.6;
+      const hz = scale.z * 0.6;
       const sourceDb = getConstructionSourceDb(site, timelineDate);
-      const intensity = sourceDb / 90;
+      const intensity = sourceDb / 108;
 
-      for (let w = 0; w < RIPPLE_WAVES_PER_SITE; w++) {
-        const phaseOffset = (w / RIPPLE_WAVES_PER_SITE) * RIPPLE_DURATION;
-        const ringGeom = new THREE.RingGeometry(0, 15, 32);
-        const material = new THREE.MeshBasicMaterial({
-          color: 0xe74c3c,
-          transparent: true,
-          opacity: 0.5 + 0.2 * intensity,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        });
-        const ring = new THREE.Mesh(ringGeom, material);
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.set(px, baseY, pz);
-        ring.scale.set(0, 0, 0);
-        ring.renderOrder = 1;
-        ring.userData.phaseOffset = phaseOffset;
-        ring.userData.intensity = intensity;
-        group.add(ring);
-      }
+      const perimeterPoints: [number, number][] = [
+        [px + hx, pz + hz],
+        [px + hx, pz - hz],
+        [px - hx, pz + hz],
+        [px - hx, pz - hz],
+        [px, pz + hz],
+        [px, pz - hz],
+        [px + hx, pz],
+        [px - hx, pz],
+      ];
+
+      perimeterPoints.forEach(([rx, rz]) => {
+        for (let w = 0; w < RIPPLE_WAVES_PER_SITE; w++) {
+          const phaseOffset = (w / RIPPLE_WAVES_PER_SITE) * RIPPLE_DURATION;
+          const ringGeom = new THREE.RingGeometry(0, 50, 48);
+          const material = new THREE.MeshBasicMaterial({
+            color: 0xe74c3c,
+            transparent: true,
+            opacity: 0.65 + 0.3 * intensity,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          });
+          const ring = new THREE.Mesh(ringGeom, material);
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.set(rx, baseY, rz);
+          ring.scale.set(0, 0, 0);
+          ring.renderOrder = 1;
+          ring.userData.phaseOffset = phaseOffset;
+          ring.userData.intensity = intensity;
+          group.add(ring);
+        }
+      });
     });
 
     noiseRippleGroupRef.current = group;
@@ -1798,6 +1852,7 @@ export default function ThreeMap({
     placedBuildings,
     timelineDate,
     isReady,
+    buildingScale,
   ]);
 
   // Update ghost position on mouse move

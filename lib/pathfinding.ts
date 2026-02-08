@@ -27,10 +27,12 @@ export class Pathfinder {
 
   /**
    * Find route from start position to destination using A*
+   * @param options.blockedEdgeIds - Edge IDs to avoid (e.g. lane/road blocks near construction)
    */
   findRoute(
     startPos: [number, number],
-    endPos: [number, number]
+    endPos: [number, number],
+    options?: { blockedEdgeIds?: Set<string> }
   ): Route | null {
     // Find nearest nodes
     const startNode = this.network.findNearestNode(startPos);
@@ -45,13 +47,18 @@ export class Pathfinder {
       return this.createDirectRoute(startPos, endPos);
     }
 
-    return this.astar(startNode.id, endNode.id);
+    return this.astar(startNode.id, endNode.id, options?.blockedEdgeIds);
   }
 
   /**
    * A* pathfinding algorithm
+   * Skips edges in blockedEdgeIds (e.g. construction lane blocks)
    */
-  private astar(startId: string, goalId: string): Route | null {
+  private astar(
+    startId: string,
+    goalId: string,
+    blockedEdgeIds?: Set<string>
+  ): Route | null {
     const openSet = new Set<string>([startId]);
     const closedSet = new Set<string>();
     const nodes = new Map<string, PathNode>();
@@ -101,6 +108,8 @@ export class Pathfinder {
       const edges = this.network.getNodeEdges(current);
 
       edges.forEach((edge) => {
+        if (blockedEdgeIds?.has(edge.id)) return;
+
         const neighborId = edge.to;
 
         if (closedSet.has(neighborId)) return;

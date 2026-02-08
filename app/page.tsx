@@ -21,11 +21,11 @@ export default function Landing() {
   // White overlay opacity: 0 -> 1 (start immediately, complete at 50% of scroll)
   const overlayOpacity = useTransform(scrollYProgress, [0, 0.5], [0, 1]);
 
-  // Content opacity: fade in after white overlay is complete (50% to 65% of scroll)
-  const contentOpacity = useTransform(scrollYProgress, [0.5, 0.65], [0, 1]);
+  // Content: appear a bit after white overlay is full (55% to 72% of scroll), then stick and settle
+  const contentOpacity = useTransform(scrollYProgress, [0.55, 0.72], [0, 1]);
 
-  // Content translateY: slide up as it fades in
-  const contentY = useTransform(scrollYProgress, [0.5, 0.65], [50, 0]);
+  // Content translateY: "come down" into place as it fades in
+  const contentY = useTransform(scrollYProgress, [0.55, 0.72], [24, 0]);
 
   useEffect(() => {
     const hero = heroRef.current;
@@ -54,8 +54,8 @@ export default function Landing() {
         </div>
       </nav>
 
-      {/* Spacer to create scroll height for animation */}
-      <div style={{ height: '400vh' }} />
+      {/* Spacer so content reaches viewport when overlay is full (progress 0.5) */}
+      <div style={{ height: '150vh' }} />
 
       {/* ───── HERO ───── */}
       <motion.section
@@ -97,14 +97,17 @@ export default function Landing() {
         </motion.div>
       </motion.section>
 
-      {/* Content that fades in after white overlay */}
+      {/* Content: sticky so it appears in view as overlay finishes, then normal scroll */}
       <motion.div
+        className="lp-content-sticky"
         style={{
           opacity: contentOpacity,
           y: contentY,
-          position: 'relative',
+          position: 'sticky',
+          top: 0,
           zIndex: 20,
           backgroundColor: '#fff',
+          paddingRight: '1.5rem',
         }}
       >
         {/* ───── STATEMENT ───── */}

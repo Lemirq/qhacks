@@ -97,6 +97,8 @@ export class Spawner {
   private config: SpawnerConfig;
   private nextCarId: number = 0;
   private pathfinder: Pathfinder;
+  /** Edge IDs to avoid when pathfinding (lane/road blocks near placed buildings) */
+  private blockedEdgeIds: Set<string> = new Set();
 
   constructor(
     private roadNetwork: RoadNetwork,
@@ -234,6 +236,67 @@ export class Spawner {
   }
 
   /**
+   * Set edges that are blocked (e.g. one lane closed near a placed building).
+   * Pathfinding will avoid these edges and vehicles will reroute around them.
+   */
+  setBlockedEdges(edgeIds: Set<string>): void {
+    this.blockedEdgeIds = new Set(edgeIds);
+  }
+
+  /**
+   * Get currently blocked edge IDs (for debugging or UI).
+   */
+  getBlockedEdgeIds(): Set<string> {
+    return new Set(this.blockedEdgeIds);
+  }
+
+  /**
+   * Add high-frequency spawn points near placed buildings to simulate
+   * extra traffic in the construction area. Removes any existing
+   * building-vicinity spawn points first.
+   * @param buildings - Array of { id, position: [lng, lat] }
+   */
+  setBuildingVicinitySpawning(
+    buildings: { id: string; position: [number, number] }[],
+  ): void {
+    // Remove existing building-vicinity spawn points
+    const toRemove: string[] = [];
+    this.spawnPoints.forEach((_, id) => {
+      if (id.startsWith("building-vicinity-")) toRemove.push(id);
+    });
+    toRemove.forEach((id) => this.spawnPoints.delete(id));
+
+    const now = Date.now();
+    const VICINITY_RADIUS_M = 85;
+    const VICINITY_SPAWN_RATE = 7; // cars per minute (high to simulate congestion)
+
+    buildings.forEach((building) => {
+      const nearEdges = this.roadNetwork.findEdgesNearPosition(
+        building.position,
+        VICINITY_RADIUS_M,
+      );
+      // Add up to 2 spawn points per building (different nearby edges)
+      const seenEdgeIds = new Set<string>();
+      let added = 0;
+      for (const edge of nearEdges) {
+        if (seenEdgeIds.has(edge.id) || added >= 2) continue;
+        seenEdgeIds.add(edge.id);
+        const pos = edge.geometry[0] as [number, number];
+        const id = `building-vicinity-${building.id}-${edge.id}`;
+        this.addSpawnPoint({
+          id,
+          position: pos,
+          roadNodeId: edge.from,
+          spawnRate: VICINITY_SPAWN_RATE,
+          lastSpawnTime: now,
+          active: true,
+        });
+        added++;
+      }
+    });
+  }
+
+  /**
    * Toggle spawn point active state
    */
   toggleSpawnPoint(spawnPointId: string, active: boolean): void {
@@ -279,10 +342,13 @@ export class Spawner {
       return null;
     }
 
-    // Find route from spawn point to destination
+    // Find route from spawn point to destination (avoid blocked edges)
     let route = this.pathfinder.findRoute(
       spawnPoint.position,
       destination.position,
+      this.blockedEdgeIds.size > 0
+        ? { blockedEdgeIds: this.blockedEdgeIds }
+        : undefined,
     );
 
     // FALLBACK: If pathfinding fails, create a simple route on a random edge
@@ -503,11 +569,36 @@ export class Spawner {
   }
 
   /**
-   * Update car position along its route
+   * Update car position along its route. If the current or next edge is
+   * blocked, recompute route from current position so the vehicle diverts.
    */
   updateCarPosition(carId: string, deltaTime: number): void {
     const car = this.activeCars.get(carId);
     if (!car || !car.route || !car.currentEdgeId) return;
+
+    // If current or next edge is blocked, reroute from current position
+    if (this.blockedEdgeIds.size > 0) {
+      const idx = car.route.edges.indexOf(car.currentEdgeId);
+      const currentBlocked = this.blockedEdgeIds.has(car.currentEdgeId);
+      const nextEdgeId =
+        idx >= 0 && idx < car.route.edges.length - 1
+          ? car.route.edges[idx + 1]
+          : null;
+      const nextBlocked =
+        nextEdgeId !== null && this.blockedEdgeIds.has(nextEdgeId);
+      if (currentBlocked || nextBlocked) {
+        const newRoute = this.pathfinder.findRoute(
+          car.position,
+          car.destination.position,
+          { blockedEdgeIds: this.blockedEdgeIds },
+        );
+        if (newRoute && newRoute.edges.length > 0) {
+          car.route = newRoute;
+          car.currentEdgeId = newRoute.edges[0];
+          car.distanceOnEdge = 0;
+        }
+      }
+    }
 
     // Calculate distance traveled this frame
     const distanceTraveled = (car.speed / 3.6) * deltaTime; // Convert km/h to m/s, multiply by deltaTime

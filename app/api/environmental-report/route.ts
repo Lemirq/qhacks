@@ -9,6 +9,8 @@ interface PlacedBuilding {
   lng: number;
   scale: { x: number; y: number; z: number };
   position: { x: number; y: number; z: number };
+  modelPath?: string;
+  timeline?: { zoneType?: string; startDate?: string; durationDays?: number };
 }
 
 interface EnvironmentalReport {
@@ -46,9 +48,23 @@ interface OverallImpact {
   treesRequired: number;
 }
 
+interface MetricsSnapshot {
+  timelineDate: string;
+  co2Emissions: number;
+  energyConsumption: number;
+  waterUsage: number;
+  totalFootprint: number;
+  materialComplexity: string;
+  sustainabilityScore: number;
+  populationHappiness: number;
+  avgDb: number;
+  activeCount: number;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { buildings } = await request.json() as { buildings: PlacedBuilding[] };
+    const body = await request.json() as { buildings: PlacedBuilding[]; snapshot?: MetricsSnapshot };
+    const { buildings, snapshot } = body;
 
     if (!buildings || buildings.length === 0) {
       return NextResponse.json({ error: 'No buildings provided for analysis' }, { status: 400 });
@@ -60,19 +76,56 @@ export async function POST(request: NextRequest) {
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    // Create building details for the prompt
-    const buildingDetails = buildings.map((b, i) => `
+    // Build rich details for Gemini: dimensions, zoning, type so it can estimate impacts
+    const buildingDetails = buildings.map((b, i) => {
+      const footprint = Math.round(b.scale.x * b.scale.z * 100);
+      const heightM = Math.round(b.scale.y * 3);
+      const zoneType = b.timeline?.zoneType ?? 'unknown';
+      const buildingType = b.modelPath?.includes('custom') || b.modelPath?.includes('editor')
+        ? 'Custom building (user-designed)'
+        : b.modelPath?.includes('let_me_sleep') ? 'Default model (Let Me Sleep Building)' : 'Placed building';
+      return `
 Building ${i + 1}:
 - ID: ${b.id}
-- GPS Coordinates: ${b.lat.toFixed(6)}°N, ${b.lng.toFixed(6)}°W
-- Scale (approx size multiplier): ${b.scale.x.toFixed(1)}x
-- Approximate footprint: ${(b.scale.x * b.scale.z * 100).toFixed(0)} sq meters
-`).join('\n');
+- GPS: ${b.lat.toFixed(6)}°N, ${b.lng.toFixed(6)}°W
+- Dimensions: scale X=${b.scale.x.toFixed(1)} Y=${b.scale.y.toFixed(1)} Z=${b.scale.z.toFixed(1)} (Y = height axis)
+- Approximate footprint: ${footprint} sq meters
+- Approximate height: ~${heightM} m
+- Zoning: ${zoneType}
+- Building type: ${buildingType}
+`;
+    }).join('\n');
+
+    const snapshotContext = snapshot
+      ? `
+CURRENT METRICS SNAPSHOT (as of ${new Date(snapshot.timelineDate).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}):
+- Active construction sites at this date: ${snapshot.activeCount}
+- CO2 emissions (tonnes/PA): ${snapshot.co2Emissions.toFixed(1)}
+- Energy consumption (MWh/PA): ${snapshot.energyConsumption.toFixed(1)}
+- Water usage (m³/PA): ${snapshot.waterUsage.toFixed(0)}
+- Total footprint (sq m): ${snapshot.totalFootprint.toFixed(0)}
+- Material complexity: ${snapshot.materialComplexity}
+- Sustainability score: ${snapshot.sustainabilityScore}/100
+- Population happiness (noise impact): ${snapshot.populationHappiness}/100
+- Average construction noise: ~${snapshot.avgDb} dB
+
+Use these snapshot values to align your overall impact numbers and summary with the current timeline state. Reference "as of [this date]" where relevant.
+`
+      : '';
 
     const prompt = `You are an environmental and urban planning expert analyzing proposed building developments in Kingston, Ontario, Canada (near Queen's University campus area at coordinates 44.2253°N, 76.4951°W).
 
-PROPOSED BUILDINGS FOR ANALYSIS:
+PROPOSED BUILDINGS FOR ANALYSIS (use dimensions, zoning, and type to estimate impacts):
 ${buildingDetails}
+${snapshotContext}
+
+ESTIMATION INSTRUCTIONS:
+- Estimate construction and operational CO2, energy use, water use, and material intensity for each building using:
+  - Footprint (sq m) and height to infer scale and embodied carbon (concrete, steel, glass).
+  - Zoning code (e.g. MU1, R1, C1) to infer use type (mixed-use, residential, commercial) and typical energy/water intensity.
+  - Building type (custom vs default) to inform complexity and material choices.
+- Typical ranges: construction 0.3–0.8 tonnes CO2/sq m; operational 15–40 kWh/sq m/year for commercial, 80–120 for residential; water 5–15 L/sq m/day. Scale with height and footprint.
+- Your overallImpact.totalCarbonTonnes and treesRequired should be numerical estimates consistent with the building dimensions and zoning. Prefer your own estimates over the snapshot when the snapshot is from a simple calculator.
 
 LOCATION CONTEXT:
 - Area: Kingston, Ontario, Canada - Historic university town on Lake Ontario
@@ -81,7 +134,7 @@ LOCATION CONTEXT:
 - Ecological zone: Great Lakes-St. Lawrence mixed forest region
 - Notable wildlife: Migratory birds, urban wildlife corridors
 
-Analyze each building location and provide a comprehensive environmental and societal impact assessment.
+Analyze each building and provide a comprehensive environmental and societal impact assessment. Base carbon, energy, water, and material estimates on the dimensions, zoning, and building type above.
 
 You MUST respond with valid JSON in this exact format:
 {
@@ -124,8 +177,8 @@ You MUST respond with valid JSON in this exact format:
 SCORING GUIDELINES:
 - environmentalScore: 100 = no impact, 0 = devastating impact
 - societalScore: 100 = highly beneficial, 0 = highly detrimental
-- totalCarbonTonnes: Estimate based on building size (typical: 500-1000 tonnes per 1000 sq m)
-- treesRequired: Trees needed to offset carbon (avg tree absorbs ~20kg CO2/year, calculate for 10 year offset)
+- totalCarbonTonnes: Estimate from footprint, height, and zoning (construction + 10-year operational). Typical: 0.3–0.8 t CO2/sq m construction; 0.02–0.05 t/sq m/year operational.
+- treesRequired: Offset totalCarbonTonnes (avg tree ~20 kg CO2/year; use for 10–20 year offset)
 
 Be specific about the Kingston, Ontario context. Reference real features of the area when relevant (Lake Ontario, Queen's University, downtown Kingston, local parks, transit routes).
 
@@ -171,6 +224,7 @@ Respond ONLY with the JSON object, no additional text.`;
       report,
       generatedAt: new Date().toISOString(),
       buildingCount: buildings.length,
+      snapshotDate: snapshot?.timelineDate ?? null,
     });
 
   } catch (error) {
