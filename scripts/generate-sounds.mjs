@@ -78,6 +78,11 @@ const SOUNDS = [
     prompt: 'A solid block clicking into place with a satisfying snap and a short bam, like a lego brick being pressed down firmly',
     duration: 0.7,
   },
+  {
+    filename: '../map/city_street.mp3',
+    prompt: 'Busy metropolitan city street ambiance with car horns honking, engines rumbling, people chatting, footsteps on pavement, and distant sirens, dense urban downtown atmosphere',
+    duration: 5.0,
+  },
 ];
 
 const API_URL = 'https://api.elevenlabs.io/v1/sound-generation';
@@ -118,8 +123,9 @@ async function generateSound(sound) {
 }
 
 async function main() {
-  // Ensure output directory exists
+  // Ensure output directories exist
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  fs.mkdirSync(path.join(ROOT, 'public', 'sounds', 'map'), { recursive: true });
 
   console.log(`Generating ${SOUNDS.length} sound effects...\n`);
   console.log(`Output: ${OUTPUT_DIR}\n`);

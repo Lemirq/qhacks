@@ -19,7 +19,11 @@
       "Bash(npm install:*)",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\phine\\\\OneDrive\\\\Laptop\\\\HACKATHON\\\\qhacks\\\\qhacks\" -Filter \"*.md\" -Recurse)",
       "Bash(Where-Object { $_FullName -notmatch \"node_modules\" })",
-      "Bash(Select-Object -ExpandProperty FullName)"
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(git -C \"c:\\\\Users\\\\phine\\\\OneDrive\\\\Laptop\\\\HACKATHON\\\\qhacks\\\\qhacks\" log --oneline)",
+      "Bash(git -C \"c:\\\\Users\\\\phine\\\\OneDrive\\\\Laptop\\\\HACKATHON\\\\qhacks\\\\qhacks\" config user.name:*)",
+      "Bash(git -C \"c:\\\\Users\\\\phine\\\\OneDrive\\\\Laptop\\\\HACKATHON\\\\qhacks\\\\qhacks\" config user.email)",
+      "Bash(git -C \"c:\\\\Users\\\\phine\\\\OneDrive\\\\Laptop\\\\HACKATHON\\\\qhacks\\\\qhacks\" config --get remote.origin.url)"
     ],
     "additionalDirectories": [
       "c:\\Users\\phine\\OneDrive\\Laptop\\HACKATHON\\qhacks\\qhacks\\public\\sounds",

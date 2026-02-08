@@ -18,7 +18,10 @@ import { fetchBuildings } from "@/lib/buildingData";
 import { renderBuildings } from "@/lib/buildingRenderer";
 import { renderRoads } from "@/lib/roadRenderer";
 import { createGround } from "@/lib/environmentRenderer";
-import { renderTreesAroundBuilding, getDefaultTreeConfigForMap } from "@/lib/treeRenderer";
+import {
+  renderTreesAroundBuilding,
+  getDefaultTreeConfigForMap,
+} from "@/lib/treeRenderer";
 import { TreeConfig } from "@/lib/editor/types/buildingSpec";
 
 // Projection and camera
@@ -339,7 +342,7 @@ function createRedStripOnRoad(
     const perpX = (-dz / len) * half;
     const perpZ = (dx / len) * half;
 
-    const i0 = (vertices.length / 3);
+    const i0 = vertices.length / 3;
     vertices.push(p1.x - perpX, p1.y + 0.04, p1.z - perpZ);
     vertices.push(p1.x + perpX, p1.y + 0.04, p1.z + perpZ);
     vertices.push(p2.x - perpX, p2.y + 0.04, p2.z - perpZ);
@@ -354,7 +357,6 @@ function createRedStripOnRoad(
   geom.computeVertexNormals();
   return new THREE.Mesh(geom, RED_STRIP_MATERIAL);
 }
-
 
 /** Thin red ring border around the construction zone. Road strips are the primary indicator. */
 function createConstructionZoneBorder(radiusScene: number): THREE.Group {
@@ -463,16 +465,22 @@ export default function ThreeMap({
   const rippleTimeRef = useRef(0);
   const zoningGroupRef = useRef<THREE.Group | null>(null);
 
-  // Analytics state (use controlled props when provided so parent can put buttons in sidebar)
+  // Street-level ambient sound
+  const streetSoundRef = useRef<HTMLAudioElement | null>(null);
+  const isStreetLevelRef = useRef(false);
+  const streetSoundLoadingRef = useRef(false);
+
   const analyticsRef = useRef<TrafficAnalytics | null>(null);
   const [internalDebugVisible, setInternalDebugVisible] = useState(false);
-  const [internalDashboardVisible, setInternalDashboardVisible] = useState(false);
+  const [internalDashboardVisible, setInternalDashboardVisible] =
+    useState(false);
   const debugOverlayVisible = debugOverlayVisibleProp ?? internalDebugVisible;
   const setDebugOverlayVisible =
     onDebugOverlayChange ?? ((v: boolean) => setInternalDebugVisible(v));
   const dashboardVisible = dashboardVisibleProp ?? internalDashboardVisible;
   const setDashboardVisible =
-    onDashboardVisibleChange ?? ((v: boolean) => setInternalDashboardVisible(v));
+    onDashboardVisibleChange ??
+    ((v: boolean) => setInternalDashboardVisible(v));
 
   // Traffic system managers (integrated systems)
   const trafficInfrastructureRef = useRef<TrafficInfrastructureManager | null>(
@@ -1061,9 +1069,16 @@ export default function ThreeMap({
                 if (d < minDistM) minDistM = d;
               }
               if (minDistM < CONSTRUCTION_ZONE_RADIUS_M) {
-                spawnedCar.targetSpeed = Math.min(spawnedCar.targetSpeed, CONSTRUCTION_ZONE_SPEED_LIMIT);
-                spawnedCar.speed = Math.min(spawnedCar.speed, CONSTRUCTION_ZONE_SPEED_LIMIT);
-                spawnedCar.behaviorReason = "Near construction site – driving slowly";
+                spawnedCar.targetSpeed = Math.min(
+                  spawnedCar.targetSpeed,
+                  CONSTRUCTION_ZONE_SPEED_LIMIT,
+                );
+                spawnedCar.speed = Math.min(
+                  spawnedCar.speed,
+                  CONSTRUCTION_ZONE_SPEED_LIMIT,
+                );
+                spawnedCar.behaviorReason =
+                  "Near construction site – driving slowly";
                 czRedCount++;
                 czSpeedSum += spawnedCar.speed;
                 czTotalInZone++;
@@ -1186,7 +1201,9 @@ export default function ThreeMap({
           const BASE_MAX_SCALE = 1400 / 50;
           rippleGroup.children.forEach((child) => {
             const mesh = child as THREE.Mesh;
-            const phaseOffset = mesh.userData?.phaseOffset as number | undefined;
+            const phaseOffset = mesh.userData?.phaseOffset as
+              | number
+              | undefined;
             const intensity = (mesh.userData?.intensity as number) ?? 1;
             if (phaseOffset == null) return;
             const phase =
@@ -1196,12 +1213,83 @@ export default function ThreeMap({
             const scale = phase * maxScale;
             mesh.scale.set(scale, scale, scale);
             const mat = mesh.material as THREE.MeshBasicMaterial;
-            if (mat.transparent) mat.opacity = (0.65 + 0.3 * intensity) * (1 - phase);
+            if (mat.transparent)
+              mat.opacity = (0.65 + 0.3 * intensity) * (1 - phase);
           });
         }
 
         // Update controls
         controlsRef.current.update();
+
+        // Street-level ambient sound: detect zoom and play city ambiance via ElevenLabs
+        if (cameraRef.current && controlsRef.current) {
+          const camDistance = cameraRef.current.position.distanceTo(
+            controlsRef.current.target,
+          );
+          const STREET_THRESHOLD = 1500;
+          const STREET_FULL_VOL = 400;
+
+          if (camDistance < STREET_THRESHOLD) {
+            const t =
+              1 -
+              Math.max(
+                0,
+                Math.min(
+                  1,
+                  (camDistance - STREET_FULL_VOL) /
+                    (STREET_THRESHOLD - STREET_FULL_VOL),
+                ),
+              );
+            const vol = t * 0.4;
+
+            if (!isStreetLevelRef.current) {
+              isStreetLevelRef.current = true;
+
+              if (streetSoundRef.current) {
+                streetSoundRef.current.volume = vol;
+                streetSoundRef.current.play().catch(() => {});
+              } else if (!streetSoundLoadingRef.current) {
+                streetSoundLoadingRef.current = true;
+                console.log(
+                  "🔊 Street-level zoom detected — calling ElevenLabs for city ambiance...",
+                );
+                fetch("/api/street-sound")
+                  .then((res) => {
+                    if (!res.ok) throw new Error(`API ${res.status}`);
+                    return res.blob();
+                  })
+                  .then((blob) => {
+                    const url = URL.createObjectURL(blob);
+                    const audio = new Audio(url);
+                    audio.loop = true;
+                    audio.volume = vol;
+                    streetSoundRef.current = audio;
+                    if (isStreetLevelRef.current) {
+                      audio.play().catch(() => {});
+                    }
+                    console.log(
+                      "🔊 ElevenLabs city ambiance loaded and playing",
+                    );
+                  })
+                  .catch((err) => console.warn("Street sound error:", err))
+                  .finally(() => {
+                    streetSoundLoadingRef.current = false;
+                  });
+              }
+            }
+
+            // Smoothly adjust volume based on distance
+            if (streetSoundRef.current && !streetSoundRef.current.paused) {
+              streetSoundRef.current.volume = vol;
+            }
+          } else if (isStreetLevelRef.current) {
+            isStreetLevelRef.current = false;
+            if (streetSoundRef.current) {
+              streetSoundRef.current.pause();
+              streetSoundRef.current.currentTime = 0;
+            }
+          }
+        }
 
         // Analytics: Track render start
         const renderStartTime = performance.now();
@@ -1267,6 +1355,12 @@ export default function ThreeMap({
       if (controlsRef.current) {
         controlsRef.current.dispose();
       }
+
+      // Clean up street-level ambient sound
+      if (streetSoundRef.current) {
+        streetSoundRef.current.pause();
+        streetSoundRef.current = null;
+      }
     };
   }, []);
 
@@ -1328,10 +1422,15 @@ export default function ThreeMap({
       });
     }
 
-    const buildingsList = placedBuildings.map((b) => ({ id: b.id, position: [b.lng, b.lat] as [number, number] }));
+    const buildingsList = placedBuildings.map((b) => ({
+      id: b.id,
+      position: [b.lng, b.lat] as [number, number],
+    }));
     const burstCount = spawner.burstSpawnNearBuildings(buildingsList);
     if (burstCount > 0) {
-      console.log(`🚧 Burst spawned ${burstCount} cars near placed building(s)`);
+      console.log(
+        `🚧 Burst spawned ${burstCount} cars near placed building(s)`,
+      );
     }
 
     // Keep spamming cars: if area is empty or below cap, burst again every 2.5s
@@ -1343,7 +1442,9 @@ export default function ThreeMap({
       if (active >= maxCars) return;
       const added = s.burstSpawnNearBuildings(buildingsList);
       if (added > 0) {
-        console.log(`🚧 Top-up spawned ${added} cars (${active + added} total)`);
+        console.log(
+          `🚧 Top-up spawned ${added} cars (${active + added} total)`,
+        );
       }
     }, 2500);
 
@@ -1761,7 +1862,8 @@ export default function ThreeMap({
           );
 
           // Always generate trees around the building
-          const treeConfig = building.treeConfig || getDefaultTreeConfigForMap();
+          const treeConfig =
+            building.treeConfig || getDefaultTreeConfigForMap();
           const forcedTreeConfig = { ...treeConfig, enabled: true };
           if (groupsRef.current) {
             const bbox = new THREE.Box3().setFromObject(toAdd);
@@ -1789,7 +1891,7 @@ export default function ThreeMap({
               buildingScaleValue,
               toAdd,
               groupsRef.current.staticGeometry,
-              otherBuildings
+              otherBuildings,
             );
             buildingTreesRef.current.set(building.id, treeGroup);
           }
@@ -1956,14 +2058,20 @@ export default function ThreeMap({
 
     placedBuildings.forEach((building) => {
       const obj = buildingModelsRef.current.get(building.id);
-      if (!obj || !building.timeline?.startDate || !building.timeline?.durationDays)
+      if (
+        !obj ||
+        !building.timeline?.startDate ||
+        !building.timeline?.durationDays
+      )
         return;
 
-      const solidModel =
-        obj.userData.solidModel ?? (obj as THREE.Group);
+      const solidModel = obj.userData.solidModel ?? (obj as THREE.Group);
       const startTime = new Date(building.timeline.startDate).getTime();
       const elapsedDays = (currentTime - startTime) / (1000 * 60 * 60 * 24);
-      const progress = Math.max(0, Math.min(1, elapsedDays / building.timeline.durationDays));
+      const progress = Math.max(
+        0,
+        Math.min(1, elapsedDays / building.timeline.durationDays),
+      );
 
       solidModel.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(solidModel);
@@ -1972,7 +2080,7 @@ export default function ThreeMap({
       const visibleTop = bottomY + progress * fullHeight;
       const clipPlane = new THREE.Plane(
         new THREE.Vector3(0, -1, 0),
-        visibleTop
+        visibleTop,
       );
 
       const applyClip = (target: THREE.Object3D) => {
@@ -2032,8 +2140,8 @@ export default function ThreeMap({
         isUnderConstruction(
           b.timeline.startDate,
           b.timeline.durationDays,
-          timelineDate
-        )
+          timelineDate,
+        ),
     );
 
     const group = new THREE.Group();
@@ -2085,13 +2193,7 @@ export default function ThreeMap({
 
     noiseRippleGroupRef.current = group;
     groupsRef.current.dynamicObjects.add(group);
-  }, [
-    showNoiseRipple,
-    placedBuildings,
-    timelineDate,
-    isReady,
-    buildingScale,
-  ]);
+  }, [showNoiseRipple, placedBuildings, timelineDate, isReady, buildingScale]);
 
   // Kingston zoning layer (Official Plan Land Use Designation)
   useEffect(() => {
@@ -2272,11 +2374,13 @@ export default function ThreeMap({
       )}
 
       {/* Panels: portal above sidebars when panelsPortalRef provided, else in-place */}
-      {panelsPortalRef?.current
-        ? createPortal(
-            <>
-              {/* Car details - centered */}
-              {selectedCarId && spawnerRef.current && (() => {
+      {panelsPortalRef?.current ? (
+        createPortal(
+          <>
+            {/* Car details - centered */}
+            {selectedCarId &&
+              spawnerRef.current &&
+              (() => {
                 const car = spawnerRef.current.getCar(selectedCarId);
                 if (!car) return null;
                 return (
@@ -2293,11 +2397,25 @@ export default function ThreeMap({
                       </button>
                     </div>
                     <div className="p-4 space-y-2 text-sm">
-                      <p><span className="text-gray-400">ID</span> {car.id}</p>
-                      <p><span className="text-gray-400">Speed</span> {car.speed.toFixed(1)} km/h</p>
-                      <p><span className="text-gray-400">Target speed</span> {car.targetSpeed.toFixed(1)} km/h</p>
-                      <p><span className="text-gray-400">Max speed</span> {car.maxSpeed.toFixed(1)} km/h</p>
-                      <p><span className="text-gray-400">State</span> {car.currentBehavior ?? "—"}</p>
+                      <p>
+                        <span className="text-gray-400">ID</span> {car.id}
+                      </p>
+                      <p>
+                        <span className="text-gray-400">Speed</span>{" "}
+                        {car.speed.toFixed(1)} km/h
+                      </p>
+                      <p>
+                        <span className="text-gray-400">Target speed</span>{" "}
+                        {car.targetSpeed.toFixed(1)} km/h
+                      </p>
+                      <p>
+                        <span className="text-gray-400">Max speed</span>{" "}
+                        {car.maxSpeed.toFixed(1)} km/h
+                      </p>
+                      <p>
+                        <span className="text-gray-400">State</span>{" "}
+                        {car.currentBehavior ?? "—"}
+                      </p>
                       {car.behaviorReason && (
                         <p className="pt-2 border-t border-gray-700">
                           <span className="text-gray-400 block mb-1">Why</span>
@@ -2308,29 +2426,33 @@ export default function ThreeMap({
                   </div>
                 );
               })()}
-              {/* Debug overlay - centered so not behind sidebars */}
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 w-full max-w-md pointer-events-auto z-10">
-                <DebugOverlay
-                  analytics={analyticsRef.current}
-                  visible={debugOverlayVisible}
-                  onToggle={() => setDebugOverlayVisible(!debugOverlayVisible)}
-                  className="pointer-events-none select-none"
-                  constructionZone={placedBuildings?.length ? constructionZoneRef.current : null}
-                />
-              </div>
-              {/* Analytics dashboard - full screen when open */}
-              <AnalyticsDashboard
+            {/* Debug overlay - centered so not behind sidebars */}
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 w-full max-w-md pointer-events-auto z-10">
+              <DebugOverlay
                 analytics={analyticsRef.current}
-                visible={dashboardVisible}
-                onClose={() => setDashboardVisible(false)}
+                visible={debugOverlayVisible}
+                onToggle={() => setDebugOverlayVisible(!debugOverlayVisible)}
+                className="pointer-events-none select-none"
+                constructionZone={
+                  placedBuildings?.length ? constructionZoneRef.current : null
+                }
               />
-            </>,
-            panelsPortalRef.current,
-          )
-        : (
-          <>
-            {/* Car details panel - in-place when no portal */}
-            {selectedCarId && spawnerRef.current && (() => {
+            </div>
+            {/* Analytics dashboard - full screen when open */}
+            <AnalyticsDashboard
+              analytics={analyticsRef.current}
+              visible={dashboardVisible}
+              onClose={() => setDashboardVisible(false)}
+            />
+          </>,
+          panelsPortalRef.current,
+        )
+      ) : (
+        <>
+          {/* Car details panel - in-place when no portal */}
+          {selectedCarId &&
+            spawnerRef.current &&
+            (() => {
               const car = spawnerRef.current.getCar(selectedCarId);
               if (!car) return null;
               return (
@@ -2347,11 +2469,25 @@ export default function ThreeMap({
                     </button>
                   </div>
                   <div className="p-4 space-y-2 text-sm">
-                    <p><span className="text-gray-400">ID</span> {car.id}</p>
-                    <p><span className="text-gray-400">Speed</span> {car.speed.toFixed(1)} km/h</p>
-                    <p><span className="text-gray-400">Target speed</span> {car.targetSpeed.toFixed(1)} km/h</p>
-                    <p><span className="text-gray-400">Max speed</span> {car.maxSpeed.toFixed(1)} km/h</p>
-                    <p><span className="text-gray-400">State</span> {car.currentBehavior ?? "—"}</p>
+                    <p>
+                      <span className="text-gray-400">ID</span> {car.id}
+                    </p>
+                    <p>
+                      <span className="text-gray-400">Speed</span>{" "}
+                      {car.speed.toFixed(1)} km/h
+                    </p>
+                    <p>
+                      <span className="text-gray-400">Target speed</span>{" "}
+                      {car.targetSpeed.toFixed(1)} km/h
+                    </p>
+                    <p>
+                      <span className="text-gray-400">Max speed</span>{" "}
+                      {car.maxSpeed.toFixed(1)} km/h
+                    </p>
+                    <p>
+                      <span className="text-gray-400">State</span>{" "}
+                      {car.currentBehavior ?? "—"}
+                    </p>
                     {car.behaviorReason && (
                       <p className="pt-2 border-t border-gray-700">
                         <span className="text-gray-400 block mb-1">Why</span>
@@ -2362,19 +2498,21 @@ export default function ThreeMap({
                 </div>
               );
             })()}
-            <DebugOverlay
-              analytics={analyticsRef.current}
-              visible={debugOverlayVisible}
-              onToggle={() => setDebugOverlayVisible(!debugOverlayVisible)}
-              constructionZone={placedBuildings?.length ? constructionZoneRef.current : null}
-            />
-            <AnalyticsDashboard
-              analytics={analyticsRef.current}
-              visible={dashboardVisible}
-              onClose={() => setDashboardVisible(false)}
-            />
-          </>
-        )}
+          <DebugOverlay
+            analytics={analyticsRef.current}
+            visible={debugOverlayVisible}
+            onToggle={() => setDebugOverlayVisible(!debugOverlayVisible)}
+            constructionZone={
+              placedBuildings?.length ? constructionZoneRef.current : null
+            }
+          />
+          <AnalyticsDashboard
+            analytics={analyticsRef.current}
+            visible={dashboardVisible}
+            onClose={() => setDashboardVisible(false)}
+          />
+        </>
+      )}
 
       {/* Right Sidebar - only when parent does not control (e.g. buttons in sidebar) */}
       {isReady && onDebugOverlayChange == null && (
