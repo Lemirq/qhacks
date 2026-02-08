@@ -16,7 +16,10 @@
       "Bash(dir:*)",
       "Bash(npx tsc:*)",
       "Bash(del:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\phine\\\\OneDrive\\\\Laptop\\\\HACKATHON\\\\qhacks\\\\qhacks\" -Filter \"*.md\" -Recurse)",
+      "Bash(Where-Object { $_FullName -notmatch \"node_modules\" })",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ],
     "additionalDirectories": [
       "c:\\Users\\phine\\OneDrive\\Laptop\\HACKATHON\\qhacks\\qhacks\\public\\sounds",

@@ -18,8 +18,8 @@ export default function Landing() {
   // Scale/Zoom: 1 -> 2.5 (zoom in significantly, first 50% of scroll)
   const scale = useTransform(scrollYProgress, [0, 0.5], [1, 2.5]);
 
-  // White overlay opacity: 0 -> 1 (start immediately, complete at 50% of scroll)
-  const overlayOpacity = useTransform(scrollYProgress, [0, 0.5], [0, 1]);
+  // White overlay opacity: fade in 0→1 then quickly fade out 1→0
+  const overlayOpacity = useTransform(scrollYProgress, [0, 0.45, 5], [0, 1, 0]);
 
   // Content: appear a bit after white overlay is full (55% to 72% of scroll), then stick and settle
   const contentOpacity = useTransform(scrollYProgress, [0.55, 0.72], [0, 1]);
@@ -111,7 +111,7 @@ export default function Landing() {
         }}
       >
         {/* ───── STATEMENT ───── */}
-        <section className="lp-statement">
+        <section className="lp-statement" style={{ paddingTop: '50rem' }}>
           <span className="lp-stmt-rule lp-fade" style={{ animationDelay: '0.1s' }} />
 
           <p className="lp-stmt-small lp-fade" style={{ animationDelay: '0.25s' }}>
@@ -141,52 +141,37 @@ export default function Landing() {
         </section>
 
         {/* ───── YOUR JOURNEY ───── */}
-        <section className="bg-[#f4efe6]">
-          <FeatureSteps
-            title="Building Kingston's Golden Age"
-            subtitle="A new era of prosperity is rising. Housing, hotels, and public spaces are creating jobs, attracting investment, and strengthening our community. The Golden Age is not built in haste — it is crafted with vision, wisdom, and care for generations to come."
-            features={[
-              {
-                step: 'Step 1',
-                title: 'Design for the Ages',
-                content:
-                  'Transform blueprints and ideas into accurate 3D buildings in minutes. Create spaces worthy of a Golden Age — supporting growth, community, and lasting prosperity.',
-                image:
-                  'https://images.unsplash.com/photo-1686164748261-33e13eef70b6?q=80&w=2070&auto=format&fit=crop',
-              },
-              {
-                step: 'Step 2',
-                title: 'Weave Into the City',
-                content:
-                  'Place your vision in real Kingston locations. See how new projects fit into the fabric of neighborhoods, transit, and the long-term flourishing of the city.',
-                image:
-                  'https://images.unsplash.com/photo-1598897270268-f7091c801c3d?q=80&w=2070&auto=format&fit=crop',
-              },
-              {
-                step: 'Step 3',
-                title: 'Leave a Lasting Legacy',
-                content:
-                  'Simulate environmental, traffic, and community impacts before construction begins. Refine designs with data and ensure Kingston\'s Golden Age endures.',
-                image:
-                  'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?q=80&w=2070&auto=format&fit=crop',
-              },
-            ]}
-            autoPlayInterval={4000}
-            imageHeight="h-[500px]"
-          />
-        </section>
-
-        {/* ───── CLOSING ───── */}
-        <section className="lp-closing">
-          <p className="lp-closing-text">
-            Shaping the Golden Age — Built for the City of Kingston at QHacks 2025.
-          </p>
-          <div className="lp-closing-ctas">
-            <Link href="/map" className="lp-btn-warm">Enter the Golden Age</Link>
-            <Link href="/editor" className="lp-btn-outline">Build the Future</Link>
-          </div>
-        </section>
-
+<section className="bg-[#f4efe6]" style={{ width: '100vw', marginLeft: 'calc(-50vw + 50%)', marginRight: 'calc(-50vw + 50%)' }}>
+  <FeatureSteps
+    title="Building Kingston's Golden Age"
+    subtitle="Planning Kingston’s future with clarity and precision."
+    features={[
+      {
+        step: 'Step 1',
+        title: 'Shape a New Golden Era',
+        content:
+          'Turn concepts, sketches, and blueprints into intelligent 3D developments. Design spaces that power economic growth, strengthen communities, and define Kingston’s next chapter.',
+        image: '/carousel/city-of-kingston-ontario-canada.jpg',
+      },
+      {
+        step: 'Step 2',
+        title: 'Build Where Growth Happens',
+        content:
+          'Place projects directly into real city locations. Visualize how housing, business hubs, and public spaces connect neighborhoods and drive a thriving urban ecosystem.',
+        image: '/carousel/PZeSqEBK-RS12147_Kingston-Glamour-Shots-Downtown-1-1024x683.jpg',
+      },
+      {
+        step: 'Step 3',
+        title: 'Design for Generations',
+        content:
+          "Plan with long-term success in mind. Simulate environmental, economic, and social impacts to ensure today's developments become tomorrow's lasting legacy.",
+        image: '/carousel/kingston-waterfront-at-night.jpg',
+      },
+    ]}
+    autoPlayInterval={4000}
+    imageHeight="h-[500px]"
+  />
+</section>
         {/* ───── FOOTER ───── */}
         <footer className="lp-footer">
           <a href="https://github.com/Lemirq/qhacks" target="_blank" rel="noopener noreferrer">
