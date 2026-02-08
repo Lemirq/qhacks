@@ -205,32 +205,40 @@ function createCarModel(type: CarType, color: string): THREE.Mesh {
 function createTrafficLightModel(): THREE.Group {
   const group = new THREE.Group();
 
-  // Pole
-  const poleGeometry = new THREE.CylinderGeometry(0.1, 0.1, 5, 8);
-  const poleMaterial = new THREE.MeshPhongMaterial({ color: 0x444444 });
+  // Pole - 50% smaller
+  const poleGeometry = new THREE.CylinderGeometry(2.5, 2.5, 25, 8);
+  const poleMaterial = new THREE.MeshPhongMaterial({
+    color: 0x444444,
+    emissive: 0x222222,
+    emissiveIntensity: 0.5
+  });
   const pole = new THREE.Mesh(poleGeometry, poleMaterial);
-  pole.position.y = 2.5;
+  pole.position.y = 12.5;
   group.add(pole);
 
-  // Light housing
-  const housingGeometry = new THREE.BoxGeometry(0.4, 1.2, 0.3);
-  const housingMaterial = new THREE.MeshPhongMaterial({ color: 0x222222 });
+  // Light housing - 50% smaller
+  const housingGeometry = new THREE.BoxGeometry(10, 30, 7.5);
+  const housingMaterial = new THREE.MeshPhongMaterial({
+    color: 0x222222,
+    emissive: 0x111111,
+    emissiveIntensity: 0.3
+  });
   const housing = new THREE.Mesh(housingGeometry, housingMaterial);
-  housing.position.y = 5;
+  housing.position.y = 25;
   group.add(housing);
 
-  // Lights (red, yellow, green)
-  const lightGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+  // Lights (red, yellow, green) - 50% smaller
+  const lightGeometry = new THREE.SphereGeometry(4, 16, 16);
 
   const redLight = new THREE.Mesh(
     lightGeometry,
     new THREE.MeshStandardMaterial({
       color: 0xff0000,
-      emissive: 0x330000,
-      emissiveIntensity: 1,
+      emissive: 0xff0000,
+      emissiveIntensity: 2,
     }),
   );
-  redLight.position.set(0, 5.4, 0.2);
+  redLight.position.set(0, 35, 5);
   redLight.name = "red";
   group.add(redLight);
 
@@ -238,11 +246,11 @@ function createTrafficLightModel(): THREE.Group {
     lightGeometry,
     new THREE.MeshStandardMaterial({
       color: 0xffff00,
-      emissive: 0x333300,
-      emissiveIntensity: 1,
+      emissive: 0xffff00,
+      emissiveIntensity: 2,
     }),
   );
-  yellowLight.position.set(0, 5.0, 0.2);
+  yellowLight.position.set(0, 25, 5);
   yellowLight.name = "yellow";
   group.add(yellowLight);
 
@@ -250,11 +258,11 @@ function createTrafficLightModel(): THREE.Group {
     lightGeometry,
     new THREE.MeshStandardMaterial({
       color: 0x00ff00,
-      emissive: 0x003300,
-      emissiveIntensity: 1,
+      emissive: 0x00ff00,
+      emissiveIntensity: 2,
     }),
   );
-  greenLight.position.set(0, 4.6, 0.2);
+  greenLight.position.set(0, 15, 5);
   greenLight.name = "green";
   group.add(greenLight);
 
@@ -539,38 +547,70 @@ export default function ThreeMap({
             `🚦 Loaded ${osmTrafficSignals.length} traffic controls from OSM`,
           );
 
-          // Get all signals from infrastructure manager and create 3D meshes
+          // SMART INTERSECTION-BASED PLACEMENT
+          // 1. Find actual road intersections
+          const intersections = roadNetwork.findIntersections();
+          console.log(`🚦 Found ${intersections.length} road intersections`);
+
           const signals = trafficInfrastructureRef.current.getSignals();
-          console.log(`🚦 Created ${signals.length} traffic signal meshes`);
-          signals.forEach((signal) => {
-            const mesh = createTrafficLightModel();
-            const worldPos = CityProjection.projectToWorld(signal.position);
 
-            // Position based on direction
-            if (signal.direction === "ns") {
-              mesh.position.set(worldPos.x, worldPos.y, worldPos.z);
-            } else {
-              mesh.position.set(worldPos.x + 10, worldPos.y, worldPos.z + 10);
-            }
+          // 2. For each intersection, check if there's a traffic signal nearby
+          intersections.forEach((intersection) => {
+            // Find closest OSM traffic signal within 50 meters
+            let closestSignal = null;
+            let minDist = 50; // meters
 
-            groups.dynamicObjects.add(mesh);
-            signal.mesh = mesh;
+            signals.forEach((signal) => {
+              const dist = turf.distance(
+                turf.point(intersection.position),
+                turf.point(signal.position),
+                { units: 'meters' }
+              );
 
-            // Maintain old trafficLights array for compatibility
-            trafficLights.push({
-              id: signal.id,
-              position: signal.position,
-              state: signal.state,
-              timer: signal.timer,
-              intersectionId: signal.intersectionId,
-              direction: signal.direction,
-              mesh: mesh,
+              if (dist < minDist) {
+                closestSignal = signal;
+                minDist = dist;
+              }
+            });
+
+            if (!closestSignal) return; // No signal at this intersection
+
+            // 3. Get all roads approaching this intersection
+            const approachingEdges = roadNetwork.getNodeEdges(intersection.id);
+
+            // 4. Place one traffic light for each approach direction
+            approachingEdges.forEach((edge, idx) => {
+              const bearing = roadNetwork.getEdgeBearingAtNode(edge, intersection.id);
+
+              // Create mesh for this approach
+              const mesh = createTrafficLightModel();
+              const worldPos = CityProjection.projectToWorld(intersection.position);
+
+              // Place light on the FAR side of intersection (where traffic goes)
+              // Offset 20m in the direction the traffic is heading (50% of original)
+              const offsetDistance = 20; // meters in world units
+              const offsetX = Math.sin((bearing * Math.PI) / 180) * offsetDistance;
+              const offsetZ = Math.cos((bearing * Math.PI) / 180) * offsetDistance;
+
+              mesh.position.set(
+                worldPos.x + offsetX,
+                worldPos.y,
+                worldPos.z + offsetZ
+              );
+
+              // Rotate to face oncoming traffic
+              mesh.rotation.y = ((-bearing + 180) * Math.PI) / 180;
+
+              groups.dynamicObjects.add(mesh);
+
+              // Link to signal (all share same signal state)
+              if (idx === 0) {
+                closestSignal.mesh = mesh;
+              }
             });
           });
 
-          console.log(
-            `✅ Traffic Infrastructure Manager loaded ${signals.length} signals`,
-          );
+          console.log(`✅ Placed traffic lights at ${intersections.length} intersections`);
 
           // Initialize Signal Coordinator for green wave coordination
           if (signalCoordinatorRef.current) {
@@ -590,11 +630,11 @@ export default function ThreeMap({
         setIsReady(true);
         setError(null);
 
-        // Fly to specific coordinates: Latitude 44.232760°, Longitude -76.479941°
+        // Fly to specific coordinates: Latitude 44.233472°, Longitude -76.498375°
         await flyToLocation(
           camera,
           controls,
-          [-76.479941, 44.23276],
+          [-76.498375, 44.233472],
           600,
           2000,
         );

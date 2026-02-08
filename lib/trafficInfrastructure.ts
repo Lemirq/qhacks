@@ -119,28 +119,18 @@ export class TrafficInfrastructureManager {
       // Create signals for this intersection
       controls.forEach((control, idx) => {
         if (control.type === 'traffic_signals') {
-          // Create NS and EW signals
-          const nsSignal = this.createSignal(
-            `signal-${control.id}-ns`,
+          // Create ONLY ONE signal per OSM node (not NS and EW separately)
+          const signal = this.createSignal(
+            `signal-${control.id}`,
             [control.lon, control.lat],
             intersectionId,
-            'ns',
+            'ns', // Default to NS
             idx % 2 === 0 ? 'green' : 'red'
           );
 
-          const ewSignal = this.createSignal(
-            `signal-${control.id}-ew`,
-            [control.lon, control.lat],
-            intersectionId,
-            'ew',
-            idx % 2 === 0 ? 'red' : 'green'
-          );
-
-          this.signals.set(nsSignal.id, nsSignal);
-          this.signals.set(ewSignal.id, ewSignal);
-
-          intersection.signals.push(nsSignal.id, ewSignal.id);
-          signalCount += 2;
+          this.signals.set(signal.id, signal);
+          intersection.signals.push(signal.id);
+          signalCount += 1;
         } else if (control.type === 'stop') {
           const stopSign: StopSign = {
             id: `stop-${control.id}`,
