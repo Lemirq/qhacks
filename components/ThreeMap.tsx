@@ -53,6 +53,7 @@ interface ThreeMapProps {
   selectedBuildingId?: string | null;
   onBuildingSelect?: (id: string | null) => void;
   customModelPath?: string | null;
+  onOsmBuildingDelete?: (buildingId: string) => void;
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -265,6 +266,7 @@ export default function ThreeMap({
   selectedBuildingId = null,
   onBuildingSelect,
   customModelPath = null,
+  onOsmBuildingDelete,
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -282,8 +284,10 @@ export default function ThreeMap({
   const [ghostPosition, setGhostPosition] = useState<THREE.Vector3 | null>(null);
   const ghostModelRef = useRef<THREE.Group | null>(null);
   const buildingModelsRef = useRef<Map<string, THREE.Group>>(new Map());
+  const osmBuildingMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const composerRef = useRef<EffectComposer | null>(null);
   const outlinePassRef = useRef<OutlinePass | null>(null);
+  const [selectedOsmBuildingId, setSelectedOsmBuildingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canvasRef.current || initialized.current) return;
@@ -344,7 +348,9 @@ export default function ThreeMap({
         const buildings = await fetchBuildings(bbox);
 
         setLoadingStatus("Rendering buildings...");
-        renderBuildings(buildings, CityProjection, groups.staticGeometry);
+        const osmMeshes = renderBuildings(buildings, CityProjection, groups.staticGeometry);
+        // Store OSM building meshes for click detection
+        osmBuildingMeshesRef.current = osmMeshes;
 
         // Initialize road network
         setLoadingStatus("Fetching road network from OpenStreetMap...");
@@ -670,7 +676,7 @@ export default function ThreeMap({
       // Update raycaster with mouse position
       raycasterRef.current.setFromCamera(mouse, cameraRef.current);
 
-      // Check if we clicked on a building first
+      // Check if we clicked on a custom placed building first
       const buildingObjects = Array.from(buildingModelsRef.current.values());
       const buildingIntersects = raycasterRef.current.intersectObjects(buildingObjects, true);
 
@@ -683,6 +689,24 @@ export default function ThreeMap({
 
         if (clickedBuilding && clickedBuilding.userData.buildingId && onBuildingSelect) {
           onBuildingSelect(clickedBuilding.userData.buildingId);
+          setSelectedOsmBuildingId(null);
+          return; // Don't process as coordinate click
+        }
+      }
+
+      // Check if we clicked on an OSM building (from buildings.json)
+      const osmBuildingObjects = Array.from(osmBuildingMeshesRef.current.values());
+      const osmBuildingIntersects = raycasterRef.current.intersectObjects(osmBuildingObjects, true);
+
+      if (osmBuildingIntersects.length > 0 && !isPlacementMode) {
+        const clickedMesh = osmBuildingIntersects[0].object as THREE.Mesh;
+        if (clickedMesh.userData.isOsmBuilding && clickedMesh.userData.buildingId) {
+          const buildingId = clickedMesh.userData.buildingId;
+          console.log('Clicked OSM building:', buildingId);
+          setSelectedOsmBuildingId(buildingId);
+          if (onBuildingSelect) {
+            onBuildingSelect(null); // Deselect custom building
+          }
           return; // Don't process as coordinate click
         }
       }
@@ -720,10 +744,11 @@ export default function ThreeMap({
           onCoordinateClick(coordinate);
         }
 
-        // Deselect building if clicking elsewhere
+        // Deselect buildings if clicking elsewhere
         if (onBuildingSelect && !isPlacementMode) {
           onBuildingSelect(null);
         }
+        setSelectedOsmBuildingId(null);
 
         console.log('Clicked coordinate:', { lat, lng, worldPos: intersectionPoint });
       }
@@ -736,26 +761,70 @@ export default function ThreeMap({
     }
   }, [onCoordinateClick, onBuildingSelect, isPlacementMode]);
 
+  // Handle OSM building deletion
+  const deleteOsmBuilding = async (buildingId: string) => {
+    try {
+      // Remove from scene
+      const mesh = osmBuildingMeshesRef.current.get(buildingId);
+      if (mesh && groupsRef.current) {
+        groupsRef.current.staticGeometry.remove(mesh);
+        mesh.geometry.dispose();
+        if (mesh.material instanceof THREE.Material) {
+          mesh.material.dispose();
+        }
+        osmBuildingMeshesRef.current.delete(buildingId);
+      }
+
+      // Call API to remove from buildings.json
+      const response = await fetch(`/api/map/buildings/${buildingId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`✅ Deleted building ${buildingId}:`, result);
+        if (onOsmBuildingDelete) {
+          onOsmBuildingDelete(buildingId);
+        }
+      } else {
+        console.error('Failed to delete building from server');
+      }
+
+      setSelectedOsmBuildingId(null);
+    } catch (error) {
+      console.error('Error deleting OSM building:', error);
+    }
+  };
+
   // Load and display placed buildings
   useEffect(() => {
     if (!groupsRef.current || !isReady) return;
 
     const loader = new GLTFLoader();
-    const loadedModels: THREE.Group[] = [];
 
-    // Remove all previously loaded custom buildings
-    const customBuildingsGroup = groupsRef.current.dynamicObjects;
-    const objectsToRemove: THREE.Object3D[] = [];
-    customBuildingsGroup.children.forEach((child) => {
-      if (child.userData.isCustomBuilding) {
-        objectsToRemove.push(child);
+    // Track which buildings currently exist
+    const currentBuildingIds = new Set(placedBuildings.map(b => b.id));
+
+    // Remove buildings that no longer exist
+    const existingIds = Array.from(buildingModelsRef.current.keys());
+    existingIds.forEach((id) => {
+      if (!currentBuildingIds.has(id)) {
+        const model = buildingModelsRef.current.get(id);
+        if (model) {
+          groupsRef.current?.dynamicObjects.remove(model);
+          buildingModelsRef.current.delete(id);
+          console.log(`🗑️ Removed building ${id}`);
+        }
       }
     });
-    objectsToRemove.forEach((obj) => customBuildingsGroup.remove(obj));
-    buildingModelsRef.current.clear();
 
-    // Load and place each building
+    // Load new buildings (only ones that don't exist yet)
     placedBuildings.forEach((building) => {
+      // Skip if this building is already loaded
+      if (buildingModelsRef.current.has(building.id)) {
+        return;
+      }
+
       loader.load(
         building.modelPath,
         (gltf) => {
@@ -777,10 +846,9 @@ export default function ThreeMap({
 
           // Add to scene
           groupsRef.current?.dynamicObjects.add(model);
-          loadedModels.push(model);
           buildingModelsRef.current.set(building.id, model);
 
-          console.log(`✅ Loaded building at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`);
+          console.log(`✅ Loaded building ${building.id} at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`);
         },
         undefined,
         (error) => {
@@ -788,15 +856,7 @@ export default function ThreeMap({
         }
       );
     });
-
-    return () => {
-      // Cleanup loaded models when component unmounts
-      loadedModels.forEach((model) => {
-        groupsRef.current?.dynamicObjects.remove(model);
-      });
-      buildingModelsRef.current.clear();
-    };
-  }, [placedBuildings, isReady]);
+  }, [placedBuildings, isReady, buildingScale]);
 
   // Load ghost preview model
   useEffect(() => {
@@ -892,18 +952,27 @@ export default function ThreeMap({
 
     // Update outline
     if (outlinePassRef.current) {
+      const selectedObjects: THREE.Object3D[] = [];
+
+      // Check for selected custom building
       if (selectedBuildingId) {
         const selectedModel = buildingModelsRef.current.get(selectedBuildingId);
         if (selectedModel) {
-          outlinePassRef.current.selectedObjects = [selectedModel];
-        } else {
-          outlinePassRef.current.selectedObjects = [];
+          selectedObjects.push(selectedModel);
         }
-      } else {
-        outlinePassRef.current.selectedObjects = [];
       }
+
+      // Check for selected OSM building
+      if (selectedOsmBuildingId) {
+        const selectedOsmMesh = osmBuildingMeshesRef.current.get(selectedOsmBuildingId);
+        if (selectedOsmMesh) {
+          selectedObjects.push(selectedOsmMesh);
+        }
+      }
+
+      outlinePassRef.current.selectedObjects = selectedObjects;
     }
-  }, [selectedBuildingId]);
+  }, [selectedBuildingId, selectedOsmBuildingId]);
 
   // Update building transforms in real-time
   useEffect(() => {
@@ -1004,6 +1073,34 @@ export default function ThreeMap({
               ✕
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Selected OSM Building Panel */}
+      {selectedOsmBuildingId && (
+        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 bg-white border border-gray-300 rounded-lg shadow-lg z-20 p-4 min-w-[280px]">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-gray-400 rounded"></div>
+              <span className="font-bold text-gray-800 text-sm">OSM Building Selected</span>
+            </div>
+            <button
+              onClick={() => setSelectedOsmBuildingId(null)}
+              className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="text-xs text-gray-600 mb-3 font-mono bg-gray-50 p-2 rounded">
+            ID: {selectedOsmBuildingId}
+          </div>
+          <button
+            onClick={() => deleteOsmBuilding(selectedOsmBuildingId)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm font-semibold transition-colors"
+          >
+            <span>🗑️</span>
+            Delete Building
+          </button>
         </div>
       )}
 

@@ -8,7 +8,10 @@
       "Bash(curl:*)",
       "Bash(npx tsx:*)",
       "Bash(python3:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(sort:*)",
+      "Bash(npx tsc:*)",
+      "Bash(timeout 15 npm run dev:*)"
     ]
   }
 }
