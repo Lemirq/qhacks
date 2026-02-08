@@ -43,6 +43,11 @@ export function renderRoads(
     // Position at ground level (same as building bases)
     roadMesh.position.y = 0;
 
+    // Mark as road for collision detection
+    roadMesh.name = `road-${edge.id || 'segment'}`;
+    roadMesh.userData.isRoad = true;
+    roadMesh.userData.roadWidth = width;
+
     // Add to scene
     scene.add(roadMesh);
   });
@@ -194,6 +199,12 @@ export function renderRoadsWithTubes(
     // Use tube geometry for 3D appearance
     const roadMesh = createTubeRoad(points, width);
     roadMesh.position.y = 0;
+
+    // Mark as road for collision detection
+    roadMesh.name = `road-tube-${edge.id || 'segment'}`;
+    roadMesh.userData.isRoad = true;
+    roadMesh.userData.roadWidth = width;
+
     scene.add(roadMesh);
   });
 

@@ -320,6 +320,40 @@ export class RoadNetwork {
   }
 
   /**
+   * Find actual road intersections (nodes where 3+ roads meet)
+   */
+  findIntersections(): RoadNode[] {
+    const intersections: RoadNode[] = [];
+
+    this.nodes.forEach((node) => {
+      const edges = this.getNodeEdges(node.id);
+      // Intersection = 3 or more roads meeting
+      if (edges.length >= 3) {
+        intersections.push(node);
+      }
+    });
+
+    return intersections;
+  }
+
+  /**
+   * Get the bearing (direction) of an edge at a specific node
+   */
+  getEdgeBearingAtNode(edge: RoadEdge, nodeId: string): number {
+    const isStart = edge.startNodeId === nodeId;
+    const coords = edge.geometry;
+
+    if (coords.length < 2) return 0;
+
+    // Get the first two points to calculate direction
+    const [from, to] = isStart
+      ? [coords[0], coords[1]]
+      : [coords[coords.length - 1], coords[coords.length - 2]];
+
+    return turf.bearing(turf.point(from), turf.point(to));
+  }
+
+  /**
    * Find nearest node to a position
    */
   findNearestNode(position: [number, number]): RoadNode | null {
@@ -369,5 +403,26 @@ export class RoadNetwork {
    */
   getDestinations(): Destination[] {
     return Array.from(this.destinations.values());
+  }
+
+  /**
+   * Get intersection node by ID
+   * Returns intersection nodes (nodes with 3+ connected edges)
+   */
+  getIntersectionById(id: string): RoadNode | undefined {
+    const node = this.nodes.get(id);
+    if (node && node.type === "intersection") {
+      return node;
+    }
+    return undefined;
+  }
+
+  /**
+   * Get all intersection nodes
+   */
+  getIntersections(): RoadNode[] {
+    return Array.from(this.nodes.values()).filter(
+      (node) => node.type === "intersection"
+    );
   }
 }

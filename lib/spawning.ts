@@ -3,11 +3,13 @@
  * Manages the lifecycle of cars in the autonomous traffic simulation
  */
 
-import * as turf from '@turf/turf';
-import { RoadNetwork, RoadNode, Destination } from './roadNetwork';
-import { Pathfinder, Route } from './pathfinding';
+import * as turf from "@turf/turf";
+import * as THREE from "three";
+import { RoadNetwork, RoadNode, Destination } from "./roadNetwork";
+import { Pathfinder, Route } from "./pathfinding";
+import { VehiclePhysicsConfig } from "./vehiclePhysics";
 
-export type CarType = 'sedan' | 'suv' | 'truck' | 'compact';
+export type CarType = "sedan" | "suv" | "truck" | "compact";
 
 export interface SpawnPoint {
   id: string;
@@ -34,6 +36,18 @@ export interface SpawnedCar {
   maxSpeed: number; // Maximum speed for this car (km/h)
   bearing: number; // Current direction (degrees)
   stoppedAtLight: boolean;
+
+  // Physics integration fields
+  physicsProfile: VehiclePhysicsConfig;
+  targetSpeed: number; // Target speed from behavior controller (km/h)
+  acceleration: number; // Current acceleration (m/s²)
+
+  // Behavior fields
+  currentBehavior?: string; // Current behavior state (for debugging)
+  behaviorTimer: number; // Timer for behavior state changes
+
+  // Rendering fields
+  meshRef?: THREE.Object3D; // Reference to 3D mesh for light updates
 }
 
 export interface SpawnerConfig {
@@ -56,25 +70,25 @@ const DEFAULT_CONFIG: SpawnerConfig = {
   defaultCarSpeed: 40,
   carTypeDistribution: {
     sedan: 0.4, // 40%
-    suv: 0.25,  // 25%
+    suv: 0.25, // 25%
     truck: 0.15, // 15%
     compact: 0.2, // 20%
   },
 };
 
 const CAR_COLORS = [
-  '#FF0000', // Red
-  '#0000FF', // Blue
-  '#00FF00', // Green
-  '#FFA500', // Orange
-  '#800080', // Purple
-  '#FFFF00', // Yellow
-  '#00FFFF', // Cyan
-  '#FF00FF', // Magenta
-  '#C0C0C0', // Silver
-  '#000000', // Black
-  '#FFFFFF', // White
-  '#808080', // Gray
+  "#FF0000", // Red
+  "#0000FF", // Blue
+  "#00FF00", // Green
+  "#FFA500", // Orange
+  "#800080", // Purple
+  "#FFFF00", // Yellow
+  "#00FFFF", // Cyan
+  "#FF00FF", // Magenta
+  "#C0C0C0", // Silver
+  "#000000", // Black
+  "#FFFFFF", // White
+  "#808080", // Gray
 ];
 
 export class Spawner {
@@ -86,7 +100,7 @@ export class Spawner {
 
   constructor(
     private roadNetwork: RoadNetwork,
-    config?: Partial<SpawnerConfig>
+    config?: Partial<SpawnerConfig>,
   ) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.pathfinder = new Pathfinder(roadNetwork);
@@ -96,62 +110,62 @@ export class Spawner {
    * Define spawn points around Queen's campus (road entry points)
    */
   initializeQueensSpawnPoints(): void {
-    const spawnPoints: Omit<SpawnPoint, 'lastSpawnTime' | 'active'>[] = [
+    const spawnPoints: Omit<SpawnPoint, "lastSpawnTime" | "active">[] = [
       {
-        id: 'union-st-west',
-        position: [-76.5000, 44.2285],
-        roadNodeId: 'entry-union-west',
+        id: "union-st-west",
+        position: [-76.5, 44.2285],
+        roadNodeId: "entry-union-west",
         spawnRate: 2.0, // 2 cars per minute
-        direction: 'eastbound',
+        direction: "eastbound",
       },
       {
-        id: 'union-st-east',
-        position: [-76.4850, 44.2285],
-        roadNodeId: 'entry-union-east',
+        id: "union-st-east",
+        position: [-76.485, 44.2285],
+        roadNodeId: "entry-union-east",
         spawnRate: 1.5,
-        direction: 'westbound',
+        direction: "westbound",
       },
       {
-        id: 'university-ave-north',
-        position: [-76.4950, 44.2350],
-        roadNodeId: 'entry-university-north',
+        id: "university-ave-north",
+        position: [-76.495, 44.235],
+        roadNodeId: "entry-university-north",
         spawnRate: 1.8,
-        direction: 'southbound',
+        direction: "southbound",
       },
       {
-        id: 'university-ave-south',
-        position: [-76.4950, 44.2250],
-        roadNodeId: 'entry-university-south',
+        id: "university-ave-south",
+        position: [-76.495, 44.225],
+        roadNodeId: "entry-university-south",
         spawnRate: 1.5,
-        direction: 'northbound',
+        direction: "northbound",
       },
       {
-        id: 'division-st-north',
-        position: [-76.4870, 44.2340],
-        roadNodeId: 'entry-division-north',
+        id: "division-st-north",
+        position: [-76.487, 44.234],
+        roadNodeId: "entry-division-north",
         spawnRate: 2.2,
-        direction: 'southbound',
+        direction: "southbound",
       },
       {
-        id: 'division-st-south',
-        position: [-76.4870, 44.2270],
-        roadNodeId: 'entry-division-south',
+        id: "division-st-south",
+        position: [-76.487, 44.227],
+        roadNodeId: "entry-division-south",
         spawnRate: 1.3,
-        direction: 'northbound',
+        direction: "northbound",
       },
       {
-        id: 'princess-st-west',
-        position: [-76.4920, 44.2310],
-        roadNodeId: 'entry-princess-west',
+        id: "princess-st-west",
+        position: [-76.492, 44.231],
+        roadNodeId: "entry-princess-west",
         spawnRate: 1.7,
-        direction: 'eastbound',
+        direction: "eastbound",
       },
       {
-        id: 'princess-st-east',
-        position: [-76.4800, 44.2310],
-        roadNodeId: 'entry-princess-east',
+        id: "princess-st-east",
+        position: [-76.48, 44.231],
+        roadNodeId: "entry-princess-east",
         spawnRate: 1.4,
-        direction: 'westbound',
+        direction: "westbound",
       },
     ];
 
@@ -163,7 +177,9 @@ export class Spawner {
       });
     });
 
-    console.log(`✅ Initialized ${this.spawnPoints.size} spawn points around Queen's campus`);
+    console.log(
+      `✅ Initialized ${this.spawnPoints.size} spawn points around Queen's campus`,
+    );
   }
 
   /**
@@ -202,7 +218,8 @@ export class Spawner {
       if (this.activeCars.size >= this.config.maxCars) return;
 
       const timeSinceLastSpawn = now - spawnPoint.lastSpawnTime;
-      const spawnInterval = (60000 / (spawnPoint.spawnRate * this.config.globalSpawnRate)); // ms
+      const spawnInterval =
+        60000 / (spawnPoint.spawnRate * this.config.globalSpawnRate); // ms
 
       if (timeSinceLastSpawn >= spawnInterval) {
         this.spawnCar(spawnPoint);
@@ -221,20 +238,59 @@ export class Spawner {
     // Select random destination (weighted)
     const destination = this.selectDestination();
     if (!destination) {
-      console.warn('No destinations available');
+      console.warn("⚠️ No destinations available");
       return null;
     }
 
+    console.log(
+      `🚀 Attempting to spawn car from ${spawnPoint.id} [${spawnPoint.position}] to ${destination.name} [${destination.position}]`,
+    );
+
     // Find route from spawn point to destination
-    const route = this.pathfinder.findRoute(spawnPoint.position, destination.position);
+    let route = this.pathfinder.findRoute(
+      spawnPoint.position,
+      destination.position,
+    );
+
+    // FALLBACK: If pathfinding fails, create a simple route with just the spawn position
     if (!route) {
-      console.warn(`Could not find route from ${spawnPoint.id} to ${destination.id}`);
-      return null;
+      console.warn(
+        `⚠️ Could not find route, creating fallback route at spawn point`,
+      );
+      // Create a minimal route that just stays at the spawn point for now
+      const edges = this.roadNetwork.getEdges();
+      if (edges.length > 0) {
+        const randomEdge = edges[Math.floor(Math.random() * edges.length)];
+        route = {
+          nodes: [],
+          edges: [randomEdge.id],
+          totalDistance: randomEdge.length,
+          estimatedTime: randomEdge.length / 10, // ~10 m/s
+          waypoints: randomEdge.geometry,
+        };
+        console.log(`✅ Created fallback route on edge ${randomEdge.id}`);
+      } else {
+        console.error(`❌ No edges available for fallback route`);
+        return null;
+      }
+    } else {
+      console.log(
+        `✅ Route found! ${route.waypoints.length} waypoints, ${route.edges.length} edges`,
+      );
     }
 
     // Select car type based on distribution
     const carType = this.selectCarType();
     const color = this.selectCarColor();
+
+    // Get physics profile for this car type
+    const physicsProfile = this.getPhysicsProfileForType(carType);
+
+    // Use first waypoint of route as actual spawn position (on the road)
+    const actualSpawnPos =
+      route.waypoints.length > 0
+        ? (route.waypoints[0] as [number, number])
+        : spawnPoint.position;
 
     const car: SpawnedCar = {
       id: `car-${this.nextCarId++}`,
@@ -242,7 +298,7 @@ export class Spawner {
       color,
       spawnPointId: spawnPoint.id,
       spawnTime: Date.now(),
-      position: spawnPoint.position,
+      position: actualSpawnPos, // Use route waypoint, not spawn point
       destination,
       route,
       currentEdgeId: route.edges[0] || null,
@@ -251,18 +307,32 @@ export class Spawner {
       maxSpeed: this.config.defaultCarSpeed + (Math.random() * 20 - 10), // ±10 km/h variance
       bearing: 0,
       stoppedAtLight: false,
+
+      // Physics integration
+      physicsProfile,
+      targetSpeed: this.config.defaultCarSpeed,
+      acceleration: 0,
+
+      // Behavior fields
+      currentBehavior: "cruising",
+      behaviorTimer: 0,
+
+      // Mesh reference (set later in ThreeMap)
+      meshRef: undefined,
     };
 
     // Calculate initial bearing
     if (route.waypoints.length >= 2) {
       car.bearing = turf.bearing(
         turf.point(route.waypoints[0]),
-        turf.point(route.waypoints[1])
+        turf.point(route.waypoints[1]),
       );
     }
 
     this.activeCars.set(car.id, car);
-    console.log(`🚗 Spawned ${car.type} (${car.id}) at ${spawnPoint.id} → ${destination.name}`);
+    console.log(
+      `🚗 Spawned ${car.type} (${car.id}) at ${spawnPoint.id} → ${destination.name}`,
+    );
 
     return car;
   }
@@ -271,7 +341,11 @@ export class Spawner {
    * Select destination using weighted random selection
    */
   private selectDestination(): Destination | null {
-    return this.roadNetwork.getRandomDestination();
+    const dest = this.roadNetwork.getRandomDestination();
+    if (!dest) {
+      console.error("❌ No destinations available in road network!");
+    }
+    return dest;
   }
 
   /**
@@ -281,14 +355,16 @@ export class Spawner {
     const rand = Math.random();
     let cumulative = 0;
 
-    for (const [type, probability] of Object.entries(this.config.carTypeDistribution)) {
+    for (const [type, probability] of Object.entries(
+      this.config.carTypeDistribution,
+    )) {
       cumulative += probability;
       if (rand <= cumulative) {
         return type as CarType;
       }
     }
 
-    return 'sedan'; // Fallback
+    return "sedan"; // Fallback
   }
 
   /**
@@ -296,6 +372,52 @@ export class Spawner {
    */
   private selectCarColor(): string {
     return CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)];
+  }
+
+  /**
+   * Get physics profile for car type
+   */
+  private getPhysicsProfileForType(type: CarType): VehiclePhysicsConfig {
+    const profiles: Record<CarType, VehiclePhysicsConfig> = {
+      sedan: {
+        maxAcceleration: 3.0,
+        maxDeceleration: 8.0,
+        comfortDeceleration: 3.5,
+        reactionTime: 1.0,
+        minFollowDistance: 2.0,
+        timeHeadway: 1.5,
+        speedVariance: 0.1,
+      },
+      suv: {
+        maxAcceleration: 2.5,
+        maxDeceleration: 7.0,
+        comfortDeceleration: 3.0,
+        reactionTime: 1.1,
+        minFollowDistance: 2.5,
+        timeHeadway: 1.8,
+        speedVariance: 0.12,
+      },
+      truck: {
+        maxAcceleration: 1.8,
+        maxDeceleration: 6.0,
+        comfortDeceleration: 2.5,
+        reactionTime: 1.3,
+        minFollowDistance: 3.5,
+        timeHeadway: 2.2,
+        speedVariance: 0.08,
+      },
+      compact: {
+        maxAcceleration: 3.2,
+        maxDeceleration: 8.5,
+        comfortDeceleration: 4.0,
+        reactionTime: 0.9,
+        minFollowDistance: 1.8,
+        timeHeadway: 1.3,
+        speedVariance: 0.15,
+      },
+    };
+
+    return profiles[type];
   }
 
   /**
@@ -308,7 +430,7 @@ export class Spawner {
       const distanceToDestination = turf.distance(
         turf.point(car.position),
         turf.point(car.destination.position),
-        { units: 'meters' }
+        { units: "meters" },
       );
 
       if (distanceToDestination < this.config.despawnRadius) {
@@ -319,7 +441,9 @@ export class Spawner {
     toDespawn.forEach((carId) => {
       const car = this.activeCars.get(carId);
       if (car) {
-        console.log(`✅ Car ${carId} reached destination: ${car.destination.name}`);
+        console.log(
+          `✅ Car ${carId} reached destination: ${car.destination.name}`,
+        );
         this.despawnCar(carId);
       }
     });
@@ -371,7 +495,10 @@ export class Spawner {
     // Check if we've completed this edge
     if (car.distanceOnEdge >= edge.length) {
       // Move to next edge
-      const nextEdgeId = this.pathfinder.getNextEdge(car.currentEdgeId, car.route);
+      const nextEdgeId = this.pathfinder.getNextEdge(
+        car.currentEdgeId,
+        car.route,
+      );
 
       if (nextEdgeId) {
         car.currentEdgeId = nextEdgeId;
@@ -385,14 +512,21 @@ export class Spawner {
     // Update position along edge
     const progress = car.distanceOnEdge / edge.length;
     const line = turf.lineString(edge.geometry);
-    const along = turf.along(line, car.distanceOnEdge / 1000, { units: 'kilometers' });
+    const along = turf.along(line, car.distanceOnEdge / 1000, {
+      units: "kilometers",
+    });
 
     car.position = along.geometry.coordinates as [number, number];
 
     // Update bearing
     const lookaheadDistance = Math.min(car.distanceOnEdge + 10, edge.length); // Look 10m ahead
-    const lookahead = turf.along(line, lookaheadDistance / 1000, { units: 'kilometers' });
-    car.bearing = turf.bearing(turf.point(car.position), turf.point(lookahead.geometry.coordinates));
+    const lookahead = turf.along(line, lookaheadDistance / 1000, {
+      units: "kilometers",
+    });
+    car.bearing = turf.bearing(
+      turf.point(car.position),
+      turf.point(lookahead.geometry.coordinates),
+    );
   }
 
   /**
@@ -417,7 +551,9 @@ export class Spawner {
       activeCars: this.activeCars.size,
       maxCars: this.config.maxCars,
       spawnPoints: this.spawnPoints.size,
-      activeSpawnPoints: Array.from(this.spawnPoints.values()).filter(sp => sp.active).length,
+      activeSpawnPoints: Array.from(this.spawnPoints.values()).filter(
+        (sp) => sp.active,
+      ).length,
     };
   }
 
@@ -426,7 +562,7 @@ export class Spawner {
    */
   clearAllCars(): void {
     this.activeCars.clear();
-    console.log('🧹 Cleared all spawned cars');
+    console.log("🧹 Cleared all spawned cars");
   }
 
   /**
@@ -439,6 +575,6 @@ export class Spawner {
     this.spawnPoints.forEach((sp) => {
       sp.lastSpawnTime = now;
     });
-    console.log('🔄 Spawner reset');
+    console.log("🔄 Spawner reset");
   }
 }

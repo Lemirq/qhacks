@@ -9,6 +9,8 @@
       "Bash(npx tsx:*)",
       "Bash(python3:*)",
       "Bash(cat:*)",
+      "Bash(wc:*)",
+      "Bash(npx tsc:*)",
       "WebFetch(domain:elevenlabs.io)",
       "Bash(node scripts/generate-sounds.mjs:*)",
       "Bash(dir:*)",

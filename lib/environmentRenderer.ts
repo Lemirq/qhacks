@@ -23,14 +23,19 @@ export async function fetchSatelliteImagery(
       // Try satellite first for realistic imagery
       const satelliteUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/[${west},${south},${east},${north}]/${width}x${height}@2x?access_token=${mapboxToken}`;
 
-      console.log("🗺️  Fetching Mapbox satellite-streets (OSM + satellite hybrid)...");
+      console.log(
+        "🗺️  Fetching Mapbox satellite-streets (OSM + satellite hybrid)...",
+      );
       const satelliteResponse = await fetch(satelliteUrl, { method: "HEAD" });
       if (satelliteResponse.ok) {
         console.log("✅ Mapbox satellite-streets imagery URL ready");
         return satelliteUrl;
       }
     } catch (error) {
-      console.warn("Mapbox satellite-streets failed, trying streets-only...", error);
+      console.warn(
+        "Mapbox satellite-streets failed, trying streets-only...",
+        error,
+      );
     }
 
     try {
@@ -107,10 +112,10 @@ export function createGround(
   // Rotate geometry to be horizontal (in XZ plane) BEFORE creating mesh
   geometry.rotateX(-Math.PI / 2);
 
-  // Create material - light gray ground (#EEE)
+  // Create material - white ground
   const material = new THREE.MeshStandardMaterial({
     map: satelliteTexture || null,
-    color: satelliteTexture ? 0xffffff : 0xeeeeee, // #EEE light gray
+    color: satelliteTexture ? 0xffffff : 0xffffff, // Pure white
     roughness: 0.9,
     metalness: 0.0,
     side: THREE.DoubleSide,
@@ -124,7 +129,7 @@ export function createGround(
   ground.position.set(centerX + 33.3, -10.0, centerZ - 750.9);
 
   // Scale calibration for perfect alignment
-  ground.scale.set(0.980, 1.000, 0.920);
+  ground.scale.set(0.98, 1.0, 0.92);
 
   ground.receiveShadow = true;
 

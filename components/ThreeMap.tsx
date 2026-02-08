@@ -17,15 +17,54 @@ import { fetchBuildings } from "@/lib/buildingData";
 import { renderBuildings } from "@/lib/buildingRenderer";
 import { renderRoads } from "@/lib/roadRenderer";
 import { createGround } from "@/lib/environmentRenderer";
+import { renderTreesAroundBuilding, getDefaultTreeConfigForMap } from "@/lib/treeRenderer";
+import { TreeConfig } from "@/lib/editor/types/buildingSpec";
 
 // Projection and camera
 import { CityProjection } from "@/lib/projection";
-import { setupControls, flyToLocation, updateTweens } from "@/lib/cameraController";
+import {
+  setupControls,
+  flyToLocation,
+  updateTweens,
+} from "@/lib/cameraController";
 
 // Traffic simulation
 import { RoadNetwork } from "@/lib/roadNetwork";
 import { Pathfinder } from "@/lib/pathfinding";
 import { Spawner, SpawnedCar } from "@/lib/spawning";
+
+// Traffic infrastructure and physics
+import { TrafficInfrastructureManager } from "@/lib/trafficInfrastructure";
+import { VehiclePhysics } from "@/lib/vehiclePhysics";
+import { VehicleBehaviorController } from "@/lib/traffic/vehicleBehavior";
+import {
+  SignalCoordinator,
+  createSignalCoordinator,
+} from "@/lib/traffic/signalCoordination";
+import {
+  CollisionSystem,
+  createCollisionSystem,
+} from "@/lib/traffic/collisionSystem";
+import { ConfigurationManager } from "@/lib/simulationConfig";
+
+// Rendering and performance
+import {
+  createEnhancedCarModel,
+  updateTurnSignals,
+  updateBrakeLights,
+  EnhancedVehicleMesh,
+} from "@/lib/vehicleRenderer";
+import {
+  VehiclePool,
+  LODManager,
+  StaggeredUpdateManager,
+  PerformanceMonitor,
+} from "@/lib/performanceOptimizer";
+
+// Analytics
+import { TrafficAnalytics } from "@/lib/analytics";
+import DebugOverlay from "./DebugOverlay";
+import AnalyticsDashboard from "./AnalyticsDashboard";
 
 interface PlacedBuilding {
   id: string;
@@ -35,18 +74,22 @@ interface PlacedBuilding {
   scale?: { x: number; y: number; z: number };
   lat: number;
   lng: number;
+  treeConfig?: TreeConfig; // Optional tree configuration for landscaping
 }
 
 interface ThreeMapProps {
   initialCenter?: [number, number];
   className?: string;
-  onCoordinateClick?: (coordinate: {
-    lat: number;
-    lng: number;
-    worldX: number;
-    worldY: number;
-    worldZ: number;
-  } | null) => void;
+  onCoordinateClick?: (
+    coordinate: {
+      lat: number;
+      lng: number;
+      worldX: number;
+      worldY: number;
+      worldZ: number;
+      ghostRotationY?: number; // Current rotation of ghost preview
+    } | null,
+  ) => void;
   placedBuildings?: PlacedBuilding[];
   isPlacementMode?: boolean;
   buildingScale?: { x: number; y: number; z: number };
@@ -166,32 +209,40 @@ function createCarModel(type: CarType, color: string): THREE.Mesh {
 function createTrafficLightModel(): THREE.Group {
   const group = new THREE.Group();
 
-  // Pole
-  const poleGeometry = new THREE.CylinderGeometry(0.1, 0.1, 5, 8);
-  const poleMaterial = new THREE.MeshPhongMaterial({ color: 0x444444 });
+  // Pole - 50% smaller
+  const poleGeometry = new THREE.CylinderGeometry(2.5, 2.5, 25, 8);
+  const poleMaterial = new THREE.MeshPhongMaterial({
+    color: 0x444444,
+    emissive: 0x222222,
+    emissiveIntensity: 0.5,
+  });
   const pole = new THREE.Mesh(poleGeometry, poleMaterial);
-  pole.position.y = 2.5;
+  pole.position.y = 12.5;
   group.add(pole);
 
-  // Light housing
-  const housingGeometry = new THREE.BoxGeometry(0.4, 1.2, 0.3);
-  const housingMaterial = new THREE.MeshPhongMaterial({ color: 0x222222 });
+  // Light housing - 50% smaller
+  const housingGeometry = new THREE.BoxGeometry(10, 30, 7.5);
+  const housingMaterial = new THREE.MeshPhongMaterial({
+    color: 0x222222,
+    emissive: 0x111111,
+    emissiveIntensity: 0.3,
+  });
   const housing = new THREE.Mesh(housingGeometry, housingMaterial);
-  housing.position.y = 5;
+  housing.position.y = 25;
   group.add(housing);
 
-  // Lights (red, yellow, green)
-  const lightGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+  // Lights (red, yellow, green) - 50% smaller
+  const lightGeometry = new THREE.SphereGeometry(4, 16, 16);
 
   const redLight = new THREE.Mesh(
     lightGeometry,
     new THREE.MeshStandardMaterial({
       color: 0xff0000,
-      emissive: 0x330000,
-      emissiveIntensity: 1,
-    })
+      emissive: 0xff0000,
+      emissiveIntensity: 2,
+    }),
   );
-  redLight.position.set(0, 5.4, 0.2);
+  redLight.position.set(0, 35, 5);
   redLight.name = "red";
   group.add(redLight);
 
@@ -199,11 +250,11 @@ function createTrafficLightModel(): THREE.Group {
     lightGeometry,
     new THREE.MeshStandardMaterial({
       color: 0xffff00,
-      emissive: 0x333300,
-      emissiveIntensity: 1,
-    })
+      emissive: 0xffff00,
+      emissiveIntensity: 2,
+    }),
   );
-  yellowLight.position.set(0, 5.0, 0.2);
+  yellowLight.position.set(0, 25, 5);
   yellowLight.name = "yellow";
   group.add(yellowLight);
 
@@ -211,18 +262,18 @@ function createTrafficLightModel(): THREE.Group {
     lightGeometry,
     new THREE.MeshStandardMaterial({
       color: 0x00ff00,
-      emissive: 0x003300,
-      emissiveIntensity: 1,
-    })
+      emissive: 0x00ff00,
+      emissiveIntensity: 2,
+    }),
   );
-  greenLight.position.set(0, 4.6, 0.2);
+  greenLight.position.set(0, 15, 5);
   greenLight.name = "green";
   group.add(greenLight);
 
   return group;
 }
 
-// Fetch traffic signals from cached Next.js API route
+// Fetch traffic signals from Next.js API route
 async function fetchAllTrafficSignals(): Promise<
   Array<{
     lat: number;
@@ -232,13 +283,12 @@ async function fetchAllTrafficSignals(): Promise<
   }>
 > {
   try {
-    console.log("Fetching traffic signals from cached API...");
+    console.log("Fetching traffic signals...");
     const response = await fetch(
       `/api/map/traffic-signals?south=44.220&west=-76.510&north=44.240&east=-76.480`,
       {
-        cache: 'force-cache', // Use browser cache
-        next: { revalidate: 86400 }, // Revalidate every 24 hours
-      }
+        cache: "no-store", // Don't cache - always fetch fresh data
+      },
     );
 
     if (!response.ok) {
@@ -281,13 +331,40 @@ export default function ThreeMap({
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster());
-  const [ghostPosition, setGhostPosition] = useState<THREE.Vector3 | null>(null);
+  const [ghostPosition, setGhostPosition] = useState<THREE.Vector3 | null>(
+    null,
+  );
   const ghostModelRef = useRef<THREE.Group | null>(null);
   const buildingModelsRef = useRef<Map<string, THREE.Group>>(new Map());
+  const buildingTreesRef = useRef<Map<string, THREE.Group>>(new Map()); // Trees for each placed building
   const osmBuildingMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const composerRef = useRef<EffectComposer | null>(null);
   const outlinePassRef = useRef<OutlinePass | null>(null);
-  const [selectedOsmBuildingId, setSelectedOsmBuildingId] = useState<string | null>(null);
+  const [selectedOsmBuildingId, setSelectedOsmBuildingId] = useState<
+    string | null
+  >(null);
+  const [ghostRotationY, setGhostRotationY] = useState(0); // Rotation for ghost preview
+
+  // Analytics state
+  const analyticsRef = useRef<TrafficAnalytics | null>(null);
+  const [debugOverlayVisible, setDebugOverlayVisible] = useState(false);
+  const [dashboardVisible, setDashboardVisible] = useState(false);
+
+  // Traffic system managers (integrated systems)
+  const trafficInfrastructureRef = useRef<TrafficInfrastructureManager | null>(
+    null,
+  );
+  const vehiclePhysicsRef = useRef<VehiclePhysics | null>(null);
+  const behaviorControllerRef = useRef<VehicleBehaviorController | null>(null);
+  const signalCoordinatorRef = useRef<SignalCoordinator | null>(null);
+  const collisionSystemRef = useRef<CollisionSystem | null>(null);
+  const configManagerRef = useRef<ConfigurationManager | null>(null);
+
+  // Performance optimization managers
+  const vehiclePoolRef = useRef<VehiclePool | null>(null);
+  const lodManagerRef = useRef<LODManager | null>(null);
+  const staggeredUpdateRef = useRef<StaggeredUpdateManager | null>(null);
+  const perfMonitorRef = useRef<PerformanceMonitor | null>(null);
 
   useEffect(() => {
     if (!canvasRef.current || initialized.current) return;
@@ -304,7 +381,9 @@ export default function ThreeMap({
       try {
         // Create scene manager
         setLoadingStatus("Creating scene...");
-        const { scene, camera, renderer, groups } = createSceneManager(canvasRef.current);
+        const { scene, camera, renderer, groups } = createSceneManager(
+          canvasRef.current,
+        );
         sceneRef.current = scene;
         cameraRef.current = camera;
         rendererRef.current = renderer;
@@ -320,14 +399,16 @@ export default function ThreeMap({
           enabled: controls.enabled,
           enableRotate: controls.enableRotate,
           enableZoom: controls.enableZoom,
-          enablePan: controls.enablePan
+          enablePan: controls.enablePan,
         });
 
         // Environment setup (sky and fog removed for clearer view)
         setLoadingStatus("Setting up environment...");
 
         // Define bounding box for Kingston/Queen's area
-        const bbox: [number, number, number, number] = [44.220, -76.510, 44.240, -76.480];
+        const bbox: [number, number, number, number] = [
+          44.22, -76.51, 44.24, -76.48,
+        ];
 
         // Create ground plane (plain white, no texture)
         setLoadingStatus("Creating ground plane...");
@@ -336,10 +417,10 @@ export default function ThreeMap({
             minLat: bbox[0],
             maxLat: bbox[2],
             minLng: bbox[1],
-            maxLng: bbox[3]
+            maxLng: bbox[3],
           },
           CityProjection,
-          undefined // No texture - plain white ground
+          undefined, // No texture - plain white ground
         );
         groups.environment.add(ground);
 
@@ -348,7 +429,11 @@ export default function ThreeMap({
         const buildings = await fetchBuildings(bbox);
 
         setLoadingStatus("Rendering buildings...");
-        const osmMeshes = renderBuildings(buildings, CityProjection, groups.staticGeometry);
+        const osmMeshes = renderBuildings(
+          buildings,
+          CityProjection,
+          groups.staticGeometry,
+        );
         // Store OSM building meshes for click detection
         osmBuildingMeshesRef.current = osmMeshes;
 
@@ -356,10 +441,10 @@ export default function ThreeMap({
         setLoadingStatus("Fetching road network from OpenStreetMap...");
         roadNetwork = new RoadNetwork();
         await roadNetwork.fetchFromOSM({
-          south: 44.220,
-          west: -76.510,
-          north: 44.240,
-          east: -76.480,
+          south: 44.22,
+          west: -76.51,
+          north: 44.24,
+          east: -76.48,
         });
 
         roadNetwork.addQueensDestinations();
@@ -380,8 +465,8 @@ export default function ThreeMap({
         // Initialize spawner
         setLoadingStatus("Initializing traffic simulation...");
         spawner = new Spawner(roadNetwork, {
-          maxCars: 30,
-          globalSpawnRate: 1.2,
+          maxCars: 200, // Way more cars!
+          globalSpawnRate: 10.0, // Spawn 10x faster!
           despawnRadius: 25,
           defaultCarSpeed: 40,
           carTypeDistribution: {
@@ -393,145 +478,261 @@ export default function ThreeMap({
         });
 
         spawner.initializeQueensSpawnPoints();
-        console.log(`✅ Spawner initialized with ${spawner.getSpawnPoints().length} spawn points`);
+        console.log(
+          `✅ Spawner initialized with ${spawner.getSpawnPoints().length} spawn points`,
+        );
 
-        // Fetch and setup traffic lights
+        // Initialize analytics
+        setLoadingStatus("Setting up analytics...");
+        analyticsRef.current = new TrafficAnalytics({
+          enablePerformanceMonitoring: true,
+          enableTrafficMetrics: true,
+          enableIntersectionTracking: true,
+          enableNearMissDetection: true,
+          nearMissThreshold: 5,
+          snapshotInterval: 1000,
+          maxHistoryLength: 300,
+        });
+        console.log("✅ Analytics initialized");
+
+        // Initialize integrated traffic systems
+        setLoadingStatus("Initializing traffic infrastructure...");
+
+        // 1. Configuration Manager
+        configManagerRef.current = new ConfigurationManager();
+        console.log("✅ Configuration manager initialized");
+
+        // 2. Traffic Infrastructure Manager
+        trafficInfrastructureRef.current = new TrafficInfrastructureManager();
+
+        // 3. Vehicle Physics Engine
+        vehiclePhysicsRef.current = new VehiclePhysics();
+        console.log("✅ Vehicle physics engine initialized");
+
+        // 4. Collision System with bounds
+        collisionSystemRef.current = createCollisionSystem({
+          south: 44.22,
+          west: -76.51,
+          north: 44.24,
+          east: -76.48,
+        });
+        console.log("✅ Collision detection system initialized");
+
+        // 5. Vehicle Behavior Controller
+        behaviorControllerRef.current = new VehicleBehaviorController();
+        console.log("✅ Behavior controller initialized");
+
+        // 6. Performance Optimization Systems
+        vehiclePoolRef.current = new VehiclePool(150);
+        lodManagerRef.current = new LODManager();
+        staggeredUpdateRef.current = new StaggeredUpdateManager(4);
+        perfMonitorRef.current = new PerformanceMonitor();
+        console.log("✅ Performance optimization systems initialized");
+
+        // Add all vehicle pool meshes to scene
+        const pooledMeshes = vehiclePoolRef.current.getAllMeshes();
+        console.log(
+          `📦 Adding ${pooledMeshes.length} pooled vehicle meshes to scene`,
+        );
+        pooledMeshes.forEach((mesh) => {
+          groups.dynamicObjects.add(mesh);
+          mesh.visible = false; // Start hidden
+        });
+        console.log(
+          `✅ Vehicle pool meshes added to scene (${groups.dynamicObjects.children.length} total objects in dynamicObjects)`,
+        );
+
+        // Fetch and setup traffic lights using Traffic Infrastructure Manager
         setLoadingStatus("Setting up traffic lights...");
         const osmTrafficSignals = await fetchAllTrafficSignals();
 
-        if (osmTrafficSignals.length > 0) {
-          osmTrafficSignals.forEach((signal, idx) => {
-            const signalPos: [number, number] = [signal.lon, signal.lat];
+        if (osmTrafficSignals.length > 0 && trafficInfrastructureRef.current) {
+          // Load traffic controls into infrastructure manager
+          trafficInfrastructureRef.current.loadFromOSM(osmTrafficSignals);
+          console.log(
+            `🚦 Loaded ${osmTrafficSignals.length} traffic controls from OSM`,
+          );
 
-            // Create NS and EW traffic lights at each signal
-            // Alternate initial states
-            const nsLight: TrafficLight = {
-              id: `${signal.id}-ns`,
-              position: signalPos,
-              state: idx % 2 === 0 ? "green" : "red",
-              timer: Date.now(),
-              intersectionId: `osm-${signal.id}`,
-              direction: "ns",
-            };
+          // SMART INTERSECTION-BASED PLACEMENT
+          // 1. Find actual road intersections
+          const intersections = roadNetwork.findIntersections();
+          console.log(`🚦 Found ${intersections.length} road intersections`);
 
-            const ewLight: TrafficLight = {
-              id: `${signal.id}-ew`,
-              position: signalPos,
-              state: idx % 2 === 0 ? "red" : "green",
-              timer: Date.now(),
-              intersectionId: `osm-${signal.id}`,
-              direction: "ew",
-            };
+          const signals = trafficInfrastructureRef.current.getSignals();
 
-            // Create meshes
-            nsLight.mesh = createTrafficLightModel();
-            ewLight.mesh = createTrafficLightModel();
+          // 2. For each intersection, check if there's a traffic signal nearby
+          intersections.forEach((intersection) => {
+            // Find closest OSM traffic signal within 50 meters
+            let closestSignal = null;
+            let minDist = 50; // meters
 
-            const worldPos = CityProjection.projectToWorld(signalPos);
+            signals.forEach((signal) => {
+              const dist = turf.distance(
+                turf.point(intersection.position),
+                turf.point(signal.position),
+                { units: "meters" },
+              );
 
-            nsLight.mesh.position.set(worldPos.x, worldPos.y, worldPos.z);
-            ewLight.mesh.position.set(worldPos.x + 10, worldPos.y, worldPos.z + 10);
+              if (dist < minDist) {
+                closestSignal = signal;
+                minDist = dist;
+              }
+            });
 
-            groups.dynamicObjects.add(nsLight.mesh);
-            groups.dynamicObjects.add(ewLight.mesh);
+            if (!closestSignal) return; // No signal at this intersection
 
-            trafficLights.push(nsLight, ewLight);
+            // 3. Get all roads approaching this intersection
+            const approachingEdges = roadNetwork.getNodeEdges(intersection.id);
+
+            // 4. Place one traffic light for each approach direction
+            approachingEdges.forEach((edge, idx) => {
+              const bearing = roadNetwork.getEdgeBearingAtNode(
+                edge,
+                intersection.id,
+              );
+
+              // Create mesh for this approach
+              const mesh = createTrafficLightModel();
+              const worldPos = CityProjection.projectToWorld(
+                intersection.position,
+              );
+
+              // Place light on the FAR side of intersection (where traffic goes)
+              // Offset 20m in the direction the traffic is heading (50% of original)
+              const offsetDistance = 20; // meters in world units
+              const offsetX =
+                Math.sin((bearing * Math.PI) / 180) * offsetDistance;
+              const offsetZ =
+                Math.cos((bearing * Math.PI) / 180) * offsetDistance;
+
+              mesh.position.set(
+                worldPos.x + offsetX,
+                worldPos.y,
+                worldPos.z + offsetZ,
+              );
+
+              // Rotate to face oncoming traffic
+              mesh.rotation.y = ((-bearing + 180) * Math.PI) / 180;
+
+              groups.dynamicObjects.add(mesh);
+
+              // Link to signal (all share same signal state)
+              if (idx === 0) {
+                closestSignal.mesh = mesh;
+              }
+            });
           });
 
-          console.log(`✅ Created ${trafficLights.length} traffic lights`);
+          console.log(
+            `✅ Placed traffic lights at ${intersections.length} intersections`,
+          );
+
+          // Initialize Signal Coordinator for green wave coordination
+          if (signalCoordinatorRef.current) {
+            signalCoordinatorRef.current = createSignalCoordinator(
+              trafficInfrastructureRef.current,
+              true, // Auto-analyze and apply coordination
+            );
+            console.log("✅ Signal coordination initialized");
+          }
         }
 
         // Start animation loop
         setLoadingStatus("Starting simulation...");
         startAnimationLoop();
 
-        // Fly to specific coordinates: Latitude 44.232760°, Longitude -76.479941°
-        setLoadingStatus("Flying to target location...");
-        await flyToLocation(camera, controls, [-76.479941, 44.232760], 600, 3500);
+        // Hide loading overlay so we can see the flight animation
+        setIsReady(true);
+        setError(null);
+
+        // Fly to specific coordinates: Latitude 44.233472°, Longitude -76.498375°
+        await flyToLocation(
+          camera,
+          controls,
+          [-76.498375, 44.233472],
+          600,
+          2000,
+        );
 
         // Ensure controls are re-enabled after animation
         controls.enabled = true;
         console.log("✅ Controls re-enabled after flyTo animation");
 
         setLoadingStatus("Ready");
-        setIsReady(true);
-        setError(null);
       } catch (err) {
         console.error("Error initializing scene:", err);
-        setError(err instanceof Error ? err.message : "Failed to initialize scene");
+        setError(
+          err instanceof Error ? err.message : "Failed to initialize scene",
+        );
         setLoadingStatus("Error");
       }
     }
 
     function updateTrafficLights() {
-      const now = Date.now();
+      // Update traffic infrastructure manager (handles signal state transitions)
+      if (trafficInfrastructureRef.current) {
+        const deltaTime = 16.67; // Approximate ms since last frame (60 FPS)
+        trafficInfrastructureRef.current.update(deltaTime);
 
-      const intersectionGroups: Record<string, TrafficLight[]> = {};
-      trafficLights.forEach((light) => {
-        if (!intersectionGroups[light.intersectionId]) {
-          intersectionGroups[light.intersectionId] = [];
-        }
-        intersectionGroups[light.intersectionId].push(light);
-      });
+        // Sync visual meshes with infrastructure manager state
+        const signals = trafficInfrastructureRef.current.getSignals();
+        signals.forEach((signal) => {
+          // Update corresponding traffic light in the old array
+          const oldLight = trafficLights.find((l) => l.id === signal.id);
+          if (oldLight) {
+            oldLight.state = signal.state;
+            oldLight.timer = signal.timer;
+          }
 
-      Object.entries(intersectionGroups).forEach(([intersectionId, lights]) => {
-        const primaryLight = lights[0];
-        const elapsed = now - primaryLight.timer;
-        const duration = TRAFFIC_LIGHT_TIMINGS[primaryLight.state];
+          // Update 3D mesh visualization
+          if (signal.mesh) {
+            const redLight = signal.mesh.getObjectByName("red") as THREE.Mesh;
+            const yellowLight = signal.mesh.getObjectByName(
+              "yellow",
+            ) as THREE.Mesh;
+            const greenLight = signal.mesh.getObjectByName(
+              "green",
+            ) as THREE.Mesh;
 
-        if (elapsed >= duration) {
-          lights.forEach((light) => {
-            if (light.state === "green") {
-              light.state = "yellow";
-            } else if (light.state === "yellow") {
-              light.state = "red";
-            } else {
-              const nsLights = lights.filter((l) => l.direction === "ns");
-              const ewLights = lights.filter((l) => l.direction === "ew");
+            if (redLight && yellowLight && greenLight) {
+              const redMaterial =
+                redLight.material as THREE.MeshStandardMaterial;
+              const yellowMaterial =
+                yellowLight.material as THREE.MeshStandardMaterial;
+              const greenMaterial =
+                greenLight.material as THREE.MeshStandardMaterial;
 
-              const nsAreRed = nsLights.every((l) => l.state === "red");
-              const ewAreRed = ewLights.every((l) => l.state === "red");
-
-              if (nsAreRed && light.direction === "ns") {
-                light.state = "green";
-              } else if (ewAreRed && light.direction === "ew") {
-                light.state = "green";
+              if (redMaterial.emissive) {
+                redMaterial.emissive.setHex(
+                  signal.state === "red" ? 0xff0000 : 0x330000,
+                );
+              }
+              if (yellowMaterial.emissive) {
+                yellowMaterial.emissive.setHex(
+                  signal.state === "yellow" ? 0xffff00 : 0x333300,
+                );
+              }
+              if (greenMaterial.emissive) {
+                greenMaterial.emissive.setHex(
+                  signal.state === "green" ? 0x00ff00 : 0x003300,
+                );
               }
             }
-            light.timer = now;
-
-            // Update light visualization
-            if (light.mesh) {
-              const redLight = light.mesh.getObjectByName("red") as THREE.Mesh;
-              const yellowLight = light.mesh.getObjectByName("yellow") as THREE.Mesh;
-              const greenLight = light.mesh.getObjectByName("green") as THREE.Mesh;
-
-              if (redLight && yellowLight && greenLight) {
-                const redMaterial = redLight.material as THREE.MeshStandardMaterial;
-                const yellowMaterial = yellowLight.material as THREE.MeshStandardMaterial;
-                const greenMaterial = greenLight.material as THREE.MeshStandardMaterial;
-
-                if (redMaterial.emissive) {
-                  redMaterial.emissive.setHex(light.state === "red" ? 0xff0000 : 0x330000);
-                }
-                if (yellowMaterial.emissive) {
-                  yellowMaterial.emissive.setHex(light.state === "yellow" ? 0xffff00 : 0x333300);
-                }
-                if (greenMaterial.emissive) {
-                  greenMaterial.emissive.setHex(light.state === "green" ? 0x00ff00 : 0x003300);
-                }
-              }
-            }
-          });
-        }
-      });
+          }
+        });
+      }
     }
 
     function startAnimationLoop() {
       let lastTime = Date.now();
 
       function animate() {
-        if (!sceneRef.current || !cameraRef.current || !rendererRef.current || !controlsRef.current) {
+        if (
+          !sceneRef.current ||
+          !cameraRef.current ||
+          !rendererRef.current ||
+          !controlsRef.current
+        ) {
           return;
         }
 
@@ -539,8 +740,17 @@ export default function ThreeMap({
         const deltaTime = (currentTime - lastTime) / 1000;
         lastTime = currentTime;
 
+        // Analytics: Track frame start
+        const frameStartTime = performance.now();
+        if (analyticsRef.current) {
+          analyticsRef.current.onFrameStart(currentTime);
+        }
+
         // Update traffic lights
         updateTrafficLights();
+
+        // Analytics: Track update start
+        const updateStartTime = performance.now();
 
         // Update spawner
         if (spawner) {
@@ -549,63 +759,243 @@ export default function ThreeMap({
           const activeCars = spawner.getActiveCars();
           const processedCarIds = new Set<string>();
 
-          // Update each active car
+          // Debug: Log active car count and positions
+          if (
+            Math.floor(currentTime / 1000) % 5 === 0 &&
+            currentTime % 1000 < 20
+          ) {
+            console.log(
+              `🚗 Active cars: ${activeCars.length}, Meshes: ${Object.keys(carMeshes).length}`,
+            );
+            if (activeCars.length > 0 && cameraRef.current) {
+              const firstCar = activeCars[0];
+              const firstMesh = carMeshes[firstCar.id];
+              console.log(
+                `📍 Camera: [${cameraRef.current.position.x.toFixed(0)}, ${cameraRef.current.position.y.toFixed(0)}, ${cameraRef.current.position.z.toFixed(0)}]`,
+              );
+              if (firstMesh) {
+                console.log(
+                  `📍 First car (${firstCar.id}): [${firstMesh.position.x.toFixed(0)}, ${firstMesh.position.y.toFixed(0)}, ${firstMesh.position.z.toFixed(0)}], visible: ${firstMesh.visible}, scale: ${firstMesh.scale.x}`,
+                );
+                const distance = cameraRef.current.position.distanceTo(
+                  firstMesh.position,
+                );
+                console.log(
+                  `📏 Distance from camera to first car: ${distance.toFixed(0)} units`,
+                );
+              }
+            }
+          }
+
+          // Update collision system spatial grid
+          if (collisionSystemRef.current) {
+            collisionSystemRef.current.updateGrid(activeCars);
+          }
+
+          // Update LOD manager camera position
+          if (lodManagerRef.current && cameraRef.current) {
+            lodManagerRef.current.updateCameraPosition(cameraRef.current);
+          }
+
+          // Performance monitor - record frame
+          if (perfMonitorRef.current) {
+            perfMonitorRef.current.recordFrame();
+          }
+
+          // Update each active car with integrated systems
           activeCars.forEach((spawnedCar) => {
             processedCarIds.add(spawnedCar.id);
 
-            // Create mesh if needed
+            // Create mesh if needed (using vehicle pool for performance)
             if (!carMeshes[spawnedCar.id]) {
-              const mesh = createCarModel(spawnedCar.type, spawnedCar.color);
-              carMeshes[spawnedCar.id] = mesh;
-              groupsRef.current?.dynamicObjects.add(mesh);
-            }
+              let mesh: EnhancedVehicleMesh | null = null;
 
-            // Check traffic lights
-            let shouldStop = false;
-            for (const light of trafficLights) {
-              const distance = turf.distance(
-                turf.point(spawnedCar.position),
-                turf.point(light.position),
-                { units: "meters" }
+              // Try to get from pool
+              if (vehiclePoolRef.current) {
+                mesh = vehiclePoolRef.current.acquire(
+                  spawnedCar.type,
+                  spawnedCar.color,
+                );
+                if (mesh) {
+                  console.log(
+                    `♻️ Acquired pooled mesh for ${spawnedCar.id} (${spawnedCar.type})`,
+                  );
+                }
+              }
+
+              // Fallback to creating new mesh
+              if (!mesh) {
+                console.log(
+                  `🆕 Creating new mesh for ${spawnedCar.id} (${spawnedCar.type})`,
+                );
+                mesh = createEnhancedCarModel(
+                  spawnedCar.type,
+                  spawnedCar.color,
+                );
+                groupsRef.current?.dynamicObjects.add(mesh);
+              }
+
+              carMeshes[spawnedCar.id] = mesh;
+              spawnedCar.meshRef = mesh; // Link mesh to car data
+              console.log(
+                `✅ Mesh ${mesh ? "created" : "FAILED"} for ${spawnedCar.id}, visible: ${mesh?.visible}, parent: ${mesh?.parent?.type}`,
               );
 
-              if (distance < 30 && (light.state === "red" || light.state === "yellow")) {
-                shouldStop = true;
-                spawnedCar.stoppedAtLight = true;
-                break;
+              // Register for staggered updates
+              if (staggeredUpdateRef.current) {
+                staggeredUpdateRef.current.register(spawnedCar.id);
+              }
+
+              // Analytics: Track spawn
+              if (analyticsRef.current) {
+                analyticsRef.current.trackSpawn();
               }
             }
 
-            if (!shouldStop) {
-              spawnedCar.stoppedAtLight = false;
+            // SIMPLIFIED FOR DEBUGGING - JUST MAKE CARS MOVE!
+            // Skip all the complex behavior and physics, just set speed
+            if (spawnedCar.speed === 0) {
+              spawnedCar.speed = spawnedCar.maxSpeed; // Start moving immediately!
             }
 
-            // Update speed
-            if (spawnedCar.stoppedAtLight) {
-              spawnedCar.speed = Math.max(0, spawnedCar.speed - 50 * deltaTime);
+            // INTEGRATED SIMULATION PIPELINE (currently simplified):
+            // 1. Behavior evaluation (traffic rules, signals, following)
+            // 2. Physics update (acceleration, velocity)
+            // 3. Collision detection
+            // 4. Position update
+            // 5. Visual updates (lights, LOD)
+
+            const allCarsMap = new Map(activeCars.map((car) => [car.id, car]));
+
+            // 1. Evaluate vehicle behavior
+            if (
+              behaviorControllerRef.current &&
+              trafficInfrastructureRef.current &&
+              collisionSystemRef.current
+            ) {
+              const behaviorResult = behaviorControllerRef.current.evaluate(
+                spawnedCar,
+                {
+                  infrastructureManager: trafficInfrastructureRef.current,
+                  collisionSystem: collisionSystemRef.current,
+                  allVehicles: allCarsMap,
+                  deltaTime,
+                },
+              );
+
+              spawnedCar.targetSpeed = behaviorResult.targetSpeed;
+              spawnedCar.acceleration = behaviorResult.acceleration;
+              spawnedCar.currentBehavior = behaviorResult.state;
+
+              // Apply behavior to speed
+              behaviorControllerRef.current.applyBehavior(
+                spawnedCar,
+                behaviorResult,
+                deltaTime,
+              );
+
+              // Debug first car
+              if (
+                spawnedCar.id === "car-0" &&
+                Math.floor(currentTime / 1000) % 2 === 0 &&
+                currentTime % 1000 < 20
+              ) {
+                console.log(
+                  `🚙 Car-0: speed=${spawnedCar.speed.toFixed(1)}, targetSpeed=${spawnedCar.targetSpeed.toFixed(1)}, behavior=${spawnedCar.currentBehavior}`,
+                );
+              }
             } else {
-              spawnedCar.speed = Math.min(spawnedCar.maxSpeed, spawnedCar.speed + 30 * deltaTime);
+              // FALLBACK: If behavior system not working, just set speed directly!
+              if (!spawnedCar.speed || spawnedCar.speed < 5) {
+                spawnedCar.speed = spawnedCar.maxSpeed;
+                spawnedCar.targetSpeed = spawnedCar.maxSpeed;
+              }
             }
 
-            // Update position
+            // 2. Update position along route
             spawner.updateCarPosition(spawnedCar.id, deltaTime);
 
-            // Update mesh
-            const mesh = carMeshes[spawnedCar.id];
+            // 3. Update visual mesh
+            const mesh = carMeshes[spawnedCar.id] as EnhancedVehicleMesh;
             if (mesh) {
-              const worldPos = CityProjection.projectToWorld(spawnedCar.position);
+              const worldPos = CityProjection.projectToWorld(
+                spawnedCar.position,
+              );
               mesh.position.set(worldPos.x, worldPos.y + 1, worldPos.z);
               mesh.rotation.y = (-spawnedCar.bearing * Math.PI) / 180;
+
+              // Debug: Log first car position once
+              if (
+                spawnedCar.id === "car-0" &&
+                Math.floor(currentTime / 1000) === 1
+              ) {
+                console.log(
+                  `🎯 Car position - Lat/Lon: [${spawnedCar.position}], World: [${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}], Visible: ${mesh.visible}, In scene: ${mesh.parent !== null}`,
+                );
+              }
+
+              // 4. Update turn signals
+              updateTurnSignals(mesh, spawnedCar.bearing, deltaTime);
+
+              // 5. Update brake lights (braking if deceleration > 2 m/s²)
+              const isBreaking = spawnedCar.acceleration < -2.0;
+              updateBrakeLights(mesh, isBreaking);
+
+              // 6. Apply LOD based on distance from camera
+              if (lodManagerRef.current) {
+                const currentLOD = mesh.userData.lodLevel || "full";
+                const newLOD = lodManagerRef.current.calculateLODLevel(
+                  mesh.position,
+                );
+                if (newLOD !== currentLOD) {
+                  lodManagerRef.current.applyLOD(mesh, newLOD, currentLOD);
+                  mesh.userData.lodLevel = newLOD;
+                }
+              }
             }
           });
 
           // Remove meshes for despawned cars
           Object.entries(carMeshes).forEach(([carId, mesh]) => {
             if (!processedCarIds.has(carId)) {
-              groupsRef.current?.dynamicObjects.remove(mesh);
+              // Return to pool if using vehicle pool
+              if (vehiclePoolRef.current && mesh instanceof THREE.Mesh) {
+                vehiclePoolRef.current.release(mesh as EnhancedVehicleMesh);
+              } else {
+                groupsRef.current?.dynamicObjects.remove(mesh);
+              }
+
               delete carMeshes[carId];
+
+              // Unregister from staggered updates
+              if (staggeredUpdateRef.current) {
+                staggeredUpdateRef.current.unregister(carId);
+              }
+
+              // Clear behavior state
+              if (behaviorControllerRef.current) {
+                behaviorControllerRef.current.resetVehicleState(carId);
+              }
+
+              // Analytics: Track despawn
+              if (analyticsRef.current) {
+                analyticsRef.current.trackDespawn();
+              }
             }
           });
+
+          // Advance staggered update manager
+          if (staggeredUpdateRef.current) {
+            staggeredUpdateRef.current.nextFrame();
+          }
+        }
+
+        // Analytics: Record update time
+        const updateEndTime = performance.now();
+        if (analyticsRef.current) {
+          analyticsRef.current.recordUpdateTime(
+            updateEndTime - updateStartTime,
+          );
         }
 
         // Update tweens
@@ -614,11 +1004,31 @@ export default function ThreeMap({
         // Update controls
         controlsRef.current.update();
 
+        // Analytics: Track render start
+        const renderStartTime = performance.now();
+
         // Render with composer if available (for outline effect), otherwise normal render
         if (composerRef.current) {
           composerRef.current.render();
         } else {
           rendererRef.current.render(sceneRef.current, cameraRef.current);
+        }
+
+        // Analytics: Record render time and frame time
+        const renderEndTime = performance.now();
+        if (analyticsRef.current) {
+          analyticsRef.current.recordRenderTime(
+            renderEndTime - renderStartTime,
+          );
+          analyticsRef.current.recordFrameTime(renderEndTime - frameStartTime);
+
+          // Create snapshot with active cars
+          if (spawner) {
+            analyticsRef.current.createSnapshot(
+              spawner.getActiveCars(),
+              currentTime,
+            );
+          }
         }
 
         animationFrameRef.current = requestAnimationFrame(animate);
@@ -629,7 +1039,8 @@ export default function ThreeMap({
 
     // Handle window resize
     function handleWindowResize() {
-      if (!canvasRef.current || !cameraRef.current || !rendererRef.current) return;
+      if (!canvasRef.current || !cameraRef.current || !rendererRef.current)
+        return;
 
       const width = canvasRef.current.clientWidth;
       const height = canvasRef.current.clientHeight;
@@ -663,7 +1074,12 @@ export default function ThreeMap({
   // Click handler to find coordinates or select buildings
   useEffect(() => {
     function handleCanvasClick(event: MouseEvent) {
-      if (!canvasRef.current || !cameraRef.current || !sceneRef.current || !groupsRef.current) {
+      if (
+        !canvasRef.current ||
+        !cameraRef.current ||
+        !sceneRef.current ||
+        !groupsRef.current
+      ) {
         return;
       }
 
@@ -678,16 +1094,24 @@ export default function ThreeMap({
 
       // Check if we clicked on a custom placed building first
       const buildingObjects = Array.from(buildingModelsRef.current.values());
-      const buildingIntersects = raycasterRef.current.intersectObjects(buildingObjects, true);
+      const buildingIntersects = raycasterRef.current.intersectObjects(
+        buildingObjects,
+        true,
+      );
 
       if (buildingIntersects.length > 0 && !isPlacementMode) {
         // Find which building was clicked
-        let clickedBuilding: THREE.Object3D | null = buildingIntersects[0].object;
+        let clickedBuilding: THREE.Object3D | null =
+          buildingIntersects[0].object;
         while (clickedBuilding && !clickedBuilding.userData.buildingId) {
           clickedBuilding = clickedBuilding.parent;
         }
 
-        if (clickedBuilding && clickedBuilding.userData.buildingId && onBuildingSelect) {
+        if (
+          clickedBuilding &&
+          clickedBuilding.userData.buildingId &&
+          onBuildingSelect
+        ) {
           onBuildingSelect(clickedBuilding.userData.buildingId);
           setSelectedOsmBuildingId(null);
           return; // Don't process as coordinate click
@@ -695,14 +1119,22 @@ export default function ThreeMap({
       }
 
       // Check if we clicked on an OSM building (from buildings.json)
-      const osmBuildingObjects = Array.from(osmBuildingMeshesRef.current.values());
-      const osmBuildingIntersects = raycasterRef.current.intersectObjects(osmBuildingObjects, true);
+      const osmBuildingObjects = Array.from(
+        osmBuildingMeshesRef.current.values(),
+      );
+      const osmBuildingIntersects = raycasterRef.current.intersectObjects(
+        osmBuildingObjects,
+        true,
+      );
 
       if (osmBuildingIntersects.length > 0 && !isPlacementMode) {
         const clickedMesh = osmBuildingIntersects[0].object as THREE.Mesh;
-        if (clickedMesh.userData.isOsmBuilding && clickedMesh.userData.buildingId) {
+        if (
+          clickedMesh.userData.isOsmBuilding &&
+          clickedMesh.userData.buildingId
+        ) {
           const buildingId = clickedMesh.userData.buildingId;
-          console.log('Clicked OSM building:', buildingId);
+          console.log("Clicked OSM building:", buildingId);
           setSelectedOsmBuildingId(buildingId);
           if (onBuildingSelect) {
             onBuildingSelect(null); // Deselect custom building
@@ -711,17 +1143,27 @@ export default function ThreeMap({
         }
       }
 
+      // For placement mode, check for building collisions first
+      if (isPlacementMode && buildingIntersects.length > 0) {
+        // Prevent placing a building on top of another building
+        console.warn("Cannot place building on top of another building");
+        return;
+      }
+
       // For placement mode, only raycast against ground and static geometry
       // For normal mode, raycast against everything
       let intersects;
       if (isPlacementMode) {
         const targetObjects = [
           ...groupsRef.current.environment.children,
-          ...groupsRef.current.staticGeometry.children
+          ...groupsRef.current.staticGeometry.children,
         ];
         intersects = raycasterRef.current.intersectObjects(targetObjects, true);
       } else {
-        intersects = raycasterRef.current.intersectObjects(sceneRef.current.children, true);
+        intersects = raycasterRef.current.intersectObjects(
+          sceneRef.current.children,
+          true,
+        );
       }
 
       if (intersects.length > 0) {
@@ -738,6 +1180,7 @@ export default function ThreeMap({
           worldX: intersectionPoint.x,
           worldY: intersectionPoint.y,
           worldZ: intersectionPoint.z,
+          ghostRotationY: isPlacementMode ? ghostRotationY : undefined,
         };
 
         if (onCoordinateClick) {
@@ -750,19 +1193,53 @@ export default function ThreeMap({
         }
         setSelectedOsmBuildingId(null);
 
-        console.log('Clicked coordinate:', { lat, lng, worldPos: intersectionPoint });
+        console.log("Clicked coordinate:", {
+          lat,
+          lng,
+          worldPos: intersectionPoint,
+        });
       }
     }
 
     const canvas = canvasRef.current;
     if (canvas) {
-      canvas.addEventListener('click', handleCanvasClick);
-      return () => canvas.removeEventListener('click', handleCanvasClick);
+      canvas.addEventListener("click", handleCanvasClick);
+      return () => canvas.removeEventListener("click", handleCanvasClick);
     }
-  }, [onCoordinateClick, onBuildingSelect, isPlacementMode]);
+  }, [onCoordinateClick, onBuildingSelect, isPlacementMode, ghostRotationY]);
+
+  // Keyboard controls for rotating ghost building during placement mode
+  useEffect(() => {
+    if (!isPlacementMode) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      // Don't interfere with text inputs
+      if ((event.target as HTMLElement).tagName === "INPUT") return;
+
+      const rotationStep = event.shiftKey ? Math.PI / 4 : Math.PI / 12; // 45° or 15°
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setGhostRotationY((prev) => prev + rotationStep); // Counter-clockwise
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setGhostRotationY((prev) => prev - rotationStep); // Clockwise
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isPlacementMode]);
+
+  // Apply rotation to ghost model when ghostRotationY changes
+  useEffect(() => {
+    if (ghostModelRef.current) {
+      ghostModelRef.current.rotation.y = ghostRotationY;
+    }
+  }, [ghostRotationY]);
 
   // Handle OSM building deletion
-  const deleteOsmBuilding = async (buildingId: string) => {
+  const deleteOsmBuilding = async (buildingId: string, skipApiCall = false) => {
     try {
       // Remove from scene
       const mesh = osmBuildingMeshesRef.current.get(buildingId);
@@ -775,24 +1252,96 @@ export default function ThreeMap({
         osmBuildingMeshesRef.current.delete(buildingId);
       }
 
-      // Call API to remove from buildings.json
-      const response = await fetch(`/api/map/buildings/${buildingId}`, {
-        method: 'DELETE',
-      });
+      // Call API to remove from buildings.json (unless skipped for batch operations)
+      if (!skipApiCall) {
+        const response = await fetch(`/api/map/buildings/${buildingId}`, {
+          method: "DELETE",
+        });
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log(`✅ Deleted building ${buildingId}:`, result);
-        if (onOsmBuildingDelete) {
-          onOsmBuildingDelete(buildingId);
+        if (response.ok) {
+          const result = await response.json();
+          console.log(`✅ Deleted building ${buildingId}:`, result);
+          if (onOsmBuildingDelete) {
+            onOsmBuildingDelete(buildingId);
+          }
+        } else {
+          console.error("Failed to delete building from server");
         }
-      } else {
-        console.error('Failed to delete building from server');
       }
 
       setSelectedOsmBuildingId(null);
     } catch (error) {
-      console.error('Error deleting OSM building:', error);
+      console.error("Error deleting OSM building:", error);
+    }
+  };
+
+  // Check for collisions between a loaded 3D model and all OSM buildings
+  const checkAndDeleteCollidingBuildings = async (
+    loadedModel: THREE.Object3D,
+  ) => {
+    if (!groupsRef.current || osmBuildingMeshesRef.current.size === 0) return;
+
+    const collidingIds: string[] = [];
+
+    // Get the actual bounding box of the loaded model
+    const placedBox = new THREE.Box3().setFromObject(loadedModel);
+
+    console.log(`📦 Checking collisions for placed building. Bounding box:`, {
+      min: placedBox.min,
+      max: placedBox.max,
+      size: placedBox.getSize(new THREE.Vector3()),
+    });
+
+    // Check each OSM building for collision
+    osmBuildingMeshesRef.current.forEach((mesh, buildingId) => {
+      // Compute bounding box for the OSM building
+      const osmBox = new THREE.Box3().setFromObject(mesh);
+
+      // Check for intersection
+      if (placedBox.intersectsBox(osmBox)) {
+        collidingIds.push(buildingId);
+        console.log(`  ⚠️ Collision detected with: ${buildingId}`);
+      }
+    });
+
+    if (collidingIds.length > 0) {
+      console.log(
+        `🔄 Found ${collidingIds.length} colliding OSM buildings, removing all...`,
+      );
+
+      // Delete all colliding buildings from scene immediately
+      for (const buildingId of collidingIds) {
+        const mesh = osmBuildingMeshesRef.current.get(buildingId);
+        if (mesh && groupsRef.current) {
+          groupsRef.current.staticGeometry.remove(mesh);
+          mesh.geometry.dispose();
+          if (mesh.material instanceof THREE.Material) {
+            mesh.material.dispose();
+          }
+          osmBuildingMeshesRef.current.delete(buildingId);
+          console.log(`  🗑️ Removed from scene: ${buildingId}`);
+        }
+      }
+
+      // Batch delete from server
+      try {
+        const response = await fetch("/api/map/buildings/batch-delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: collidingIds }),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log(
+            `✅ Batch deleted ${result.deletedCount} buildings from server`,
+          );
+        }
+      } catch (error) {
+        console.error("Error batch deleting buildings:", error);
+      }
+    } else {
+      console.log(`✅ No collisions detected`);
     }
   };
 
@@ -803,7 +1352,7 @@ export default function ThreeMap({
     const loader = new GLTFLoader();
 
     // Track which buildings currently exist
-    const currentBuildingIds = new Set(placedBuildings.map(b => b.id));
+    const currentBuildingIds = new Set(placedBuildings.map((b) => b.id));
 
     // Remove buildings that no longer exist
     const existingIds = Array.from(buildingModelsRef.current.keys());
@@ -814,6 +1363,13 @@ export default function ThreeMap({
           groupsRef.current?.dynamicObjects.remove(model);
           buildingModelsRef.current.delete(id);
           console.log(`🗑️ Removed building ${id}`);
+        }
+        // Also remove associated trees
+        const trees = buildingTreesRef.current.get(id);
+        if (trees) {
+          groupsRef.current?.dynamicObjects.remove(trees);
+          buildingTreesRef.current.delete(id);
+          console.log(`🌲 Removed trees for building ${id}`);
         }
       }
     });
@@ -833,11 +1389,19 @@ export default function ThreeMap({
           model.userData.buildingId = building.id;
 
           // Position the model
-          model.position.set(building.position.x, building.position.y, building.position.z);
+          model.position.set(
+            building.position.x,
+            building.position.y,
+            building.position.z,
+          );
 
           // Rotation
           if (building.rotation) {
-            model.rotation.set(building.rotation.x, building.rotation.y, building.rotation.z);
+            model.rotation.set(
+              building.rotation.x,
+              building.rotation.y,
+              building.rotation.z,
+            );
           }
 
           // Scale - use per-building scale if available, otherwise use global buildingScale
@@ -848,12 +1412,59 @@ export default function ThreeMap({
           groupsRef.current?.dynamicObjects.add(model);
           buildingModelsRef.current.set(building.id, model);
 
-          console.log(`✅ Loaded building ${building.id} at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`);
+          console.log(
+            `✅ Loaded building ${building.id} at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`,
+          );
+
+          // Check for and delete colliding OSM buildings after model is loaded
+          // Need to update matrix world for accurate bounding box calculation
+          model.updateMatrixWorld(true);
+          checkAndDeleteCollidingBuildings(model);
+
+          // Always generate trees around the building
+          const treeConfig = building.treeConfig || getDefaultTreeConfigForMap();
+          // Force enabled to true so trees are always generated
+          const forcedTreeConfig = { ...treeConfig, enabled: true };
+          if (groupsRef.current) {
+            // Calculate building dimensions from bounding box
+            const bbox = new THREE.Box3().setFromObject(model);
+            const size = bbox.getSize(new THREE.Vector3());
+            const buildingWidth = size.x;
+            const buildingDepth = size.z;
+
+            // Use the same scale as the building for trees
+            const buildingScaleValue = scale.x; // Assuming uniform scale
+
+            // Collect other buildings for collision detection (exclude current building)
+            const otherBuildings: THREE.Object3D[] = [];
+            buildingModelsRef.current.forEach((otherModel, otherId) => {
+              if (otherId !== building.id) {
+                otherBuildings.push(otherModel);
+              }
+            });
+            // Also include OSM buildings
+            osmBuildingMeshesRef.current.forEach((osmMesh) => {
+              otherBuildings.push(osmMesh);
+            });
+
+            const treeGroup = renderTreesAroundBuilding(
+              building.position,
+              buildingWidth,
+              buildingDepth,
+              forcedTreeConfig,
+              groupsRef.current.dynamicObjects,
+              buildingScaleValue, // Pass building scale to trees
+              model, // Pass the building model for collision detection
+              groupsRef.current.staticGeometry, // Pass static geometry (roads) for collision detection
+              otherBuildings // Pass other buildings for collision detection
+            );
+            buildingTreesRef.current.set(building.id, treeGroup);
+          }
         },
         undefined,
         (error) => {
           console.error(`❌ Error loading building model:`, error);
-        }
+        },
       );
     });
   }, [placedBuildings, isReady, buildingScale]);
@@ -871,7 +1482,8 @@ export default function ThreeMap({
     }
 
     // Use custom model path if available, otherwise use default
-    const modelPath = customModelPath || '/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf';
+    const modelPath =
+      customModelPath || "/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf";
 
     const loader = new GLTFLoader();
     loader.load(
@@ -906,7 +1518,7 @@ export default function ThreeMap({
         console.log(`✅ Ghost preview loaded: ${modelPath}`);
       },
       undefined,
-      (error) => console.error('Error loading ghost model:', error)
+      (error) => console.error("Error loading ghost model:", error),
     );
 
     return () => {
@@ -920,7 +1532,11 @@ export default function ThreeMap({
   // Update ghost scale when buildingScale changes
   useEffect(() => {
     if (ghostModelRef.current) {
-      ghostModelRef.current.scale.set(buildingScale.x, buildingScale.y, buildingScale.z);
+      ghostModelRef.current.scale.set(
+        buildingScale.x,
+        buildingScale.y,
+        buildingScale.z,
+      );
     }
   }, [buildingScale]);
 
@@ -937,13 +1553,13 @@ export default function ThreeMap({
       const outlinePass = new OutlinePass(
         new THREE.Vector2(window.innerWidth, window.innerHeight),
         sceneRef.current,
-        cameraRef.current
+        cameraRef.current,
       );
       outlinePass.edgeStrength = 5;
       outlinePass.edgeGlow = 1;
       outlinePass.edgeThickness = 2;
-      outlinePass.visibleEdgeColor.set('#003F7C');
-      outlinePass.hiddenEdgeColor.set('#003F7C');
+      outlinePass.visibleEdgeColor.set("#003F7C");
+      outlinePass.hiddenEdgeColor.set("#003F7C");
 
       composer.addPass(outlinePass);
       composerRef.current = composer;
@@ -964,7 +1580,9 @@ export default function ThreeMap({
 
       // Check for selected OSM building
       if (selectedOsmBuildingId) {
-        const selectedOsmMesh = osmBuildingMeshesRef.current.get(selectedOsmBuildingId);
+        const selectedOsmMesh = osmBuildingMeshesRef.current.get(
+          selectedOsmBuildingId,
+        );
         if (selectedOsmMesh) {
           selectedObjects.push(selectedOsmMesh);
         }
@@ -979,9 +1597,17 @@ export default function ThreeMap({
     placedBuildings.forEach((building) => {
       const model = buildingModelsRef.current.get(building.id);
       if (model) {
-        model.position.set(building.position.x, building.position.y, building.position.z);
+        model.position.set(
+          building.position.x,
+          building.position.y,
+          building.position.z,
+        );
         if (building.rotation) {
-          model.rotation.set(building.rotation.x, building.rotation.y, building.rotation.z);
+          model.rotation.set(
+            building.rotation.x,
+            building.rotation.y,
+            building.rotation.z,
+          );
         }
         const scale = building.scale || buildingScale;
         model.scale.set(scale.x, scale.y, scale.z);
@@ -994,7 +1620,8 @@ export default function ThreeMap({
     if (!isPlacementMode) return;
 
     function handleMouseMove(event: MouseEvent) {
-      if (!canvasRef.current || !cameraRef.current || !groupsRef.current) return;
+      if (!canvasRef.current || !cameraRef.current || !groupsRef.current)
+        return;
 
       const rect = canvasRef.current.getBoundingClientRect();
       const mouse = new THREE.Vector2();
@@ -1003,13 +1630,24 @@ export default function ThreeMap({
 
       raycasterRef.current.setFromCamera(mouse, cameraRef.current);
 
+      // Check if hovering over an existing building
+      const buildingObjects = Array.from(buildingModelsRef.current.values());
+      const buildingIntersects = raycasterRef.current.intersectObjects(
+        buildingObjects,
+        true,
+      );
+      const isOverBuilding = buildingIntersects.length > 0;
+
       // Only raycast against the ground plane and static geometry (buildings/roads)
       // This prevents placing buildings on cars or in the air
       const targetObjects = [
         ...groupsRef.current.environment.children,
-        ...groupsRef.current.staticGeometry.children
+        ...groupsRef.current.staticGeometry.children,
       ];
-      const intersects = raycasterRef.current.intersectObjects(targetObjects, true);
+      const intersects = raycasterRef.current.intersectObjects(
+        targetObjects,
+        true,
+      );
 
       // Check if ghost exists inside the handler (it might load after this effect runs)
       if (intersects.length > 0 && ghostModelRef.current) {
@@ -1017,6 +1655,29 @@ export default function ThreeMap({
         ghostModelRef.current.position.set(point.x, point.y, point.z);
         ghostModelRef.current.visible = true;
         setGhostPosition(point);
+
+        // Change ghost color based on validity
+        ghostModelRef.current.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            if (isOverBuilding) {
+              // Red for invalid placement
+              (child.material as THREE.MeshStandardMaterial).color.set(
+                0xff0000,
+              );
+              (child.material as THREE.MeshStandardMaterial).emissive.set(
+                0x330000,
+              );
+            } else {
+              // Green for valid placement
+              (child.material as THREE.MeshStandardMaterial).color.set(
+                0x00ff00,
+              );
+              (child.material as THREE.MeshStandardMaterial).emissive.set(
+                0x003300,
+              );
+            }
+          }
+        });
       } else if (ghostModelRef.current) {
         // Hide ghost when not hovering over valid placement surface
         ghostModelRef.current.visible = false;
@@ -1025,8 +1686,8 @@ export default function ThreeMap({
 
     const canvas = canvasRef.current;
     if (canvas) {
-      canvas.addEventListener('mousemove', handleMouseMove);
-      return () => canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener("mousemove", handleMouseMove);
+      return () => canvas.removeEventListener("mousemove", handleMouseMove);
     }
   }, [isPlacementMode]);
 
@@ -1035,7 +1696,7 @@ export default function ThreeMap({
       <canvas
         ref={canvasRef}
         className="w-full h-full"
-        style={{ touchAction: 'none', cursor: 'grab' }}
+        style={{ touchAction: "none", cursor: "grab" }}
       />
 
       {/* Loading overlay */}
@@ -1076,34 +1737,50 @@ export default function ThreeMap({
         </div>
       )}
 
-      {/* Selected OSM Building Panel */}
-      {selectedOsmBuildingId && (
-        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 bg-white border border-gray-300 rounded-lg shadow-lg z-20 p-4 min-w-[280px]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-gray-400 rounded"></div>
-              <span className="font-bold text-gray-800 text-sm">OSM Building Selected</span>
-            </div>
-            <button
-              onClick={() => setSelectedOsmBuildingId(null)}
-              className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="text-xs text-gray-600 mb-3 font-mono bg-gray-50 p-2 rounded">
-            ID: {selectedOsmBuildingId}
-          </div>
+      {/* Debug Overlay - Press F3 to toggle */}
+      <DebugOverlay
+        analytics={analyticsRef.current}
+        visible={debugOverlayVisible}
+        onToggle={() => setDebugOverlayVisible(!debugOverlayVisible)}
+      />
+
+      {/* Analytics Dashboard */}
+      <AnalyticsDashboard
+        analytics={analyticsRef.current}
+        visible={dashboardVisible}
+        onClose={() => setDashboardVisible(false)}
+      />
+
+      {/* Control Panel */}
+      {isReady && (
+        <div className="absolute bottom-4 right-4 z-40 flex gap-2">
           <button
-            onClick={() => deleteOsmBuilding(selectedOsmBuildingId)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm font-semibold transition-colors"
+            onClick={() => setDebugOverlayVisible(!debugOverlayVisible)}
+            className="px-4 py-2 bg-gray-800/90 hover:bg-gray-700/90 text-white rounded-lg shadow-lg text-sm font-medium transition-colors backdrop-blur-sm"
+            title="Toggle debug overlay (F3)"
           >
-            <span>🗑️</span>
-            Delete Building
+            {debugOverlayVisible ? "Hide" : "Show"} Debug
+          </button>
+          <button
+            onClick={() => setDashboardVisible(!dashboardVisible)}
+            className="px-4 py-2 bg-blue-600/90 hover:bg-blue-500/90 text-white rounded-lg shadow-lg text-sm font-medium transition-colors backdrop-blur-sm"
+          >
+            Analytics Dashboard
           </button>
         </div>
       )}
 
+      {/* Selected OSM Building - Delete Button */}
+      {selectedOsmBuildingId && (
+        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20">
+          <button
+            onClick={() => deleteOsmBuilding(selectedOsmBuildingId)}
+            className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg shadow-lg text-sm font-semibold transition-colors"
+          >
+            Delete Building
+          </button>
+        </div>
+      )}
     </div>
   );
 }

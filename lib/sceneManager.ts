@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from "three";
 
 /**
  * Scene groups for organizing objects hierarchically
@@ -28,7 +28,7 @@ export interface SceneManager {
 export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
   // Create scene
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x87ceeb); // Sky blue
+  scene.background = new THREE.Color(0xf0f8ff); // Very light blue/white (alice blue)
 
   // Create organized groups
   const groups: SceneGroups = {
@@ -50,11 +50,11 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
   // Initially hide debug group
   groups.debug.visible = false;
 
-  // Setup lighting
-  const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+  // Setup lighting - bright white lighting for clean appearance
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
   // Position as sun (from above and to the side)
   directionalLight.position.set(1000, 2000, 500);
   directionalLight.castShadow = true;
@@ -76,7 +76,7 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
     60, // FOV
     canvas.clientWidth / canvas.clientHeight, // Aspect ratio
     1, // Near plane
-    100000 // Far plane
+    100000, // Far plane
   );
 
   // Initial position for zoomed out Kingston view
@@ -126,7 +126,7 @@ export function handleResize(
   camera: THREE.PerspectiveCamera,
   renderer: THREE.WebGLRenderer,
   width: number,
-  height: number
+  height: number,
 ): void {
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
