@@ -46,6 +46,8 @@ export function BuildingWrapper({ building, isSelected, onSelect }: BuildingWrap
     <>
       <group
         ref={groupRef}
+        name={`building-${building.id}`}
+        userData={{ isBuilding: true, buildingId: building.id }}
         position={[building.position.x, building.position.y, building.position.z]}
         rotation={[0, building.rotation, 0]}
         onClick={handleClick}

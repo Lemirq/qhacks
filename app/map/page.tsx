@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import ThreeMap from '@/components/ThreeMap';
-import { Landmark, SlidersHorizontal, Building2, TrafficCone, Leaf, FileText, PlayCircle, Clock, Settings, MapPin, Copy, X, Plus, Trash2, Ruler } from 'lucide-react';
+import { Landmark, SlidersHorizontal, Building2, TrafficCone, Leaf, FileText, PlayCircle, Clock, Settings, MapPin, Copy, X, Plus, Trash2, Upload } from 'lucide-react';
 import { prefetchMapData } from '@/lib/prefetchMapData';
 
 interface PlacedBuilding {
@@ -15,7 +16,8 @@ interface PlacedBuilding {
   lng: number;
 }
 
-export default function MapPage() {
+function MapPageContent() {
+  const searchParams = useSearchParams();
   const [clickedCoordinate, setClickedCoordinate] = useState<{
     lat: number;
     lng: number;
@@ -27,13 +29,31 @@ export default function MapPage() {
   const [placedBuildings, setPlacedBuildings] = useState<PlacedBuilding[]>([]);
   const [isPlacementMode, setIsPlacementMode] = useState(false);
   // Default scale now matches the calibrated building size (was 1.4, now scaled to 10)
-  const [buildingScale, setBuildingScale] = useState({ x: 10, y: 10, z: 10 });
+  const [buildingScale, setBuildingScale] = useState({ x: 20, y: 20, z: 10 });
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
+
+  // Custom model path from editor export
+  const [customModelPath, setCustomModelPath] = useState<string | null>(null);
+  const [importedBuildingName, setImportedBuildingName] = useState<string | null>(null);
 
   // Pre-fetch map data on mount to warm up cache
   useEffect(() => {
     prefetchMapData();
   }, []);
+
+  // Check for imported building from editor
+  useEffect(() => {
+    const buildingId = searchParams.get('buildingId');
+    if (buildingId) {
+      const modelPath = `/api/editor/building/${buildingId}`;
+      setCustomModelPath(modelPath);
+      setImportedBuildingName('Custom Building from Editor');
+      setIsPlacementMode(true);
+      // Update scale for custom buildings (default to 15x, user can adjust with slider)
+      setBuildingScale({ x: 15, y: 15, z: 15 });
+      console.log(`✅ Imported building from editor: ${modelPath}`);
+    }
+  }, [searchParams]);
 
   const handleMapClick = (coordinate: {
     lat: number;
@@ -44,10 +64,13 @@ export default function MapPage() {
   } | null) => {
     if (coordinate) {
       if (isPlacementMode) {
+        // Use custom model path if available, otherwise use default
+        const modelPath = customModelPath || '/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf';
+
         // Place a building at the clicked location
         const newBuilding: PlacedBuilding = {
           id: `building-${Date.now()}`,
-          modelPath: '/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf',
+          modelPath,
           position: { x: coordinate.worldX, y: coordinate.worldY, z: coordinate.worldZ },
           rotation: { x: 0, y: 0, z: 0 },
           scale: { x: buildingScale.x, y: buildingScale.y, z: buildingScale.z },
@@ -56,11 +79,28 @@ export default function MapPage() {
         };
         setPlacedBuildings([...placedBuildings, newBuilding]);
         setIsPlacementMode(false); // Exit placement mode after placing
+
+        // Clear custom model after placing (user can place more from editor)
+        if (customModelPath) {
+          setCustomModelPath(null);
+          setImportedBuildingName(null);
+          // Reset scale to default for next placements
+          setBuildingScale({ x: 10, y: 10, z: 10 });
+        }
       } else {
         // Just show the coordinate
         setClickedCoordinate(coordinate);
       }
     }
+  };
+
+  const clearImportedBuilding = () => {
+    setCustomModelPath(null);
+    setImportedBuildingName(null);
+    setIsPlacementMode(false);
+    setBuildingScale({ x: 10, y: 10, z: 10 });
+    // Clear the URL param
+    window.history.replaceState({}, '', '/map');
   };
 
   const removeBuilding = (id: string) => {
@@ -168,16 +208,55 @@ export default function MapPage() {
           buildingScale={buildingScale}
           selectedBuildingId={selectedBuildingId}
           onBuildingSelect={setSelectedBuildingId}
+          customModelPath={customModelPath}
         />
         {/* Map gradient overlay for better UI contrast */}
         <div className="absolute inset-0 map-gradient pointer-events-none"></div>
 
         {/* Placement Mode Indicator */}
         {isPlacementMode && (
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 glass border-accent-blue px-6 py-3 rounded-lg shadow-lg z-50 pointer-events-none">
-            <p className="text-sm font-black text-accent-blue uppercase tracking-tight">
-              Click on the map to place building
-            </p>
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 glass border-accent-blue px-6 py-3 rounded-lg shadow-lg z-50 pointer-events-auto flex items-center gap-4">
+            <div>
+              <p className="text-sm font-black text-accent-blue uppercase tracking-tight">
+                {customModelPath ? 'Place your custom building' : 'Click on the map to place building'}
+              </p>
+              {importedBuildingName && (
+                <p className="text-xs text-slate-600 mt-1">
+                  Model: {importedBuildingName}
+                </p>
+              )}
+            </div>
+            {customModelPath && (
+              <button
+                onClick={clearImportedBuilding}
+                className="p-1.5 hover:bg-red-50 rounded-full transition-colors text-slate-400 hover:text-red-600"
+                title="Cancel import"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Imported Building Notification */}
+        {customModelPath && !isPlacementMode && (
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 glass border-orange-400 bg-orange-50/90 px-6 py-3 rounded-lg shadow-lg z-50 pointer-events-auto flex items-center gap-4">
+            <Upload size={18} className="text-orange-600" />
+            <div>
+              <p className="text-sm font-black text-orange-700 uppercase tracking-tight">
+                Building imported from Editor
+              </p>
+              <p className="text-xs text-orange-600 mt-0.5">
+                Click "Place" to position it on the map
+              </p>
+            </div>
+            <button
+              onClick={clearImportedBuilding}
+              className="p-1.5 hover:bg-red-100 rounded-full transition-colors text-orange-400 hover:text-red-600"
+              title="Discard import"
+            >
+              <X size={16} />
+            </button>
           </div>
         )}
       </div>
@@ -434,8 +513,37 @@ export default function MapPage() {
                   </button>
                 </div>
 
-                <div className="bg-slate-50 rounded-md p-3 border border-slate-200">
-                  <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Model: Let Me Sleep Building</p>
+                <div className={`rounded-md p-3 border ${customModelPath ? 'bg-orange-50 border-orange-300' : 'bg-slate-50 border-slate-200'}`}>
+                  <p className={`text-[9px] font-bold uppercase mb-2 ${customModelPath ? 'text-orange-600' : 'text-slate-500'}`}>
+                    Model: {customModelPath ? 'Custom Building from Editor' : 'Let Me Sleep Building'}
+                  </p>
+
+                  {/* Scale Multiplier for Custom Buildings */}
+                  {customModelPath && (
+                    <div className="mb-3 pb-3 border-b border-orange-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-[9px] font-bold text-orange-700 uppercase">Scale Multiplier</label>
+                        <span className="text-[10px] font-mono font-bold text-orange-800">{buildingScale.x.toFixed(1)}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="50"
+                        step="0.5"
+                        value={buildingScale.x}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setBuildingScale({ x: val, y: val, z: val });
+                        }}
+                        className="w-full h-1.5 bg-orange-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                      />
+                      <div className="flex justify-between text-[8px] text-orange-600 mt-1">
+                        <span>0.1x</span>
+                        <span>25x</span>
+                        <span>50x</span>
+                      </div>
+                    </div>
+                  )}
 
                   {placedBuildings.length === 0 ? (
                     <p className="text-[10px] text-slate-500 text-center py-4">
@@ -832,5 +940,21 @@ export default function MapPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Wrap with Suspense for useSearchParams
+export default function MapPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen w-full bg-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-accent-blue border-r-transparent mb-4" />
+          <p className="text-slate-600">Loading map...</p>
+        </div>
+      </div>
+    }>
+      <MapPageContent />
+    </Suspense>
   );
 }

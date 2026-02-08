@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import * as THREE from 'three';
 import { useBuildings } from '@/lib/editor/contexts/BuildingsContext';
-import { exportMultiBuildingsToGLB, exportMultiBuildingsToJSON, copyMultiBuildingsToClipboard } from '@/lib/editor/utils/exportUtils';
+import { exportMultiBuildingsToGLB, exportMultiBuildingsToJSON, copyMultiBuildingsToClipboard, exportToMap } from '@/lib/editor/utils/exportUtils';
 
 interface ExportBarProps {
   sceneRef: React.MutableRefObject<THREE.Scene | null>;
@@ -9,7 +10,9 @@ interface ExportBarProps {
 
 export function ExportBar({ sceneRef }: ExportBarProps) {
   const { buildings } = useBuildings();
+  const router = useRouter();
   const [exporting, setExporting] = useState(false);
+  const [exportingToMap, setExportingToMap] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleExportGLB = async () => {
@@ -45,6 +48,29 @@ export function ExportBar({ sceneRef }: ExportBarProps) {
     }
   };
 
+  const handleExportToMap = async () => {
+    if (!sceneRef.current) {
+      alert('Scene not ready for export');
+      return;
+    }
+
+    if (buildings.length === 0) {
+      alert('No buildings to export. Create a building first!');
+      return;
+    }
+
+    setExportingToMap(true);
+    try {
+      const { id } = await exportToMap(sceneRef.current, 'custom-building');
+      // Navigate to map with the building ID
+      router.push(`/map?buildingId=${id}`);
+    } catch (error) {
+      console.error('Export to map failed:', error);
+      alert('Failed to export to map. Check console for details.');
+      setExportingToMap(false);
+    }
+  };
+
   return (
     <div className="w-full bg-gray-800 text-white p-4 border-t border-gray-700">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -76,6 +102,16 @@ export function ExportBar({ sceneRef }: ExportBarProps) {
             className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-700/80 border-violet-400/60 text-violet-300 hover:bg-violet-500 hover:border-violet-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(139,92,246,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out"
           >
             {copied ? 'Copied!' : 'Copy JSON'}
+          </button>
+
+          <div className="w-px h-8 bg-gray-600" />
+
+          <button
+            onClick={handleExportToMap}
+            disabled={exportingToMap}
+            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gradient-to-r from-orange-500 to-amber-500 border-orange-400 text-white hover:from-orange-600 hover:to-amber-600 hover:shadow-[0_8px_25px_-5px_rgba(249,115,22,0.5)] hover:-translate-y-0.5 active:translate-y-0 disabled:from-gray-600 disabled:to-gray-600 disabled:border-gray-500 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none transition-all duration-200 ease-out"
+          >
+            {exportingToMap ? 'Exporting...' : 'Export to Map →'}
           </button>
         </div>
       </div>

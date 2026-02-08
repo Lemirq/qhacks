@@ -187,9 +187,11 @@ function SceneContent({ sceneRef }: SceneContentProps) {
       <pointLight position={[50, 50, -50]} intensity={0.3} />
       <pointLight position={[-50, 50, -50]} intensity={0.3} />
 
-      {/* Invisible grid plane for click detection and pointer tracking */}
+      {/* Invisible grid plane for click detection and pointer tracking - excluded from export */}
       <mesh
         ref={gridPlaneRef}
+        name="click-detection-plane"
+        userData={{ excludeFromExport: true }}
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, 0, 0]}
         onClick={handleGridClick}
@@ -200,20 +202,22 @@ function SceneContent({ sceneRef }: SceneContentProps) {
         <meshBasicMaterial transparent opacity={0} />
       </mesh>
 
-      {/* Grid */}
-      <Grid
-        position={[0, -0.01, 0]}
-        args={[100, 100]}
-        cellSize={1}
-        cellThickness={0.5}
-        cellColor="#a0a0a0"
-        sectionSize={5}
-        sectionThickness={1}
-        sectionColor="#707070"
-        fadeDistance={100}
-        fadeStrength={1}
-        infiniteGrid
-      />
+      {/* Grid - marked to exclude from export */}
+      <group name="grid-helper" userData={{ excludeFromExport: true }}>
+        <Grid
+          position={[0, -0.01, 0]}
+          args={[100, 100]}
+          cellSize={1}
+          cellThickness={0.5}
+          cellColor="#a0a0a0"
+          sectionSize={5}
+          sectionThickness={1}
+          sectionColor="#707070"
+          fadeDistance={100}
+          fadeStrength={1}
+          infiniteGrid
+        />
+      </group>
 
       {/* Ghost building preview when in placement mode */}
       {placementMode && ghostPosition && (
