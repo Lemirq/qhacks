@@ -180,30 +180,136 @@ body {
   }
 
   .lp-statement {
-    max-width: 720px;
+    max-width: 780px;
     margin: 0 auto;
-    padding: 7rem 2rem 6rem;
+    padding: 10rem 2rem 8rem;
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
   }
 
-  .lp-stmt-line {
-    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
-    font-size: clamp(1.3rem, 2.8vw, 1.8rem);
-    font-weight: 400;
-    line-height: 1.6;
-    color: #1a1611;
+  /* thin gold rule */
+  .lp-stmt-rule {
+    display: block;
+    width: 48px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #c5a44e, transparent);
+    margin-bottom: 3rem;
+  }
+
+  /* small intro line */
+  .lp-stmt-small {
+    font-family: var(--font-archivo), sans-serif;
+    font-size: 0.78rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #8a8279;
+    margin: 0 0 3.5rem;
+  }
+
+  /* grouped narrative block */
+  .lp-stmt-block {
     margin: 0 0 2.5rem;
   }
 
-  .lp-stmt-large {
-    font-size: clamp(1.5rem, 3.2vw, 2.2rem);
-    line-height: 1.55;
-    margin-bottom: 0;
+  .lp-stmt-block .lp-stmt-line {
+    margin: 0;
   }
 
-  .lp-stmt-large em {
+  /* "Shape a new Golden Age" line */
+  .lp-stmt-main {
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-size: clamp(1.5rem, 3vw, 2.1rem);
+    font-weight: 400;
+    line-height: 1.5;
+    color: #1a1611;
+    margin: 0 0 3rem;
+    letter-spacing: -0.01em;
+  }
+
+  /* subtitle / supporting text */
+  .lp-stmt-sub {
+    font-family: var(--font-archivo), sans-serif;
+    font-size: 0.82rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #8a8279;
+    margin: 0 0 3.5rem;
+  }
+
+  /* gold accent — the showpiece */
+  .lp-stmt-gold {
+    font-family: var(--font-script), "Instrument Serif", serif;
+    font-size: clamp(2.4rem, 5vw, 3.8rem);
     font-style: italic;
-    color: #3d362c;
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    background: linear-gradient(
+      135deg,
+      #b8942f 0%,
+      #e8c44a 25%,
+      #f5dfa0 50%,
+      #d4a843 75%,
+      #c5944a 100%
+    );
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: goldShimmer 6s ease-in-out infinite;
+  }
+
+  /* CTA button */
+  .lp-stmt-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 1rem;
+    padding: 1rem 2.6rem;
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-size: 0.92rem;
+    letter-spacing: 0.06em;
+    color: #faf5eb;
+    background: linear-gradient(135deg, #1a1611 0%, #2d261c 100%);
+    border: 1px solid rgba(197, 164, 78, 0.2);
+    border-radius: 50px;
+    text-decoration: none;
+    box-shadow:
+      0 2px 12px rgba(26, 22, 17, 0.12),
+      0 0 0 0 rgba(197, 164, 78, 0);
+    transition:
+      transform 0.25s ease,
+      box-shadow 0.3s ease,
+      border-color 0.3s ease;
+  }
+
+  .lp-stmt-cta:hover {
+    transform: translateY(-2px);
+    border-color: rgba(197, 164, 78, 0.45);
+    box-shadow:
+      0 8px 30px rgba(26, 22, 17, 0.18),
+      0 0 0 1px rgba(197, 164, 78, 0.1);
+  }
+
+  /* fade-in / slide-up animation */
+  .lp-fade {
+    opacity: 0;
+    transform: translateY(24px);
+    animation: lpFadeUp 0.8s ease-out forwards;
+  }
+
+  /* consistent narrative lines */
+  .lp-stmt-line {
+    font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+    font-size: clamp(1.5rem, 3vw, 2.1rem);
+    font-weight: 400;
+    line-height: 1.5;
+    color: #1a1611;
+    margin: 0;
+    letter-spacing: -0.01em;
   }
 
   .lp-details {
@@ -344,6 +450,22 @@ body {
   }
 }
 
+@keyframes lpFadeUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes goldShimmer {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
 @keyframes fireflyPulse {
   0% {
     opacity: 0.15;
@@ -391,7 +513,15 @@ body {
   }
 
   .lp-statement {
-    padding: 5rem 1.5rem 4rem;
+    padding: 6rem 1.25rem 5rem;
+  }
+
+  .lp-stmt-small {
+    margin-bottom: 2.5rem;
+  }
+
+  .lp-stmt-rule {
+    margin-bottom: 2rem;
   }
 }
 

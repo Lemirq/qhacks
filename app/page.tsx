@@ -7,7 +7,6 @@ import { FeatureSteps } from '@/components/ui/feature-section';
 
 export default function Landing() {
   const heroRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   // Track scroll progress for the entire page
   const { scrollYProgress } = useScroll();
@@ -109,46 +108,65 @@ export default function Landing() {
       >
         {/* ───── STATEMENT ───── */}
         <section className="lp-statement">
-          <p className="lp-stmt-line">
-            Cities grow faster than we can plan for them.
+          <span className="lp-stmt-rule lp-fade" style={{ animationDelay: '0.1s' }} />
+
+          <p className="lp-stmt-small lp-fade" style={{ animationDelay: '0.25s' }}>
+            Cities rise in moments. Legacies last for generations.
           </p>
-          <p className="lp-stmt-line lp-stmt-large">
-            Before breaking ground on a new building,<br />
-            Kingston deserves to see what it will look like,<br />
-            how traffic will shift, and what it <em>costs the air.</em>
+
+          <div className="lp-stmt-block lp-fade" style={{ animationDelay: '0.5s' }}>
+            <h2 className="lp-stmt-line">Before we build the future,</h2>
+            <h2 className="lp-stmt-line">Kingston deserves to see it.</h2>
+          </div>
+
+          <p className="lp-stmt-sub lp-fade" style={{ animationDelay: '0.75s' }}>
+            Design smarter. Build responsibly.
           </p>
+
+          <h2 className="lp-stmt-main lp-fade" style={{ animationDelay: '0.95s' }}>
+            Shape a new <span className="lp-stmt-gold">Golden Age.</span>
+          </h2>
+
+          <Link
+            href="/map"
+            className="lp-stmt-cta lp-fade"
+            style={{ animationDelay: '1.35s' }}
+          >
+            Explore the Future&ensp;&rarr;
+          </Link>
         </section>
 
-        {/* ───── HOW IT WORKS ───── */}
+        {/* ───── YOUR JOURNEY ───── */}
         <section className="bg-[#f4efe6]">
           <FeatureSteps
+            title="Your Journey Starts Here"
+            subtitle="Kingston is entering a new golden age. New housing, hotels, and public spaces are creating jobs, attracting investment, and strengthening the local economy. Real progress is not about building fast. It is about building wisely and planning for the years ahead."
             features={[
               {
                 step: 'Step 1',
-                title: 'Build a 3D Building From Any Input',
+                title: 'Build With Purpose',
                 content:
-                  'Create accurate 3D buildings from blueprints or simple specs in minutes, then adjust floors, height, roof type, and materials in a live preview.',
+                  'Transform blueprints and ideas into accurate 3D buildings in minutes. Design spaces that support economic growth, community needs, and long-term stability.',
                 image:
                   'https://images.unsplash.com/photo-1686164748261-33e13eef70b6?q=80&w=2070&auto=format&fit=crop',
               },
               {
                 step: 'Step 2',
-                title: 'Place It Anywhere in Kingston',
+                title: 'Place With Intention',
                 content:
-                  'Drop your building onto a real Kingston location and export it as GeoJSON or GLB for seamless use in planning and mapping workflows.',
+                  'Position your building in real Kingston locations. Evaluate how new projects fit into neighborhoods, transit systems, and long-term development plans.',
                 image:
                   'https://images.unsplash.com/photo-1598897270268-f7091c801c3d?q=80&w=2070&auto=format&fit=crop',
               },
               {
                 step: 'Step 3',
-                title: 'Simulate Impact Before Construction Starts',
+                title: 'Grow Responsibly',
                 content:
-                  'Visualize construction progress over time while tracking CO₂, noise, air quality, and traffic impacts before anything is built.',
+                  'Simulate environmental, traffic, and community impacts before construction begins. Use data to refine designs and protect Kingston\'s future.',
                 image:
                   'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?q=80&w=2070&auto=format&fit=crop',
               },
             ]}
-            title="Your Journey Starts Here"
             autoPlayInterval={4000}
             imageHeight="h-[500px]"
           />

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Archivo, Lora, Playfair_Display } from "next/font/google";
+import { Archivo, Lora, Playfair_Display, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 
 const archivo = Archivo({
@@ -19,6 +19,13 @@ const playfair = Playfair_Display({
   subsets: ["latin"],
 });
 
+const instrumentSerif = Instrument_Serif({
+  weight: "400",
+  style: ["normal", "italic"],
+  subsets: ["latin"],
+  variable: "--font-script",
+});
+
 export const metadata: Metadata = {
   title: "KingsView — Urban Planning for Kingston",
   description: "3D urban planning tool for the City of Kingston. Design buildings, simulate construction timelines, and measure environmental impact before breaking ground.",
@@ -32,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${archivo.variable} ${lora.variable} ${playfair.variable} antialiased`}
+        className={`${archivo.variable} ${lora.variable} ${playfair.variable} ${instrumentSerif.variable} antialiased`}
       >
         {children}
         <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js" async></script>
