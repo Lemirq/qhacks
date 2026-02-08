@@ -267,19 +267,19 @@ export class Spawner {
     toRemove.forEach((id) => this.spawnPoints.delete(id));
 
     const now = Date.now();
-    const VICINITY_RADIUS_M = 85;
-    const VICINITY_SPAWN_RATE = 7; // cars per minute (high to simulate congestion)
+    const VICINITY_RADIUS_M = 100;
+    const VICINITY_SPAWN_RATE = 90; // tons of cars for demo
 
     buildings.forEach((building) => {
       const nearEdges = this.roadNetwork.findEdgesNearPosition(
         building.position,
         VICINITY_RADIUS_M,
       );
-      // Add up to 2 spawn points per building (different nearby edges)
+      // Add up to 8 spawn points per building
       const seenEdgeIds = new Set<string>();
       let added = 0;
       for (const edge of nearEdges) {
-        if (seenEdgeIds.has(edge.id) || added >= 2) continue;
+        if (seenEdgeIds.has(edge.id) || added >= 8) continue;
         seenEdgeIds.add(edge.id);
         const pos = edge.geometry[0] as [number, number];
         const id = `building-vicinity-${building.id}-${edge.id}`;
@@ -294,6 +294,137 @@ export class Spawner {
         added++;
       }
     });
+  }
+
+  /**
+   * Burst-spawn many cars at once around placed buildings (for demo visibility).
+   * Places cars at spaced positions along nearby roads so they don't overlap.
+   * Uses min spacing ~14m so collision/following keeps them separated.
+   */
+  burstSpawnNearBuildings(
+    buildings: { id: string; position: [number, number] }[],
+  ): number {
+    const MIN_SPACING_M = 6;
+    const MAX_BURST_PER_BUILDING = 180;
+    const radiusM = 120;
+    let spawned = 0;
+
+    for (const building of buildings) {
+      const nearEdges = this.roadNetwork.findEdgesNearPosition(
+        building.position,
+        radiusM,
+      );
+      const slots: { position: [number, number]; distanceOnEdge: number; edgeId: string }[] = [];
+      for (const edge of nearEdges) {
+        if (this.blockedEdgeIds.has(edge.id)) continue;
+        const points = this.roadNetwork.samplePointsAlongEdge(
+          edge.id,
+          MIN_SPACING_M,
+        );
+        for (const p of points) {
+          slots.push({
+            position: p.position,
+            distanceOnEdge: p.distanceOnEdge,
+            edgeId: edge.id,
+          });
+        }
+      }
+      const toSpawn = Math.min(
+        MAX_BURST_PER_BUILDING,
+        slots.length,
+        this.config.maxCars - this.activeCars.size,
+      );
+      for (let i = 0; i < toSpawn && this.activeCars.size < this.config.maxCars; i++) {
+        const idx = Math.floor(Math.random() * slots.length);
+        const slot = slots[idx];
+        slots.splice(idx, 1);
+        const car = this.spawnCarAtPosition(slot.position, slot.edgeId, slot.distanceOnEdge);
+        if (car) spawned++;
+      }
+    }
+    return spawned;
+  }
+
+  /**
+   * Spawn a single car at a specific position on the road (for burst spawn).
+   * Builds route from this edge to destination so the car stays on the correct edge.
+   */
+  private spawnCarAtPosition(
+    position: [number, number],
+    edgeId: string,
+    distanceOnEdge: number,
+  ): SpawnedCar | null {
+    const destination = this.selectDestination();
+    if (!destination) return null;
+
+    const edge = this.roadNetwork.getEdge(edgeId);
+    if (!edge) return null;
+    const toNode = this.roadNetwork.getNode(edge.to);
+    if (!toNode) return null;
+
+    const routeFromEnd = this.pathfinder.findRoute(
+      toNode.position,
+      destination.position,
+      this.blockedEdgeIds.size > 0
+        ? { blockedEdgeIds: this.blockedEdgeIds }
+        : undefined,
+    );
+    if (!routeFromEnd || routeFromEnd.edges.length === 0) return null;
+
+    const line = turf.lineString(edge.geometry);
+    const along = turf.along(line, distanceOnEdge / 1000, {
+      units: "kilometers",
+    });
+    const exactPos = along.geometry.coordinates as [number, number];
+
+    const route: Route = {
+      nodes: [edge.from, edge.to, ...routeFromEnd.nodes.slice(1)],
+      edges: [edgeId, ...routeFromEnd.edges],
+      totalDistance: (edge.length - distanceOnEdge) + routeFromEnd.totalDistance,
+      estimatedTime:
+        (edge.length - distanceOnEdge) / 10 + routeFromEnd.estimatedTime,
+      waypoints: [exactPos, ...edge.geometry.slice(1), ...routeFromEnd.waypoints],
+    };
+
+    const carType = this.selectCarType();
+    const color = this.selectCarColor();
+    const physicsProfile = this.getPhysicsProfileForType(carType);
+
+    const car: SpawnedCar = {
+      id: `car-${this.nextCarId++}`,
+      type: carType,
+      color,
+      spawnPointId: "burst",
+      spawnTime: Date.now(),
+      position: exactPos,
+      destination,
+      route,
+      currentEdgeId: edgeId,
+      distanceOnEdge,
+      speed: 0,
+      maxSpeed: this.config.defaultCarSpeed + (Math.random() * 12 - 6),
+      bearing: 0,
+      stoppedAtLight: false,
+      physicsProfile,
+      targetSpeed: this.config.defaultCarSpeed * 0.35,
+      acceleration: 0,
+      currentBehavior: "following",
+      behaviorTimer: 0,
+      meshRef: undefined,
+    };
+
+    if (edge.geometry.length >= 2) {
+      const lookIdx = Math.min(
+        Math.floor((distanceOnEdge / edge.length) * (edge.geometry.length - 1)) + 1,
+        edge.geometry.length - 1,
+      );
+      const from = edge.geometry[Math.max(0, lookIdx - 1)];
+      const to = edge.geometry[lookIdx];
+      car.bearing = turf.bearing(turf.point(from), turf.point(to));
+    }
+
+    this.activeCars.set(car.id, car);
+    return car;
   }
 
   /**
@@ -594,45 +725,56 @@ export class Spawner {
         );
         if (newRoute && newRoute.edges.length > 0) {
           car.route = newRoute;
+          const sameFirstEdge = newRoute.edges[0] === car.currentEdgeId;
           car.currentEdgeId = newRoute.edges[0];
-          car.distanceOnEdge = 0;
+          if (!sameFirstEdge) car.distanceOnEdge = 0;
         }
       }
+    }
+
+    // Get current edge (re-fetch after possible reroute)
+    let edge = this.roadNetwork.getEdge(car.currentEdgeId);
+    if (!edge) {
+      const newRoute = this.pathfinder.findRoute(
+        car.position,
+        car.destination.position,
+        this.blockedEdgeIds.size > 0
+          ? { blockedEdgeIds: this.blockedEdgeIds }
+          : undefined,
+      );
+      if (newRoute?.edges.length) {
+        car.route = newRoute;
+        car.currentEdgeId = newRoute.edges[0];
+        car.distanceOnEdge = 0;
+        edge = this.roadNetwork.getEdge(car.currentEdgeId);
+      }
+      if (!edge) return;
     }
 
     // Calculate distance traveled this frame
     const distanceTraveled = (car.speed / 3.6) * deltaTime; // Convert km/h to m/s, multiply by deltaTime
     car.distanceOnEdge += distanceTraveled;
 
-    // Get current edge
-    const edge = this.roadNetwork.getEdge(car.currentEdgeId);
-    if (!edge) return;
-
     // Check if we've completed this edge
     if (car.distanceOnEdge >= edge.length) {
-      // Move to next edge
       const nextEdgeId = this.pathfinder.getNextEdge(
         car.currentEdgeId,
         car.route,
       );
-
       if (nextEdgeId) {
         car.currentEdgeId = nextEdgeId;
         car.distanceOnEdge = 0;
+        edge = this.roadNetwork.getEdge(nextEdgeId) ?? edge;
       } else {
-        // End of route / end of road — despawn so car doesn't just stop
         this.despawnCar(car.id);
         return;
       }
     }
 
     // Update position along edge
-    const progress = car.distanceOnEdge / edge.length;
     const line = turf.lineString(edge.geometry);
-    const along = turf.along(line, car.distanceOnEdge / 1000, {
-      units: "kilometers",
-    });
-
+    const distKm = Math.min(car.distanceOnEdge, edge.length - 0.01) / 1000;
+    const along = turf.along(line, distKm, { units: "kilometers" });
     car.position = along.geometry.coordinates as [number, number];
 
     // Update bearing

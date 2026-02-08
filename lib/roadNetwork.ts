@@ -452,4 +452,46 @@ export class RoadNetwork {
     withDistance.sort((a, b) => a.distance - b.distance);
     return withDistance.map((x) => x.edge);
   }
+
+  /**
+   * Get distance in meters from the start of an edge to the nearest point on
+   * that edge to the given position. Used for placing cars at specific points
+   * along the road (e.g. burst spawn).
+   */
+  getDistanceAlongEdge(
+    edgeId: string,
+    position: [number, number],
+  ): number {
+    const edge = this.edges.get(edgeId);
+    if (!edge?.geometry || edge.geometry.length < 2) return 0;
+    const line = turf.lineString(edge.geometry);
+    const point = turf.point(position);
+    const nearest = turf.nearestPointOnLine(line, point, { units: "meters" });
+    const loc = (nearest.properties?.location ?? 0) as number;
+    const meters =
+      loc <= 1 && loc >= 0 ? loc * edge.length : Math.min(loc, edge.length);
+    return Math.max(0, Math.min(meters, edge.length - 0.1));
+  }
+
+  /**
+   * Sample positions along an edge, spaced by minSpacingMeters (for burst spawn).
+   * Returns [{ position, distanceOnEdge }].
+   */
+  samplePointsAlongEdge(
+    edgeId: string,
+    minSpacingMeters: number,
+  ): { position: [number, number]; distanceOnEdge: number }[] {
+    const edge = this.edges.get(edgeId);
+    if (!edge?.geometry || edge.geometry.length < 2) return [];
+    const line = turf.lineString(edge.geometry);
+    const out: { position: [number, number]; distanceOnEdge: number }[] = [];
+    let d = 0;
+    while (d < edge.length - 1) {
+      const along = turf.along(line, d / 1000, { units: "kilometers" });
+      const pos = along.geometry.coordinates as [number, number];
+      out.push({ position: pos, distanceOnEdge: d });
+      d += minSpacingMeters;
+    }
+    return out;
+  }
 }

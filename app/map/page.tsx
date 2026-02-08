@@ -26,6 +26,7 @@ import {
   Frown,
   Pause,
   ClipboardList,
+  Map,
 } from "lucide-react";
 import { prefetchMapData } from "@/lib/prefetchMapData";
 import {
@@ -105,6 +106,11 @@ function MapPageContent() {
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [showBuildingSelector, setShowBuildingSelector] = useState(false);
   const [showNoiseRipple, setShowNoiseRipple] = useState(true);
+  const [showZoningLayer, setShowZoningLayer] = useState(false);
+  // Correct config for Kingston zoning layer (Official Plan)
+  const [zoningOffset, setZoningOffset] = useState({ x: 0, z: 0 });
+  const [zoningRotationY, setZoningRotationY] = useState(180);
+  const [zoningFlipH, setZoningFlipH] = useState(true);
   const [showEnvironmentalReport, setShowEnvironmentalReport] = useState(false);
 
   // Pre-fetch map data and available buildings on mount
@@ -492,6 +498,10 @@ function MapPageContent() {
           customModelPath={customModelPath}
           timelineDate={timelineDate}
           showNoiseRipple={showNoiseRipple}
+          showZoningLayer={showZoningLayer}
+          zoningOffset={zoningOffset}
+          zoningRotationY={zoningRotationY}
+          zoningFlipH={zoningFlipH}
         />
         {/* Map gradient overlay for better UI contrast */}
         <div className="absolute inset-0 map-gradient pointer-events-none"></div>
@@ -499,6 +509,8 @@ function MapPageContent() {
         {/* Building placement form modal */}
         {pendingPlacement && (
           <BuildingPlacementForm
+            lat={pendingPlacement.lat}
+            lng={pendingPlacement.lng}
             onSubmit={handlePlacementSubmit}
             onCancel={() => setPendingPlacement(null)}
           />
@@ -569,12 +581,9 @@ function MapPageContent() {
             </div>
             <div className="flex items-center justify-between mb-5">
               <h3 className="ui-label">Geospatial Layers</h3>
-              <button className="p-1 hover:bg-slate-100 rounded transition-colors text-slate-400">
-                <SlidersHorizontal size={18} />
-              </button>
             </div>
 
-            {/* Single Layer: Construction Noise (DB) Ripple */}
+            {/* Geospatial Layers: Noise Ripple + Zoning */}
             <div className="space-y-2 overflow-y-auto custom-scrollbar pr-1">
               <div
                 className={`p-2.5 rounded-md border transition-all cursor-pointer group ${
@@ -614,6 +623,108 @@ function MapPageContent() {
                   </div>
                 </div>
               </div>
+
+              <div
+                className={`p-2.5 rounded-md border transition-all cursor-pointer group ${
+                  showZoningLayer
+                    ? "border-slate-200 bg-white"
+                    : "border-slate-100 hover:border-slate-200 bg-white/50"
+                }`}
+                onClick={() => setShowZoningLayer(!showZoningLayer)}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-7 h-7 rounded bg-slate-50 border border-slate-100 flex items-center justify-center transition-colors ${
+                      showZoningLayer
+                        ? "text-accent-blue"
+                        : "text-slate-400 group-hover:text-accent-blue"
+                    }`}
+                  >
+                    <Map size={14} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[11px] font-bold text-slate-900">
+                      City Zoning
+                    </p>
+                    <p className="text-[9px] text-slate-500">
+                      Official Plan · Land Use Designation
+                    </p>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={showZoningLayer}
+                      onChange={(e) => setShowZoningLayer(e.target.checked)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="accent-accent-blue h-3.5 w-3.5"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Zoning alignment controls - commented out (correct config: flipH=true, rotationY=180) */}
+              {/* {showZoningLayer && (
+                <div
+                  className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-3"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="text-[9px] font-bold text-slate-600 uppercase">
+                    Align Zone Position
+                  </p>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-[9px] text-slate-500 block mb-0.5">X</label>
+                      <input
+                        type="number"
+                        value={zoningOffset.x}
+                        onChange={(e) =>
+                          setZoningOffset((o) => ({
+                            ...o,
+                            x: parseFloat(e.target.value) || 0,
+                          }))
+                        }
+                        className="w-full px-2 py-1 text-[10px] font-mono bg-white border border-slate-200 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-slate-500 block mb-0.5">Z</label>
+                      <input
+                        type="number"
+                        value={zoningOffset.z}
+                        onChange={(e) =>
+                          setZoningOffset((o) => ({
+                            ...o,
+                            z: parseFloat(e.target.value) || 0,
+                          }))
+                        }
+                        className="w-full px-2 py-1 text-[10px] font-mono bg-white border border-slate-200 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-slate-500 block mb-0.5">Rotation Y (°)</label>
+                      <input
+                        type="number"
+                        value={zoningRotationY}
+                        onChange={(e) =>
+                          setZoningRotationY(parseFloat(e.target.value) || 0)
+                        }
+                        className="w-full px-2 py-1 text-[10px] font-mono bg-white border border-slate-200 rounded"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={zoningFlipH}
+                        onChange={(e) => setZoningFlipH(e.target.checked)}
+                        className="accent-accent-blue h-3.5 w-3.5"
+                      />
+                      <span className="text-[10px] font-medium text-slate-700">
+                        Flip horizontally
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )} */}
             </div>
 
             {/* Population Happiness Score */}
@@ -800,9 +911,6 @@ function MapPageContent() {
                   )}
                 </p>
               </div>
-              <button className="text-[10px] font-black text-accent-blue border border-accent-blue px-2 py-0.5 rounded hover:bg-blue-50 transition-colors">
-                EXPORT CSV
-              </button>
             </div>
 
             {/* Key Environmental Metrics - Dynamic based on buildings active at current timeline date */}

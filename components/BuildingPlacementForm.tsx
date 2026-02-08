@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { X, Building2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Building2, AlertTriangle } from "lucide-react";
 import { KINGSTON_ZONE_TYPES, type KingstonZoneCode } from "@/lib/kingstonZoning";
+import {
+  fetchZoneAtPoint,
+  getZoneCompatibilityWarning,
+} from "@/lib/zoneCompatibility";
 
 export interface BuildingPlacementDetails {
   zoneType: KingstonZoneCode;
@@ -11,18 +15,49 @@ export interface BuildingPlacementDetails {
 }
 
 interface BuildingPlacementFormProps {
+  lat: number;
+  lng: number;
   onSubmit: (details: BuildingPlacementDetails) => void;
   onCancel: () => void;
 }
 
 const DEFAULT_DURATION_DAYS = 180;
 
-export function BuildingPlacementForm({ onSubmit, onCancel }: BuildingPlacementFormProps) {
+export function BuildingPlacementForm({
+  lat,
+  lng,
+  onSubmit,
+  onCancel,
+}: BuildingPlacementFormProps) {
   const [zoneType, setZoneType] = useState<KingstonZoneCode>("MU1");
   const [durationDays, setDurationDays] = useState(DEFAULT_DURATION_DAYS);
   const [startDate, setStartDate] = useState(
     () => new Date().toISOString().slice(0, 10)
   );
+  const [officialPlanZone, setOfficialPlanZone] = useState<string | null>(null);
+  const [zoneLoading, setZoneLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) setZoneLoading(true);
+    });
+    fetchZoneAtPoint(lat, lng)
+      .then((code) => {
+        if (!cancelled) setOfficialPlanZone(code);
+      })
+      .catch(() => {
+        if (!cancelled) setOfficialPlanZone(null);
+      })
+      .finally(() => {
+        if (!cancelled) setZoneLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lat, lng]);
+
+  const zoneWarning = getZoneCompatibilityWarning(officialPlanZone, zoneType);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,10 +86,18 @@ export function BuildingPlacementForm({ onSubmit, onCancel }: BuildingPlacementF
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Zone at location */}
+          {!zoneLoading && officialPlanZone && (
+            <div className="text-[10px] text-slate-600">
+              <span className="font-bold uppercase">Official Plan zone at this location:</span>{" "}
+              {officialPlanZone}
+            </div>
+          )}
+
           {/* Zone Type */}
           <div>
             <label className="block text-[10px] font-bold text-slate-600 uppercase mb-2">
-              Kingston Zoning Type
+              Kingston Zoning Type (building use)
             </label>
             <select
               value={zoneType}
@@ -74,6 +117,17 @@ export function BuildingPlacementForm({ onSubmit, onCancel }: BuildingPlacementF
               ))}
             </select>
           </div>
+
+          {/* Zone compatibility warning */}
+          {zoneWarning && (
+            <div className="flex gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <AlertTriangle className="shrink-0 text-amber-600" size={20} />
+              <div>
+                <p className="text-sm font-bold text-amber-800">Zone compatibility warning</p>
+                <p className="text-xs text-amber-700 mt-0.5">{zoneWarning}</p>
+              </div>
+            </div>
+          )}
 
           {/* Construction duration */}
           <div>

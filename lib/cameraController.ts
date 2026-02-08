@@ -30,9 +30,9 @@ export function setupControls(
   controls.enablePan = true;
   controls.enableRotate = true;
 
-  // Set generous zoom limits for better exploration
-  controls.minDistance = 10; // Allow close-up views
-  controls.maxDistance = 20000; // Allow wide overview
+  // Set expanded zoom limits for better exploration
+  controls.minDistance = 2;   // Zoom in very close
+  controls.maxDistance = 100000; // Zoom out for regional view
 
   // Adjust speeds for better user experience
   controls.panSpeed = 1.5; // Faster panning

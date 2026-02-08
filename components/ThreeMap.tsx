@@ -69,6 +69,7 @@ import {
   isUnderConstruction,
   getConstructionSourceDb,
 } from "@/lib/constructionNoise";
+import { loadAndRenderZoningLayer } from "@/lib/zoningRenderer";
 
 interface PlacedBuilding {
   id: string;
@@ -108,6 +109,13 @@ interface ThreeMapProps {
   onOsmBuildingDelete?: (buildingId: string) => void;
   timelineDate?: string;
   showNoiseRipple?: boolean;
+  showZoningLayer?: boolean;
+  /** Offset to align zoning layer (world units) */
+  zoningOffset?: { x: number; z: number };
+  /** Rotation in degrees (Y axis) */
+  zoningRotationY?: number;
+  /** Flip zoning layer horizontally */
+  zoningFlipH?: boolean;
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -284,6 +292,52 @@ function createTrafficLightModel(): THREE.Group {
   return group;
 }
 
+const MAP_SCALE = 10 / 1.4;
+const BARRICADE_SCALE = 3 * MAP_SCALE;
+
+/** A couple of visible barricades in the construction area (no full road span). */
+function createBarricadeMesh(): THREE.Group {
+  const group = new THREE.Group();
+  const orange = new THREE.MeshStandardMaterial({
+    color: 0xff6600,
+    emissive: 0xff4400,
+    emissiveIntensity: 0.35,
+    roughness: 0.5,
+    metalness: 0.1,
+  });
+  const white = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.2,
+    roughness: 0.5,
+    metalness: 0.1,
+  });
+  const h = 1.4;
+  const w = 0.9;
+  const d = 1.8;
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h * 0.5, d),
+    orange,
+  );
+  base.position.y = h * 0.25;
+  group.add(base);
+  const stripe = new THREE.Mesh(
+    new THREE.BoxGeometry(w * 0.95, h * 0.3, d * 0.2),
+    white,
+  );
+  stripe.position.y = h * 0.55;
+  stripe.position.z = 0.2;
+  group.add(stripe);
+  const cone = new THREE.Mesh(
+    new THREE.ConeGeometry(0.5, 1, 8),
+    orange,
+  );
+  cone.position.y = h + 0.5;
+  group.add(cone);
+  group.scale.setScalar(BARRICADE_SCALE);
+  return group;
+}
+
 // Fetch traffic signals from Next.js API route
 async function fetchAllTrafficSignals(): Promise<
   Array<{
@@ -330,6 +384,10 @@ export default function ThreeMap({
   onOsmBuildingDelete,
   timelineDate = new Date().toISOString().slice(0, 10),
   showNoiseRipple = false,
+  showZoningLayer = false,
+  zoningOffset = { x: 0, z: 0 },
+  zoningRotationY = 0,
+  zoningFlipH = false,
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -359,6 +417,7 @@ export default function ThreeMap({
   const [ghostRotationY, setGhostRotationY] = useState(0); // Rotation for ghost preview
   const noiseRippleGroupRef = useRef<THREE.Group | null>(null);
   const rippleTimeRef = useRef(0);
+  const zoningGroupRef = useRef<THREE.Group | null>(null);
 
   // Analytics state
   const analyticsRef = useRef<TrafficAnalytics | null>(null);
@@ -378,6 +437,7 @@ export default function ThreeMap({
   // Traffic spawner and road network refs (for building-vicinity spawning and lane blocks)
   const spawnerRef = useRef<Spawner | null>(null);
   const roadNetworkRef = useRef<RoadNetwork | null>(null);
+  const barricadesGroupRef = useRef<THREE.Group | null>(null);
 
   // Performance optimization managers
   const vehiclePoolRef = useRef<VehiclePool | null>(null);
@@ -481,11 +541,17 @@ export default function ThreeMap({
         // Update static geometry matrix after all additions
         groups.staticGeometry.updateMatrix();
 
+        // Group for road barricades (lane blocks near placed buildings)
+        const barricadesGroup = new THREE.Group();
+        barricadesGroup.name = "barricades";
+        groups.dynamicObjects.add(barricadesGroup);
+        barricadesGroupRef.current = barricadesGroup;
+
         // Initialize spawner
         setLoadingStatus("Initializing traffic simulation...");
         spawner = new Spawner(roadNetwork, {
-          maxCars: 380, // High cap so streets stay busy
-          globalSpawnRate: 3.0, // Spawn quickly to fill the map
+          maxCars: 650,
+          globalSpawnRate: 12.0, // Huge spawn for demo
           despawnRadius: 25,
           defaultCarSpeed: 40,
           carTypeDistribution: {
@@ -497,7 +563,7 @@ export default function ThreeMap({
         });
 
         spawner.initializeQueensSpawnPoints();
-        spawner.initializeFromRoadNetwork(45); // Spawn from many edges so cars appear everywhere
+        spawner.initializeFromRoadNetwork(70);
         spawnerRef.current = spawner;
         roadNetworkRef.current = roadNetwork;
         console.log(
@@ -1109,14 +1175,21 @@ export default function ThreeMap({
     };
   }, []);
 
-  // Sync placed buildings to traffic: more spawns near buildings + block one lane per building
+  // Sync placed buildings to traffic: barricades, spawns, lane blocks, and burst spawn
   useEffect(() => {
     const spawner = spawnerRef.current;
     const roadNetwork = roadNetworkRef.current;
-    if (!spawner || !roadNetwork || !placedBuildings?.length) {
-      if (spawner && (!placedBuildings || placedBuildings.length === 0)) {
-        spawner.setBlockedEdges(new Set());
-        spawner.setBuildingVicinitySpawning([]);
+    const barricadesGroup = barricadesGroupRef.current;
+
+    if (!spawner || !roadNetwork) return;
+
+    if (!placedBuildings?.length) {
+      spawner.setBlockedEdges(new Set());
+      spawner.setBuildingVicinitySpawning([]);
+      if (barricadesGroup) {
+        while (barricadesGroup.children.length > 0) {
+          barricadesGroup.remove(barricadesGroup.children[0]);
+        }
       }
       return;
     }
@@ -1139,6 +1212,65 @@ export default function ThreeMap({
     spawner.setBuildingVicinitySpawning(
       placedBuildings.map((b) => ({ id: b.id, position: [b.lng, b.lat] })),
     );
+
+    // Place barricades at the point(s) on the road nearest to each building (realistic: right at the site)
+    if (barricadesGroup) {
+      while (barricadesGroup.children.length > 0) {
+        barricadesGroup.remove(barricadesGroup.children[0]);
+      }
+      const OFFSET_ALONG_ROAD_M = 6; // second barricade this many meters along from nearest point
+      placedBuildings.forEach((b) => {
+        const buildingPos: [number, number] = [b.lng, b.lat];
+        const nearEdges = roadNetwork.findEdgesNearPosition(
+          buildingPos,
+          BUILDING_BLOCK_RADIUS_M,
+        );
+        if (nearEdges.length === 0) return;
+        const edge = nearEdges[0];
+        if (!edge.geometry || edge.geometry.length < 2) return;
+        const line = turf.lineString(edge.geometry);
+        const buildingPoint = turf.point(buildingPos);
+        const nearest = turf.nearestPointOnLine(line, buildingPoint, {
+          units: "meters",
+        });
+        const nearestCoords = nearest.geometry
+          .coordinates as [number, number];
+        const loc = (nearest.properties?.location ?? 0) as number;
+        const distanceAlongM =
+          loc <= 1 && loc >= 0 ? loc * edge.length : loc;
+        const positions: [number, number][] = [nearestCoords];
+        const secondM = Math.min(
+          edge.length - 1,
+          Math.max(1, distanceAlongM + OFFSET_ALONG_ROAD_M),
+        );
+        const secondAlong = turf.along(line, secondM / 1000, {
+          units: "kilometers",
+        });
+        positions.push(secondAlong.geometry.coordinates as [number, number]);
+        for (let i = 0; i < positions.length; i++) {
+          const lonLat = positions[i];
+          const next = positions[i + 1] ?? positions[i];
+          const world = CityProjection.projectToWorld(lonLat);
+          const barricade = createBarricadeMesh();
+          barricade.position.set(
+            world.x,
+            world.y + BARRICADE_SCALE * 0.4,
+            world.z,
+          );
+          const bearing = turf.bearing(turf.point(lonLat), turf.point(next));
+          barricade.rotation.y = ((-bearing + 90) * Math.PI) / 180;
+          barricadesGroup.add(barricade);
+        }
+      });
+    }
+
+    // Burst-spawn a bunch of cars around the building for demo visibility
+    const burstCount = spawner.burstSpawnNearBuildings(
+      placedBuildings.map((b) => ({ id: b.id, position: [b.lng, b.lat] })),
+    );
+    if (burstCount > 0) {
+      console.log(`🚧 Burst spawned ${burstCount} cars near placed building(s)`);
+    }
   }, [placedBuildings]);
 
   // Click handler to find coordinates or select buildings
@@ -1653,8 +1785,8 @@ export default function ThreeMap({
       outlinePass.edgeStrength = 5;
       outlinePass.edgeGlow = 1;
       outlinePass.edgeThickness = 2;
-      outlinePass.visibleEdgeColor.set("#003F7C");
-      outlinePass.hiddenEdgeColor.set("#003F7C");
+      outlinePass.visibleEdgeColor.set("#FFD700");
+      outlinePass.hiddenEdgeColor.set("#FFD700");
 
       composer.addPass(outlinePass);
       composerRef.current = composer;
@@ -1854,6 +1986,69 @@ export default function ThreeMap({
     isReady,
     buildingScale,
   ]);
+
+  // Kingston zoning layer (Official Plan Land Use Designation)
+  useEffect(() => {
+    const bbox = {
+      minLat: 44.22,
+      maxLat: 44.24,
+      minLng: -76.51,
+      maxLng: -76.48,
+    };
+    if (!groupsRef.current || !isReady) return;
+
+    const removeZoningGroup = (group: THREE.Group | null) => {
+      if (!group || !groupsRef.current) return;
+      groupsRef.current.dynamicObjects.remove(group);
+      group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry?.dispose();
+          if (obj.material instanceof THREE.Material) obj.material.dispose();
+        }
+      });
+    };
+
+    if (!showZoningLayer) {
+      if (zoningGroupRef.current) {
+        removeZoningGroup(zoningGroupRef.current);
+        zoningGroupRef.current = null;
+      }
+      return;
+    }
+
+    let cancelled = false;
+    loadAndRenderZoningLayer(bbox, CityProjection)
+      .then((group) => {
+        if (!group) return;
+        if (cancelled) {
+          removeZoningGroup(group);
+          return;
+        }
+        zoningGroupRef.current = group;
+        group.position.set(zoningOffset.x, 0, zoningOffset.z);
+        group.rotation.y = (zoningRotationY * Math.PI) / 180;
+        group.scale.x = zoningFlipH ? -1 : 1;
+        groupsRef.current?.dynamicObjects.add(group);
+      })
+      .catch((err) => console.error("Zoning layer load error:", err));
+
+    return () => {
+      cancelled = true;
+      if (zoningGroupRef.current) {
+        removeZoningGroup(zoningGroupRef.current);
+        zoningGroupRef.current = null;
+      }
+    };
+  }, [showZoningLayer, isReady]);
+
+  // Apply zoning offset and rotation when they change
+  useEffect(() => {
+    if (zoningGroupRef.current) {
+      zoningGroupRef.current.position.set(zoningOffset.x, 0, zoningOffset.z);
+      zoningGroupRef.current.rotation.y = (zoningRotationY * Math.PI) / 180;
+      zoningGroupRef.current.scale.x = zoningFlipH ? -1 : 1;
+    }
+  }, [zoningOffset.x, zoningOffset.z, zoningRotationY, zoningFlipH]);
 
   // Update ghost position on mouse move
   useEffect(() => {
