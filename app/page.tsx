@@ -138,52 +138,40 @@ export default function Landing() {
         </section>
 
         {/* ───── YOUR JOURNEY ───── */}
-        <section className="bg-[#f4efe6]">
-          <FeatureSteps
-            title="Building Kingston's Golden Age"
-            subtitle="A new era of prosperity is rising. Housing, hotels, and public spaces are creating jobs, attracting investment, and strengthening our community. The Golden Age is not built in haste — it is crafted with vision, wisdom, and care for generations to come."
-            features={[
-              {
-                step: 'Step 1',
-                title: 'Design for the Ages',
-                content:
-                  'Transform blueprints and ideas into accurate 3D buildings in minutes. Create spaces worthy of a Golden Age — supporting growth, community, and lasting prosperity.',
-                image:
-                  'https://images.unsplash.com/photo-1686164748261-33e13eef70b6?q=80&w=2070&auto=format&fit=crop',
-              },
-              {
-                step: 'Step 2',
-                title: 'Weave Into the City',
-                content:
-                  'Place your vision in real Kingston locations. See how new projects fit into the fabric of neighborhoods, transit, and the long-term flourishing of the city.',
-                image:
-                  'https://images.unsplash.com/photo-1598897270268-f7091c801c3d?q=80&w=2070&auto=format&fit=crop',
-              },
-              {
-                step: 'Step 3',
-                title: 'Leave a Lasting Legacy',
-                content:
-                  'Simulate environmental, traffic, and community impacts before construction begins. Refine designs with data and ensure Kingston\'s Golden Age endures.',
-                image:
-                  'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?q=80&w=2070&auto=format&fit=crop',
-              },
-            ]}
-            autoPlayInterval={4000}
-            imageHeight="h-[500px]"
-          />
-        </section>
-
-        {/* ───── CLOSING ───── */}
-        <section className="lp-closing">
-          <p className="lp-closing-text">
-            Shaping the Golden Age — Built for the City of Kingston at QHacks 2025.
-          </p>
-          <div className="lp-closing-ctas">
-            <Link href="/map" className="lp-btn-warm">Enter the Golden Age</Link>
-            <Link href="/editor" className="lp-btn-outline">Build the Future</Link>
-          </div>
-        </section>
-
+<section className="bg-[#f4efe6]">
+  <FeatureSteps
+    title="Building Kingston's Golden Age"
+    subtitle="Planning Kingston’s future with clarity and precision."
+    features={[
+      {
+        step: 'Step 1',
+        title: 'Shape a New Golden Era',
+        content:
+          'Turn concepts, sketches, and blueprints into intelligent 3D developments. Design spaces that power economic growth, strengthen communities, and define Kingston’s next chapter.',
+        image:
+          'https://images.unsplash.com/photo-1686164748261-33e13eef70b6?q=80&w=2070&auto=format&fit=crop',
+      },
+      {
+        step: 'Step 2',
+        title: 'Build Where Growth Happens',
+        content:
+          'Place projects directly into real city locations. Visualize how housing, business hubs, and public spaces connect neighborhoods and drive a thriving urban ecosystem.',
+        image:
+          'https://images.unsplash.com/photo-1598897270268-f7091c801c3d?q=80&w=2070&auto=format&fit=crop',
+      },
+      {
+        step: 'Step 3',
+        title: 'Design for Generations',
+        content:
+          'Plan with long-term success in mind. Simulate environmental, economic, and social impacts to ensure today’s developments become tomorrow’s lasting legacy.',
+        image:
+          'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?q=80&w=2070&auto=format&fit=crop',
+      },
+    ]}
+    autoPlayInterval={4000}
+    imageHeight="h-[500px]"
+  />
+</section>
         {/* ───── FOOTER ───── */}
         <footer className="lp-footer">
           <a href="https://github.com/Lemirq/qhacks" target="_blank" rel="noopener noreferrer">
