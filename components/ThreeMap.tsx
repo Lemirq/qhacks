@@ -46,6 +46,7 @@ interface ThreeMapProps {
     worldX: number;
     worldY: number;
     worldZ: number;
+    ghostRotationY?: number; // Current rotation of ghost preview
   } | null) => void;
   placedBuildings?: PlacedBuilding[];
   isPlacementMode?: boolean;
@@ -288,6 +289,7 @@ export default function ThreeMap({
   const composerRef = useRef<EffectComposer | null>(null);
   const outlinePassRef = useRef<OutlinePass | null>(null);
   const [selectedOsmBuildingId, setSelectedOsmBuildingId] = useState<string | null>(null);
+  const [ghostRotationY, setGhostRotationY] = useState(0); // Rotation for ghost preview
 
   useEffect(() => {
     if (!canvasRef.current || initialized.current) return;
@@ -738,6 +740,7 @@ export default function ThreeMap({
           worldX: intersectionPoint.x,
           worldY: intersectionPoint.y,
           worldZ: intersectionPoint.z,
+          ghostRotationY: isPlacementMode ? ghostRotationY : undefined,
         };
 
         if (onCoordinateClick) {
@@ -759,10 +762,40 @@ export default function ThreeMap({
       canvas.addEventListener('click', handleCanvasClick);
       return () => canvas.removeEventListener('click', handleCanvasClick);
     }
-  }, [onCoordinateClick, onBuildingSelect, isPlacementMode]);
+  }, [onCoordinateClick, onBuildingSelect, isPlacementMode, ghostRotationY]);
+
+  // Keyboard controls for rotating ghost building during placement mode
+  useEffect(() => {
+    if (!isPlacementMode) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      // Don't interfere with text inputs
+      if ((event.target as HTMLElement).tagName === 'INPUT') return;
+
+      const rotationStep = event.shiftKey ? Math.PI / 4 : Math.PI / 12; // 45° or 15°
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        setGhostRotationY(prev => prev + rotationStep); // Counter-clockwise
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        setGhostRotationY(prev => prev - rotationStep); // Clockwise
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPlacementMode]);
+
+  // Apply rotation to ghost model when ghostRotationY changes
+  useEffect(() => {
+    if (ghostModelRef.current) {
+      ghostModelRef.current.rotation.y = ghostRotationY;
+    }
+  }, [ghostRotationY]);
 
   // Handle OSM building deletion
-  const deleteOsmBuilding = async (buildingId: string) => {
+  const deleteOsmBuilding = async (buildingId: string, skipApiCall = false) => {
     try {
       // Remove from scene
       const mesh = osmBuildingMeshesRef.current.get(buildingId);
@@ -775,24 +808,90 @@ export default function ThreeMap({
         osmBuildingMeshesRef.current.delete(buildingId);
       }
 
-      // Call API to remove from buildings.json
-      const response = await fetch(`/api/map/buildings/${buildingId}`, {
-        method: 'DELETE',
-      });
+      // Call API to remove from buildings.json (unless skipped for batch operations)
+      if (!skipApiCall) {
+        const response = await fetch(`/api/map/buildings/${buildingId}`, {
+          method: 'DELETE',
+        });
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log(`✅ Deleted building ${buildingId}:`, result);
-        if (onOsmBuildingDelete) {
-          onOsmBuildingDelete(buildingId);
+        if (response.ok) {
+          const result = await response.json();
+          console.log(`✅ Deleted building ${buildingId}:`, result);
+          if (onOsmBuildingDelete) {
+            onOsmBuildingDelete(buildingId);
+          }
+        } else {
+          console.error('Failed to delete building from server');
         }
-      } else {
-        console.error('Failed to delete building from server');
       }
 
       setSelectedOsmBuildingId(null);
     } catch (error) {
       console.error('Error deleting OSM building:', error);
+    }
+  };
+
+  // Check for collisions between a loaded 3D model and all OSM buildings
+  const checkAndDeleteCollidingBuildings = async (loadedModel: THREE.Object3D) => {
+    if (!groupsRef.current || osmBuildingMeshesRef.current.size === 0) return;
+
+    const collidingIds: string[] = [];
+
+    // Get the actual bounding box of the loaded model
+    const placedBox = new THREE.Box3().setFromObject(loadedModel);
+
+    console.log(`📦 Checking collisions for placed building. Bounding box:`, {
+      min: placedBox.min,
+      max: placedBox.max,
+      size: placedBox.getSize(new THREE.Vector3())
+    });
+
+    // Check each OSM building for collision
+    osmBuildingMeshesRef.current.forEach((mesh, buildingId) => {
+      // Compute bounding box for the OSM building
+      const osmBox = new THREE.Box3().setFromObject(mesh);
+
+      // Check for intersection
+      if (placedBox.intersectsBox(osmBox)) {
+        collidingIds.push(buildingId);
+        console.log(`  ⚠️ Collision detected with: ${buildingId}`);
+      }
+    });
+
+    if (collidingIds.length > 0) {
+      console.log(`🔄 Found ${collidingIds.length} colliding OSM buildings, removing all...`);
+
+      // Delete all colliding buildings from scene immediately
+      for (const buildingId of collidingIds) {
+        const mesh = osmBuildingMeshesRef.current.get(buildingId);
+        if (mesh && groupsRef.current) {
+          groupsRef.current.staticGeometry.remove(mesh);
+          mesh.geometry.dispose();
+          if (mesh.material instanceof THREE.Material) {
+            mesh.material.dispose();
+          }
+          osmBuildingMeshesRef.current.delete(buildingId);
+          console.log(`  🗑️ Removed from scene: ${buildingId}`);
+        }
+      }
+
+      // Batch delete from server
+      try {
+        const response = await fetch('/api/map/buildings/batch-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: collidingIds }),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log(`✅ Batch deleted ${result.deletedCount} buildings from server`);
+        }
+      } catch (error) {
+        console.error('Error batch deleting buildings:', error);
+      }
+    } else {
+      console.log(`✅ No collisions detected`);
     }
   };
 
@@ -849,6 +948,11 @@ export default function ThreeMap({
           buildingModelsRef.current.set(building.id, model);
 
           console.log(`✅ Loaded building ${building.id} at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`);
+
+          // Check for and delete colliding OSM buildings after model is loaded
+          // Need to update matrix world for accurate bounding box calculation
+          model.updateMatrixWorld(true);
+          checkAndDeleteCollidingBuildings(model);
         },
         undefined,
         (error) => {
