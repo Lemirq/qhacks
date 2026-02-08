@@ -35,13 +35,29 @@ import { Spawner, SpawnedCar } from "@/lib/spawning";
 import { TrafficInfrastructureManager } from "@/lib/trafficInfrastructure";
 import { VehiclePhysics } from "@/lib/vehiclePhysics";
 import { VehicleBehaviorController } from "@/lib/traffic/vehicleBehavior";
-import { SignalCoordinator, createSignalCoordinator } from "@/lib/traffic/signalCoordination";
-import { CollisionSystem, createCollisionSystem } from "@/lib/traffic/collisionSystem";
+import {
+  SignalCoordinator,
+  createSignalCoordinator,
+} from "@/lib/traffic/signalCoordination";
+import {
+  CollisionSystem,
+  createCollisionSystem,
+} from "@/lib/traffic/collisionSystem";
 import { ConfigurationManager } from "@/lib/simulationConfig";
 
 // Rendering and performance
-import { createEnhancedCarModel, updateTurnSignals, updateBrakeLights, EnhancedVehicleMesh } from "@/lib/vehicleRenderer";
-import { VehiclePool, LODManager, StaggeredUpdateManager, PerformanceMonitor } from "@/lib/performanceOptimizer";
+import {
+  createEnhancedCarModel,
+  updateTurnSignals,
+  updateBrakeLights,
+  EnhancedVehicleMesh,
+} from "@/lib/vehicleRenderer";
+import {
+  VehiclePool,
+  LODManager,
+  StaggeredUpdateManager,
+  PerformanceMonitor,
+} from "@/lib/performanceOptimizer";
 
 // Analytics
 import { TrafficAnalytics } from "@/lib/analytics";
@@ -76,6 +92,7 @@ interface ThreeMapProps {
   selectedBuildingId?: string | null;
   onBuildingSelect?: (id: string | null) => void;
   customModelPath?: string | null;
+  onOsmBuildingDelete?: (buildingId: string) => void;
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -287,6 +304,7 @@ export default function ThreeMap({
   selectedBuildingId = null,
   onBuildingSelect,
   customModelPath = null,
+  onOsmBuildingDelete,
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -306,8 +324,12 @@ export default function ThreeMap({
   );
   const ghostModelRef = useRef<THREE.Group | null>(null);
   const buildingModelsRef = useRef<Map<string, THREE.Group>>(new Map());
+  const osmBuildingMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const composerRef = useRef<EffectComposer | null>(null);
   const outlinePassRef = useRef<OutlinePass | null>(null);
+  const [selectedOsmBuildingId, setSelectedOsmBuildingId] = useState<
+    string | null
+  >(null);
 
   // Analytics state
   const analyticsRef = useRef<TrafficAnalytics | null>(null);
@@ -315,7 +337,9 @@ export default function ThreeMap({
   const [dashboardVisible, setDashboardVisible] = useState(false);
 
   // Traffic system managers (integrated systems)
-  const trafficInfrastructureRef = useRef<TrafficInfrastructureManager | null>(null);
+  const trafficInfrastructureRef = useRef<TrafficInfrastructureManager | null>(
+    null,
+  );
   const vehiclePhysicsRef = useRef<VehiclePhysics | null>(null);
   const behaviorControllerRef = useRef<VehicleBehaviorController | null>(null);
   const signalCoordinatorRef = useRef<SignalCoordinator | null>(null);
@@ -391,7 +415,13 @@ export default function ThreeMap({
         const buildings = await fetchBuildings(bbox);
 
         setLoadingStatus("Rendering buildings...");
-        renderBuildings(buildings, CityProjection, groups.staticGeometry);
+        const osmMeshes = renderBuildings(
+          buildings,
+          CityProjection,
+          groups.staticGeometry,
+        );
+        // Store OSM building meshes for click detection
+        osmBuildingMeshesRef.current = osmMeshes;
 
         // Initialize road network
         setLoadingStatus("Fetching road network from OpenStreetMap...");
@@ -421,8 +451,8 @@ export default function ThreeMap({
         // Initialize spawner
         setLoadingStatus("Initializing traffic simulation...");
         spawner = new Spawner(roadNetwork, {
-          maxCars: 200,           // Way more cars!
-          globalSpawnRate: 10.0,  // Spawn 10x faster!
+          maxCars: 200, // Way more cars!
+          globalSpawnRate: 10.0, // Spawn 10x faster!
           despawnRadius: 25,
           defaultCarSpeed: 40,
           carTypeDistribution: {
@@ -487,12 +517,16 @@ export default function ThreeMap({
 
         // Add all vehicle pool meshes to scene
         const pooledMeshes = vehiclePoolRef.current.getAllMeshes();
-        console.log(`📦 Adding ${pooledMeshes.length} pooled vehicle meshes to scene`);
-        pooledMeshes.forEach(mesh => {
+        console.log(
+          `📦 Adding ${pooledMeshes.length} pooled vehicle meshes to scene`,
+        );
+        pooledMeshes.forEach((mesh) => {
           groups.dynamicObjects.add(mesh);
           mesh.visible = false; // Start hidden
         });
-        console.log(`✅ Vehicle pool meshes added to scene (${groups.dynamicObjects.children.length} total objects in dynamicObjects)`);
+        console.log(
+          `✅ Vehicle pool meshes added to scene (${groups.dynamicObjects.children.length} total objects in dynamicObjects)`,
+        );
 
         // Fetch and setup traffic lights using Traffic Infrastructure Manager
         setLoadingStatus("Setting up traffic lights...");
@@ -501,7 +535,9 @@ export default function ThreeMap({
         if (osmTrafficSignals.length > 0 && trafficInfrastructureRef.current) {
           // Load traffic controls into infrastructure manager
           trafficInfrastructureRef.current.loadFromOSM(osmTrafficSignals);
-          console.log(`🚦 Loaded ${osmTrafficSignals.length} traffic controls from OSM`);
+          console.log(
+            `🚦 Loaded ${osmTrafficSignals.length} traffic controls from OSM`,
+          );
 
           // Get all signals from infrastructure manager and create 3D meshes
           const signals = trafficInfrastructureRef.current.getSignals();
@@ -511,7 +547,7 @@ export default function ThreeMap({
             const worldPos = CityProjection.projectToWorld(signal.position);
 
             // Position based on direction
-            if (signal.direction === 'ns') {
+            if (signal.direction === "ns") {
               mesh.position.set(worldPos.x, worldPos.y, worldPos.z);
             } else {
               mesh.position.set(worldPos.x + 10, worldPos.y, worldPos.z + 10);
@@ -532,13 +568,15 @@ export default function ThreeMap({
             });
           });
 
-          console.log(`✅ Traffic Infrastructure Manager loaded ${signals.length} signals`);
+          console.log(
+            `✅ Traffic Infrastructure Manager loaded ${signals.length} signals`,
+          );
 
           // Initialize Signal Coordinator for green wave coordination
           if (signalCoordinatorRef.current) {
             signalCoordinatorRef.current = createSignalCoordinator(
               trafficInfrastructureRef.current,
-              true // Auto-analyze and apply coordination
+              true, // Auto-analyze and apply coordination
             );
             console.log("✅ Signal coordination initialized");
           }
@@ -585,7 +623,7 @@ export default function ThreeMap({
         const signals = trafficInfrastructureRef.current.getSignals();
         signals.forEach((signal) => {
           // Update corresponding traffic light in the old array
-          const oldLight = trafficLights.find(l => l.id === signal.id);
+          const oldLight = trafficLights.find((l) => l.id === signal.id);
           if (oldLight) {
             oldLight.state = signal.state;
             oldLight.timer = signal.timer;
@@ -594,13 +632,20 @@ export default function ThreeMap({
           // Update 3D mesh visualization
           if (signal.mesh) {
             const redLight = signal.mesh.getObjectByName("red") as THREE.Mesh;
-            const yellowLight = signal.mesh.getObjectByName("yellow") as THREE.Mesh;
-            const greenLight = signal.mesh.getObjectByName("green") as THREE.Mesh;
+            const yellowLight = signal.mesh.getObjectByName(
+              "yellow",
+            ) as THREE.Mesh;
+            const greenLight = signal.mesh.getObjectByName(
+              "green",
+            ) as THREE.Mesh;
 
             if (redLight && yellowLight && greenLight) {
-              const redMaterial = redLight.material as THREE.MeshStandardMaterial;
-              const yellowMaterial = yellowLight.material as THREE.MeshStandardMaterial;
-              const greenMaterial = greenLight.material as THREE.MeshStandardMaterial;
+              const redMaterial =
+                redLight.material as THREE.MeshStandardMaterial;
+              const yellowMaterial =
+                yellowLight.material as THREE.MeshStandardMaterial;
+              const greenMaterial =
+                greenLight.material as THREE.MeshStandardMaterial;
 
               if (redMaterial.emissive) {
                 redMaterial.emissive.setHex(
@@ -660,16 +705,29 @@ export default function ThreeMap({
           const processedCarIds = new Set<string>();
 
           // Debug: Log active car count and positions
-          if (Math.floor(currentTime / 1000) % 5 === 0 && currentTime % 1000 < 20) {
-            console.log(`🚗 Active cars: ${activeCars.length}, Meshes: ${Object.keys(carMeshes).length}`);
+          if (
+            Math.floor(currentTime / 1000) % 5 === 0 &&
+            currentTime % 1000 < 20
+          ) {
+            console.log(
+              `🚗 Active cars: ${activeCars.length}, Meshes: ${Object.keys(carMeshes).length}`,
+            );
             if (activeCars.length > 0 && cameraRef.current) {
               const firstCar = activeCars[0];
               const firstMesh = carMeshes[firstCar.id];
-              console.log(`📍 Camera: [${cameraRef.current.position.x.toFixed(0)}, ${cameraRef.current.position.y.toFixed(0)}, ${cameraRef.current.position.z.toFixed(0)}]`);
+              console.log(
+                `📍 Camera: [${cameraRef.current.position.x.toFixed(0)}, ${cameraRef.current.position.y.toFixed(0)}, ${cameraRef.current.position.z.toFixed(0)}]`,
+              );
               if (firstMesh) {
-                console.log(`📍 First car (${firstCar.id}): [${firstMesh.position.x.toFixed(0)}, ${firstMesh.position.y.toFixed(0)}, ${firstMesh.position.z.toFixed(0)}], visible: ${firstMesh.visible}, scale: ${firstMesh.scale.x}`);
-                const distance = cameraRef.current.position.distanceTo(firstMesh.position);
-                console.log(`📏 Distance from camera to first car: ${distance.toFixed(0)} units`);
+                console.log(
+                  `📍 First car (${firstCar.id}): [${firstMesh.position.x.toFixed(0)}, ${firstMesh.position.y.toFixed(0)}, ${firstMesh.position.z.toFixed(0)}], visible: ${firstMesh.visible}, scale: ${firstMesh.scale.x}`,
+                );
+                const distance = cameraRef.current.position.distanceTo(
+                  firstMesh.position,
+                );
+                console.log(
+                  `📏 Distance from camera to first car: ${distance.toFixed(0)} units`,
+                );
               }
             }
           }
@@ -699,22 +757,34 @@ export default function ThreeMap({
 
               // Try to get from pool
               if (vehiclePoolRef.current) {
-                mesh = vehiclePoolRef.current.acquire(spawnedCar.type, spawnedCar.color);
+                mesh = vehiclePoolRef.current.acquire(
+                  spawnedCar.type,
+                  spawnedCar.color,
+                );
                 if (mesh) {
-                  console.log(`♻️ Acquired pooled mesh for ${spawnedCar.id} (${spawnedCar.type})`);
+                  console.log(
+                    `♻️ Acquired pooled mesh for ${spawnedCar.id} (${spawnedCar.type})`,
+                  );
                 }
               }
 
               // Fallback to creating new mesh
               if (!mesh) {
-                console.log(`🆕 Creating new mesh for ${spawnedCar.id} (${spawnedCar.type})`);
-                mesh = createEnhancedCarModel(spawnedCar.type, spawnedCar.color);
+                console.log(
+                  `🆕 Creating new mesh for ${spawnedCar.id} (${spawnedCar.type})`,
+                );
+                mesh = createEnhancedCarModel(
+                  spawnedCar.type,
+                  spawnedCar.color,
+                );
                 groupsRef.current?.dynamicObjects.add(mesh);
               }
 
               carMeshes[spawnedCar.id] = mesh;
               spawnedCar.meshRef = mesh; // Link mesh to car data
-              console.log(`✅ Mesh ${mesh ? 'created' : 'FAILED'} for ${spawnedCar.id}, visible: ${mesh?.visible}, parent: ${mesh?.parent?.type}`);
+              console.log(
+                `✅ Mesh ${mesh ? "created" : "FAILED"} for ${spawnedCar.id}, visible: ${mesh?.visible}, parent: ${mesh?.parent?.type}`,
+              );
 
               // Register for staggered updates
               if (staggeredUpdateRef.current) {
@@ -740,27 +810,44 @@ export default function ThreeMap({
             // 4. Position update
             // 5. Visual updates (lights, LOD)
 
-            const allCarsMap = new Map(activeCars.map(car => [car.id, car]));
+            const allCarsMap = new Map(activeCars.map((car) => [car.id, car]));
 
             // 1. Evaluate vehicle behavior
-            if (behaviorControllerRef.current && trafficInfrastructureRef.current && collisionSystemRef.current) {
-              const behaviorResult = behaviorControllerRef.current.evaluate(spawnedCar, {
-                infrastructureManager: trafficInfrastructureRef.current,
-                collisionSystem: collisionSystemRef.current,
-                allVehicles: allCarsMap,
-                deltaTime,
-              });
+            if (
+              behaviorControllerRef.current &&
+              trafficInfrastructureRef.current &&
+              collisionSystemRef.current
+            ) {
+              const behaviorResult = behaviorControllerRef.current.evaluate(
+                spawnedCar,
+                {
+                  infrastructureManager: trafficInfrastructureRef.current,
+                  collisionSystem: collisionSystemRef.current,
+                  allVehicles: allCarsMap,
+                  deltaTime,
+                },
+              );
 
               spawnedCar.targetSpeed = behaviorResult.targetSpeed;
               spawnedCar.acceleration = behaviorResult.acceleration;
               spawnedCar.currentBehavior = behaviorResult.state;
 
               // Apply behavior to speed
-              behaviorControllerRef.current.applyBehavior(spawnedCar, behaviorResult, deltaTime);
+              behaviorControllerRef.current.applyBehavior(
+                spawnedCar,
+                behaviorResult,
+                deltaTime,
+              );
 
               // Debug first car
-              if (spawnedCar.id === 'car-0' && Math.floor(currentTime / 1000) % 2 === 0 && currentTime % 1000 < 20) {
-                console.log(`🚙 Car-0: speed=${spawnedCar.speed.toFixed(1)}, targetSpeed=${spawnedCar.targetSpeed.toFixed(1)}, behavior=${spawnedCar.currentBehavior}`);
+              if (
+                spawnedCar.id === "car-0" &&
+                Math.floor(currentTime / 1000) % 2 === 0 &&
+                currentTime % 1000 < 20
+              ) {
+                console.log(
+                  `🚙 Car-0: speed=${spawnedCar.speed.toFixed(1)}, targetSpeed=${spawnedCar.targetSpeed.toFixed(1)}, behavior=${spawnedCar.currentBehavior}`,
+                );
               }
             } else {
               // FALLBACK: If behavior system not working, just set speed directly!
@@ -776,13 +863,20 @@ export default function ThreeMap({
             // 3. Update visual mesh
             const mesh = carMeshes[spawnedCar.id] as EnhancedVehicleMesh;
             if (mesh) {
-              const worldPos = CityProjection.projectToWorld(spawnedCar.position);
+              const worldPos = CityProjection.projectToWorld(
+                spawnedCar.position,
+              );
               mesh.position.set(worldPos.x, worldPos.y + 1, worldPos.z);
               mesh.rotation.y = (-spawnedCar.bearing * Math.PI) / 180;
 
               // Debug: Log first car position once
-              if (spawnedCar.id === 'car-0' && Math.floor(currentTime / 1000) === 1) {
-                console.log(`🎯 Car position - Lat/Lon: [${spawnedCar.position}], World: [${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}], Visible: ${mesh.visible}, In scene: ${mesh.parent !== null}`);
+              if (
+                spawnedCar.id === "car-0" &&
+                Math.floor(currentTime / 1000) === 1
+              ) {
+                console.log(
+                  `🎯 Car position - Lat/Lon: [${spawnedCar.position}], World: [${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}], Visible: ${mesh.visible}, In scene: ${mesh.parent !== null}`,
+                );
               }
 
               // 4. Update turn signals
@@ -794,8 +888,10 @@ export default function ThreeMap({
 
               // 6. Apply LOD based on distance from camera
               if (lodManagerRef.current) {
-                const currentLOD = mesh.userData.lodLevel || 'full';
-                const newLOD = lodManagerRef.current.calculateLODLevel(mesh.position);
+                const currentLOD = mesh.userData.lodLevel || "full";
+                const newLOD = lodManagerRef.current.calculateLODLevel(
+                  mesh.position,
+                );
                 if (newLOD !== currentLOD) {
                   lodManagerRef.current.applyLOD(mesh, newLOD, currentLOD);
                   mesh.userData.lodLevel = newLOD;
@@ -842,7 +938,9 @@ export default function ThreeMap({
         // Analytics: Record update time
         const updateEndTime = performance.now();
         if (analyticsRef.current) {
-          analyticsRef.current.recordUpdateTime(updateEndTime - updateStartTime);
+          analyticsRef.current.recordUpdateTime(
+            updateEndTime - updateStartTime,
+          );
         }
 
         // Update tweens
@@ -864,14 +962,16 @@ export default function ThreeMap({
         // Analytics: Record render time and frame time
         const renderEndTime = performance.now();
         if (analyticsRef.current) {
-          analyticsRef.current.recordRenderTime(renderEndTime - renderStartTime);
+          analyticsRef.current.recordRenderTime(
+            renderEndTime - renderStartTime,
+          );
           analyticsRef.current.recordFrameTime(renderEndTime - frameStartTime);
 
           // Create snapshot with active cars
           if (spawner) {
             analyticsRef.current.createSnapshot(
               spawner.getActiveCars(),
-              currentTime
+              currentTime,
             );
           }
         }
@@ -937,7 +1037,7 @@ export default function ThreeMap({
       // Update raycaster with mouse position
       raycasterRef.current.setFromCamera(mouse, cameraRef.current);
 
-      // Check if we clicked on a building first
+      // Check if we clicked on a custom placed building first
       const buildingObjects = Array.from(buildingModelsRef.current.values());
       const buildingIntersects = raycasterRef.current.intersectObjects(
         buildingObjects,
@@ -958,6 +1058,32 @@ export default function ThreeMap({
           onBuildingSelect
         ) {
           onBuildingSelect(clickedBuilding.userData.buildingId);
+          setSelectedOsmBuildingId(null);
+          return; // Don't process as coordinate click
+        }
+      }
+
+      // Check if we clicked on an OSM building (from buildings.json)
+      const osmBuildingObjects = Array.from(
+        osmBuildingMeshesRef.current.values(),
+      );
+      const osmBuildingIntersects = raycasterRef.current.intersectObjects(
+        osmBuildingObjects,
+        true,
+      );
+
+      if (osmBuildingIntersects.length > 0 && !isPlacementMode) {
+        const clickedMesh = osmBuildingIntersects[0].object as THREE.Mesh;
+        if (
+          clickedMesh.userData.isOsmBuilding &&
+          clickedMesh.userData.buildingId
+        ) {
+          const buildingId = clickedMesh.userData.buildingId;
+          console.log("Clicked OSM building:", buildingId);
+          setSelectedOsmBuildingId(buildingId);
+          if (onBuildingSelect) {
+            onBuildingSelect(null); // Deselect custom building
+          }
           return; // Don't process as coordinate click
         }
       }
@@ -1005,10 +1131,11 @@ export default function ThreeMap({
           onCoordinateClick(coordinate);
         }
 
-        // Deselect building if clicking elsewhere
+        // Deselect buildings if clicking elsewhere
         if (onBuildingSelect && !isPlacementMode) {
           onBuildingSelect(null);
         }
+        setSelectedOsmBuildingId(null);
 
         console.log("Clicked coordinate:", {
           lat,
@@ -1025,26 +1152,70 @@ export default function ThreeMap({
     }
   }, [onCoordinateClick, onBuildingSelect, isPlacementMode]);
 
+  // Handle OSM building deletion
+  const deleteOsmBuilding = async (buildingId: string) => {
+    try {
+      // Remove from scene
+      const mesh = osmBuildingMeshesRef.current.get(buildingId);
+      if (mesh && groupsRef.current) {
+        groupsRef.current.staticGeometry.remove(mesh);
+        mesh.geometry.dispose();
+        if (mesh.material instanceof THREE.Material) {
+          mesh.material.dispose();
+        }
+        osmBuildingMeshesRef.current.delete(buildingId);
+      }
+
+      // Call API to remove from buildings.json
+      const response = await fetch(`/api/map/buildings/${buildingId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`✅ Deleted building ${buildingId}:`, result);
+        if (onOsmBuildingDelete) {
+          onOsmBuildingDelete(buildingId);
+        }
+      } else {
+        console.error("Failed to delete building from server");
+      }
+
+      setSelectedOsmBuildingId(null);
+    } catch (error) {
+      console.error("Error deleting OSM building:", error);
+    }
+  };
+
   // Load and display placed buildings
   useEffect(() => {
     if (!groupsRef.current || !isReady) return;
 
     const loader = new GLTFLoader();
-    const loadedModels: THREE.Group[] = [];
 
-    // Remove all previously loaded custom buildings
-    const customBuildingsGroup = groupsRef.current.dynamicObjects;
-    const objectsToRemove: THREE.Object3D[] = [];
-    customBuildingsGroup.children.forEach((child) => {
-      if (child.userData.isCustomBuilding) {
-        objectsToRemove.push(child);
+    // Track which buildings currently exist
+    const currentBuildingIds = new Set(placedBuildings.map((b) => b.id));
+
+    // Remove buildings that no longer exist
+    const existingIds = Array.from(buildingModelsRef.current.keys());
+    existingIds.forEach((id) => {
+      if (!currentBuildingIds.has(id)) {
+        const model = buildingModelsRef.current.get(id);
+        if (model) {
+          groupsRef.current?.dynamicObjects.remove(model);
+          buildingModelsRef.current.delete(id);
+          console.log(`🗑️ Removed building ${id}`);
+        }
       }
     });
-    objectsToRemove.forEach((obj) => customBuildingsGroup.remove(obj));
-    buildingModelsRef.current.clear();
 
-    // Load and place each building
+    // Load new buildings (only ones that don't exist yet)
     placedBuildings.forEach((building) => {
+      // Skip if this building is already loaded
+      if (buildingModelsRef.current.has(building.id)) {
+        return;
+      }
+
       loader.load(
         building.modelPath,
         (gltf) => {
@@ -1074,11 +1245,13 @@ export default function ThreeMap({
 
           // Add to scene
           groupsRef.current?.dynamicObjects.add(model);
-          loadedModels.push(model);
           buildingModelsRef.current.set(building.id, model);
 
           console.log(
             `✅ Loaded building at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`,
+          );
+          console.log(
+            `✅ Loaded building ${building.id} at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`,
           );
         },
         undefined,
@@ -1087,15 +1260,7 @@ export default function ThreeMap({
         },
       );
     });
-
-    return () => {
-      // Cleanup loaded models when component unmounts
-      loadedModels.forEach((model) => {
-        groupsRef.current?.dynamicObjects.remove(model);
-      });
-      buildingModelsRef.current.clear();
-    };
-  }, [placedBuildings, isReady]);
+  }, [placedBuildings, isReady, buildingScale]);
 
   // Load ghost preview model
   useEffect(() => {
@@ -1196,18 +1361,29 @@ export default function ThreeMap({
 
     // Update outline
     if (outlinePassRef.current) {
+      const selectedObjects: THREE.Object3D[] = [];
+
+      // Check for selected custom building
       if (selectedBuildingId) {
         const selectedModel = buildingModelsRef.current.get(selectedBuildingId);
         if (selectedModel) {
-          outlinePassRef.current.selectedObjects = [selectedModel];
-        } else {
-          outlinePassRef.current.selectedObjects = [];
+          selectedObjects.push(selectedModel);
         }
-      } else {
-        outlinePassRef.current.selectedObjects = [];
       }
+
+      // Check for selected OSM building
+      if (selectedOsmBuildingId) {
+        const selectedOsmMesh = osmBuildingMeshesRef.current.get(
+          selectedOsmBuildingId,
+        );
+        if (selectedOsmMesh) {
+          selectedObjects.push(selectedOsmMesh);
+        }
+      }
+
+      outlinePassRef.current.selectedObjects = selectedObjects;
     }
-  }, [selectedBuildingId]);
+  }, [selectedBuildingId, selectedOsmBuildingId]);
 
   // Update building transforms in real-time
   useEffect(() => {
@@ -1278,12 +1454,20 @@ export default function ThreeMap({
           if (child instanceof THREE.Mesh) {
             if (isOverBuilding) {
               // Red for invalid placement
-              (child.material as THREE.MeshStandardMaterial).color.set(0xff0000);
-              (child.material as THREE.MeshStandardMaterial).emissive.set(0x330000);
+              (child.material as THREE.MeshStandardMaterial).color.set(
+                0xff0000,
+              );
+              (child.material as THREE.MeshStandardMaterial).emissive.set(
+                0x330000,
+              );
             } else {
               // Green for valid placement
-              (child.material as THREE.MeshStandardMaterial).color.set(0x00ff00);
-              (child.material as THREE.MeshStandardMaterial).emissive.set(0x003300);
+              (child.material as THREE.MeshStandardMaterial).color.set(
+                0x00ff00,
+              );
+              (child.material as THREE.MeshStandardMaterial).emissive.set(
+                0x003300,
+              );
             }
           }
         });
@@ -1375,6 +1559,36 @@ export default function ThreeMap({
             className="px-4 py-2 bg-blue-600/90 hover:bg-blue-500/90 text-white rounded-lg shadow-lg text-sm font-medium transition-colors backdrop-blur-sm"
           >
             Analytics Dashboard
+          </button>
+        </div>
+      )}
+
+      {/* Selected OSM Building Panel */}
+      {selectedOsmBuildingId && (
+        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 bg-white border border-gray-300 rounded-lg shadow-lg z-20 p-4 min-w-[280px]">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-gray-400 rounded"></div>
+              <span className="font-bold text-gray-800 text-sm">
+                OSM Building Selected
+              </span>
+            </div>
+            <button
+              onClick={() => setSelectedOsmBuildingId(null)}
+              className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="text-xs text-gray-600 mb-3 font-mono bg-gray-50 p-2 rounded">
+            ID: {selectedOsmBuildingId}
+          </div>
+          <button
+            onClick={() => deleteOsmBuilding(selectedOsmBuildingId)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm font-semibold transition-colors"
+          >
+            <span>🗑️</span>
+            Delete Building
           </button>
         </div>
       )}

@@ -10,7 +10,10 @@
       "Bash(python3:*)",
       "Bash(cat:*)",
       "Bash(wc:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(sort:*)",
+      "Bash(npx tsc:*)",
+      "Bash(timeout 15 npm run dev:*)"
     ]
   }
 }

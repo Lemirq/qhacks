@@ -22,15 +22,17 @@ export const HEIGHT_MULTIPLIER = 8.0;
  * @param buildings - Array of buildings to render
  * @param projection - CityProjection instance for coordinate conversion
  * @param scene - Three.js scene to add meshes to
+ * @returns Map of building IDs to their meshes
  */
 export function renderBuildings(
   buildings: Building[],
   projection: typeof CityProjection,
-  scene: THREE.Scene,
-): void {
+  scene: THREE.Object3D,
+): Map<string, THREE.Mesh> {
   console.log(`Rendering ${buildings.length} buildings...`);
 
   let rendered = 0;
+  const meshMap = new Map<string, THREE.Mesh>();
 
   buildings.forEach((building) => {
     try {
@@ -40,6 +42,7 @@ export function renderBuildings(
       if (mesh) {
         // Add to scene
         scene.add(mesh);
+        meshMap.set(building.id, mesh);
         rendered++;
       }
     } catch (error) {
@@ -48,6 +51,7 @@ export function renderBuildings(
   });
 
   console.log(`✅ Rendered ${rendered} buildings`);
+  return meshMap;
 }
 
 /**
@@ -122,8 +126,14 @@ function createBuildingMesh(
   mesh.castShadow = true;
   mesh.receiveShadow = true;
 
-  // Set mesh name for debugging
+  // Set mesh name and userData for identification
   mesh.name = building.id;
+  mesh.userData = {
+    buildingId: building.id,
+    isOsmBuilding: true,
+    type: building.type,
+    height: building.height,
+  };
 
   return mesh;
 }
