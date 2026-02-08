@@ -4,8 +4,8 @@
  * Noise varies by construction phase (slice complexity) and deterministic randomness over time.
  */
 
-/** Base construction noise at 1m from source (typical heavy construction: 85-95 dB) */
-const BASE_SOURCE_DB = 90;
+/** Base construction noise at 1m from source (jackhammers, pile drivers, heavy equipment: 100-115 dB) */
+const BASE_SOURCE_DB = 108;
 
 /** Inverse-square law: L2 = L1 - 20*log10(d2/d1). At d meters: dB = SOURCE - 20*log10(d) */
 export function dbAtDistanceMeters(
@@ -59,7 +59,7 @@ export function getConstructionSourceDb(
   const randomFactor = 0.7 + seededRandom(seed) * 0.6; // 0.7–1.3
 
   const sourceDb = BASE_SOURCE_DB * phaseIntensity * randomFactor;
-  return Math.max(60, Math.min(98, sourceDb));
+  return Math.max(85, Math.min(118, sourceDb));
 }
 
 /** Check if a building is under construction on the given date */
@@ -74,6 +74,19 @@ export function isUnderConstruction(
   return now >= start && now <= end;
 }
 
+/** Construction progress 0–1 at a given date. 0 = just started, 1 = completed or past end. */
+export function getConstructionProgress(
+  startDate: string,
+  durationDays: number,
+  currentDate: string
+): number {
+  const start = new Date(startDate).getTime();
+  const durationMs = durationDays * 24 * 60 * 60 * 1000;
+  const now = new Date(currentDate).getTime();
+  const elapsed = now - start;
+  return Math.max(0, Math.min(1, elapsed / durationMs));
+}
+
 /** Distance between two points in world space (XZ plane) */
 export function distance2D(
   ax: number,
@@ -86,10 +99,10 @@ export function distance2D(
 
 /** DB contour ring radii for visualization (distances where dB drops to these levels) */
 export const DB_CONTOURS = [
-  { db: 85, label: "85 dB" },
-  { db: 70, label: "70 dB" },
-  { db: 55, label: "55 dB" },
-  { db: 40, label: "40 dB" },
+  { db: 95, label: "95 dB" },
+  { db: 80, label: "80 dB" },
+  { db: 65, label: "65 dB" },
+  { db: 50, label: "50 dB" },
 ] as const;
 
 /** Get distance (m) at which noise drops to target dB */
@@ -150,7 +163,7 @@ export function computeHappinessScore(
   }
 
   const avgDb = count > 0 ? totalDb / count : 0;
-  const score = Math.max(0, Math.min(100, 100 - (avgDb / 85) * 100));
+  const score = Math.max(0, Math.min(100, 100 - (avgDb / 100) * 100));
 
   return { score: Math.round(score), avgDb: Math.round(avgDb * 10) / 10, activeCount: active.length };
 }

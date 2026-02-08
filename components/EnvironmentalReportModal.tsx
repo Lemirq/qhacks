@@ -62,25 +62,42 @@ interface EnvironmentalReport {
   recommendations: string[];
 }
 
+export interface MetricsSnapshot {
+  timelineDate: string;
+  co2Emissions: number;
+  energyConsumption: number;
+  waterUsage: number;
+  totalFootprint: number;
+  materialComplexity: string;
+  sustainabilityScore: number;
+  populationHappiness: number;
+  avgDb: number;
+  activeCount: number;
+}
+
 interface EnvironmentalReportModalProps {
   visible: boolean;
   onClose: () => void;
   buildings: PlacedBuilding[];
+  /** Snapshot of metrics at current timeline when report is generated */
+  snapshot?: MetricsSnapshot | null;
 }
 
 export default function EnvironmentalReportModal({
   visible,
   onClose,
   buildings,
+  snapshot = null,
 }: EnvironmentalReportModalProps) {
   const [report, setReport] = useState<EnvironmentalReport | null>(null);
+  const [reportSnapshotDate, setReportSnapshotDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedBuildingIndex, setSelectedBuildingIndex] = useState(0);
 
   const generateReport = async () => {
     if (buildings.length === 0) {
-      setError("No buildings placed on the map to analyze");
+      setError("No buildings active at the current timeline date. Move the timeline to a date with active construction.");
       return;
     }
 
@@ -91,7 +108,7 @@ export default function EnvironmentalReportModal({
       const response = await fetch("/api/environmental-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ buildings }),
+        body: JSON.stringify({ buildings, snapshot: snapshot ?? undefined }),
       });
 
       if (!response.ok) {
@@ -101,6 +118,7 @@ export default function EnvironmentalReportModal({
 
       const data = await response.json();
       setReport(data.report);
+      setReportSnapshotDate(data.snapshotDate ?? snapshot?.timelineDate ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate report");
     } finally {
@@ -111,9 +129,12 @@ export default function EnvironmentalReportModal({
   const exportReport = () => {
     if (!report) return;
 
+    const asOfLabel = reportSnapshotDate
+      ? `Report snapshot as of: ${new Date(reportSnapshotDate).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}`
+      : "";
     const reportText = `
 ENVIRONMENTAL IMPACT ASSESSMENT REPORT
-Generated: ${new Date().toLocaleDateString()}
+${asOfLabel ? asOfLabel + "\n" : ""}Generated: ${new Date().toLocaleDateString()}
 Location: Kingston, Ontario, Canada
 
 ================================================================================
@@ -173,7 +194,7 @@ END OF REPORT
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `environmental-report-${new Date().toISOString().split("T")[0]}.txt`;
+    a.download = `environmental-report-${reportSnapshotDate ? reportSnapshotDate : new Date().toISOString().split("T")[0]}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -227,6 +248,11 @@ END OF REPORT
               </h2>
               <p className="text-xs text-slate-500">
                 Kingston, Ontario Development Analysis
+                {reportSnapshotDate && (
+                  <span className="block mt-0.5 text-green-700 font-medium">
+                    Report snapshot as of {new Date(reportSnapshotDate).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -260,9 +286,9 @@ END OF REPORT
                 Generate Environmental Impact Report
               </h3>
               <p className="text-slate-500 mb-6 max-w-md mx-auto">
-                Analyze the environmental and societal impact of {buildings.length} proposed
-                building{buildings.length !== 1 ? "s" : ""} at their specific GPS coordinates
-                in Kingston, Ontario.
+                {snapshot
+                  ? `Generate a report using the current timeline snapshot (${new Date(snapshot.timelineDate).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}). Metrics and ${buildings.length} active building${buildings.length !== 1 ? "s" : ""} will be captured at this exact time.`
+                  : `Analyze the environmental and societal impact of ${buildings.length} proposed building${buildings.length !== 1 ? "s" : ""} at their specific GPS coordinates in Kingston, Ontario.`}
               </p>
               <button
                 onClick={generateReport}

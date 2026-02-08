@@ -340,7 +340,7 @@ export class RoadNetwork {
    * Get the bearing (direction) of an edge at a specific node
    */
   getEdgeBearingAtNode(edge: RoadEdge, nodeId: string): number {
-    const isStart = edge.startNodeId === nodeId;
+    const isStart = edge.from === nodeId;
     const coords = edge.geometry;
 
     if (coords.length < 2) return 0;
@@ -424,5 +424,32 @@ export class RoadNetwork {
     return Array.from(this.nodes.values()).filter(
       (node) => node.type === "intersection"
     );
+  }
+
+  /**
+   * Find edges within radius (meters) of a position. Used for building-vicinity
+   * spawn points and for blocking the "forward" lane near placed buildings.
+   * Returns edges sorted by distance (nearest first).
+   */
+  findEdgesNearPosition(
+    position: [number, number],
+    radiusMeters: number
+  ): RoadEdge[] {
+    const point = turf.point(position);
+    const withDistance: { edge: RoadEdge; distance: number }[] = [];
+
+    this.edges.forEach((edge) => {
+      if (!edge.geometry || edge.geometry.length < 2) return;
+      const line = turf.lineString(edge.geometry);
+      const distance = turf.pointToLineDistance(point, line, {
+        units: "meters",
+      });
+      if (distance <= radiusMeters) {
+        withDistance.push({ edge, distance });
+      }
+    });
+
+    withDistance.sort((a, b) => a.distance - b.distance);
+    return withDistance.map((x) => x.edge);
   }
 }
