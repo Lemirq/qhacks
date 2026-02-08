@@ -13,13 +13,14 @@
       "Bash(node scripts/generate-sounds.mjs:*)",
       "Bash(dir:*)",
       "Bash(npx tsc:*)",
-      "Bash(del:*)"
+      "Bash(del:*)",
+      "Bash(npm install:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\phine\\OneDrive\\Laptop\\HACKATHON\\qhacks\\qhacks\\public\\sounds",
       "Bash(sort:*)",
       "Bash(npx tsc:*)",
-      "Bash(timeout 15 npm run dev:*)",
+      "Bash(timeout 15 npm run dev:*)"
     ]
   }
 }
