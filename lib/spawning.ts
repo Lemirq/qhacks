@@ -44,6 +44,7 @@ export interface SpawnedCar {
 
   // Behavior fields
   currentBehavior?: string; // Current behavior state (for debugging)
+  behaviorReason?: string; // Why current speed/state (e.g. "Following lead vehicle", "In red zone")
   behaviorTimer: number; // Timer for behavior state changes
 
   // Rendering fields
@@ -64,10 +65,10 @@ export interface SpawnerConfig {
 }
 
 const DEFAULT_CONFIG: SpawnerConfig = {
-  maxCars: 120,
+  maxCars: 400, // Allow lots of cars near construction
   globalSpawnRate: 1.5,
   despawnRadius: 20,
-  defaultCarSpeed: 40,
+  defaultCarSpeed: 72, // Fast normal driving; slow zones (red 5, yellow 22) unchanged
   carTypeDistribution: {
     sedan: 0.4, // 40%
     suv: 0.25, // 25%
@@ -297,40 +298,83 @@ export class Spawner {
   }
 
   /**
-   * Burst-spawn many cars at once around placed buildings (for demo visibility).
-   * Places cars at spaced positions along nearby roads so they don't overlap.
-   * Uses min spacing ~14m so collision/following keeps them separated.
+   * Burst-spawn cars directly beside placed buildings.
+   * Uses the closest point on each nearby edge to the building so cars appear right beside it.
+   * Falls back to larger radii if no roads are very close.
    */
   burstSpawnNearBuildings(
     buildings: { id: string; position: [number, number] }[],
   ): number {
     const MIN_SPACING_M = 6;
-    const MAX_BURST_PER_BUILDING = 180;
-    const radiusM = 120;
+    const BURST_MIN = 60;
+    const BURST_MAX = 140;
     let spawned = 0;
 
     for (const building of buildings) {
-      const nearEdges = this.roadNetwork.findEdgesNearPosition(
+      // Prefer edges right beside the building (40m), then 120m, then 250m
+      let nearEdges = this.roadNetwork.findEdgesNearPosition(
         building.position,
-        radiusM,
+        40,
       );
+      if (nearEdges.length === 0) {
+        nearEdges = this.roadNetwork.findEdgesNearPosition(
+          building.position,
+          120,
+        );
+      }
+      if (nearEdges.length === 0) {
+        nearEdges = this.roadNetwork.findEdgesNearPosition(
+          building.position,
+          250,
+        );
+      }
+
       const slots: { position: [number, number]; distanceOnEdge: number; edgeId: string }[] = [];
+      const APPROACH_DISTANCES_M = [40, 80, 120, 160]; // spawn this far before building so they drive past it
+
       for (const edge of nearEdges) {
         if (this.blockedEdgeIds.has(edge.id)) continue;
-        const points = this.roadNetwork.samplePointsAlongEdge(
+        const line = turf.lineString(edge.geometry);
+        // Point on edge nearest to the building (they will drive past this)
+        const distanceAlong = this.roadNetwork.getDistanceAlongEdge(
           edge.id,
-          MIN_SPACING_M,
+          building.position,
         );
-        for (const p of points) {
+
+        // Pass-through slots: spawn along the road BEFORE the building so their path goes past it
+        for (const approachM of APPROACH_DISTANCES_M) {
+          const d = Math.max(0, distanceAlong - approachM);
+          if (d < edge.length - 0.5) {
+            const along = turf.along(line, d / 1000, { units: "kilometers" });
+            slots.push({
+              position: along.geometry.coordinates as [number, number],
+              distanceOnEdge: d,
+              edgeId: edge.id,
+            });
+          }
+        }
+
+        // Some slots right beside the building (for density)
+        const alongAt = turf.along(line, distanceAlong / 1000, { units: "kilometers" });
+        slots.push({
+          position: alongAt.geometry.coordinates as [number, number],
+          distanceOnEdge: distanceAlong,
+          edgeId: edge.id,
+        });
+        for (const offset of [-1, 1, 2].map((k) => k * MIN_SPACING_M)) {
+          const d = Math.max(0, Math.min(edge.length - 0.5, distanceAlong + offset));
+          const a = turf.along(line, d / 1000, { units: "kilometers" });
           slots.push({
-            position: p.position,
-            distanceOnEdge: p.distanceOnEdge,
+            position: a.geometry.coordinates as [number, number],
+            distanceOnEdge: d,
             edgeId: edge.id,
           });
         }
       }
+
+      const want = BURST_MIN + Math.floor(Math.random() * (BURST_MAX - BURST_MIN + 1));
       const toSpawn = Math.min(
-        MAX_BURST_PER_BUILDING,
+        want,
         slots.length,
         this.config.maxCars - this.activeCars.size,
       );
@@ -354,22 +398,29 @@ export class Spawner {
     edgeId: string,
     distanceOnEdge: number,
   ): SpawnedCar | null {
-    const destination = this.selectDestination();
-    if (!destination) return null;
-
     const edge = this.roadNetwork.getEdge(edgeId);
     if (!edge) return null;
     const toNode = this.roadNetwork.getNode(edge.to);
     if (!toNode) return null;
 
-    const routeFromEnd = this.pathfinder.findRoute(
-      toNode.position,
-      destination.position,
+    const opts =
       this.blockedEdgeIds.size > 0
         ? { blockedEdgeIds: this.blockedEdgeIds }
-        : undefined,
-    );
-    if (!routeFromEnd || routeFromEnd.edges.length === 0) return null;
+        : undefined;
+    let routeFromEnd: Route | null = null;
+    let destination: Destination | null = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      destination = this.selectDestination();
+      if (!destination) break;
+      routeFromEnd = this.pathfinder.findRoute(
+        toNode.position,
+        destination.position,
+        opts,
+      );
+      if (routeFromEnd?.edges.length) break;
+    }
+    if (!destination || !routeFromEnd || routeFromEnd.edges.length === 0)
+      return null;
 
     const line = turf.lineString(edge.geometry);
     const along = turf.along(line, distanceOnEdge / 1000, {

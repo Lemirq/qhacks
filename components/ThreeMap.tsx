@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import * as THREE from "three";
 import * as turf from "@turf/turf";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -116,6 +117,13 @@ interface ThreeMapProps {
   zoningRotationY?: number;
   /** Flip zoning layer horizontally */
   zoningFlipH?: boolean;
+  /** When provided, debug/dashboard visibility is controlled by parent (e.g. buttons in sidebar) */
+  debugOverlayVisible?: boolean;
+  onDebugOverlayChange?: (visible: boolean) => void;
+  dashboardVisible?: boolean;
+  onDashboardVisibleChange?: (visible: boolean) => void;
+  /** When set, panels (car details, debug, analytics) are portaled here so they appear above sidebars */
+  panelsPortalRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -293,48 +301,79 @@ function createTrafficLightModel(): THREE.Group {
 }
 
 const MAP_SCALE = 10 / 1.4;
-const BARRICADE_SCALE = 3 * MAP_SCALE;
 
-/** A couple of visible barricades in the construction area (no full road span). */
-function createBarricadeMesh(): THREE.Group {
+/** Construction zone: flat 10 km/h when car is within this radius of a building */
+const CONSTRUCTION_ZONE_RADIUS_M = 20;
+const CONSTRUCTION_ZONE_SPEED_LIMIT = 10; // flat 10 km/h
+
+/** Red strip material for construction zone on the road */
+const RED_STRIP_MATERIAL = new THREE.MeshBasicMaterial({
+  color: 0xcc0000,
+  transparent: true,
+  opacity: 0.92,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+});
+
+/**
+ * Create a red strip mesh along a path (road segment) in world space.
+ * Used to show "slow down" construction zone directly on the road.
+ */
+function createRedStripOnRoad(
+  worldPoints: THREE.Vector3[],
+  widthScene: number,
+): THREE.Mesh {
+  if (worldPoints.length < 2) {
+    return new THREE.Mesh(new THREE.BufferGeometry(), RED_STRIP_MATERIAL);
+  }
+  const half = widthScene / 2;
+  const vertices: number[] = [];
+  const indices: number[] = [];
+
+  for (let i = 0; i < worldPoints.length - 1; i++) {
+    const p1 = worldPoints[i];
+    const p2 = worldPoints[i + 1];
+    const dx = p2.x - p1.x;
+    const dz = p2.z - p1.z;
+    const len = Math.sqrt(dx * dx + dz * dz) || 1;
+    const perpX = (-dz / len) * half;
+    const perpZ = (dx / len) * half;
+
+    const i0 = (vertices.length / 3);
+    vertices.push(p1.x - perpX, p1.y + 0.04, p1.z - perpZ);
+    vertices.push(p1.x + perpX, p1.y + 0.04, p1.z + perpZ);
+    vertices.push(p2.x - perpX, p2.y + 0.04, p2.z - perpZ);
+    vertices.push(p2.x + perpX, p2.y + 0.04, p2.z + perpZ);
+
+    indices.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2);
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geom.setIndex(indices);
+  geom.computeVertexNormals();
+  return new THREE.Mesh(geom, RED_STRIP_MATERIAL);
+}
+
+
+/** Thin red ring border around the construction zone. Road strips are the primary indicator. */
+function createConstructionZoneBorder(radiusScene: number): THREE.Group {
   const group = new THREE.Group();
-  const orange = new THREE.MeshStandardMaterial({
-    color: 0xff6600,
-    emissive: 0xff4400,
-    emissiveIntensity: 0.35,
-    roughness: 0.5,
-    metalness: 0.1,
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0xcc0000,
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
   });
-  const white = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    emissive: 0xffffff,
-    emissiveIntensity: 0.2,
-    roughness: 0.5,
-    metalness: 0.1,
-  });
-  const h = 1.4;
-  const w = 0.9;
-  const d = 1.8;
-  const base = new THREE.Mesh(
-    new THREE.BoxGeometry(w, h * 0.5, d),
-    orange,
+  const ringThickness = radiusScene * 0.06;
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(radiusScene - ringThickness, radiusScene, 48, 1),
+    ringMat,
   );
-  base.position.y = h * 0.25;
-  group.add(base);
-  const stripe = new THREE.Mesh(
-    new THREE.BoxGeometry(w * 0.95, h * 0.3, d * 0.2),
-    white,
-  );
-  stripe.position.y = h * 0.55;
-  stripe.position.z = 0.2;
-  group.add(stripe);
-  const cone = new THREE.Mesh(
-    new THREE.ConeGeometry(0.5, 1, 8),
-    orange,
-  );
-  cone.position.y = h + 0.5;
-  group.add(cone);
-  group.scale.setScalar(BARRICADE_SCALE);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.03;
+  ring.name = "construction-zone-border";
+  group.add(ring);
   return group;
 }
 
@@ -388,6 +427,11 @@ export default function ThreeMap({
   zoningOffset = { x: 0, z: 0 },
   zoningRotationY = 0,
   zoningFlipH = false,
+  debugOverlayVisible: debugOverlayVisibleProp,
+  onDebugOverlayChange,
+  dashboardVisible: dashboardVisibleProp,
+  onDashboardVisibleChange,
+  panelsPortalRef,
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -419,10 +463,16 @@ export default function ThreeMap({
   const rippleTimeRef = useRef(0);
   const zoningGroupRef = useRef<THREE.Group | null>(null);
 
-  // Analytics state
+  // Analytics state (use controlled props when provided so parent can put buttons in sidebar)
   const analyticsRef = useRef<TrafficAnalytics | null>(null);
-  const [debugOverlayVisible, setDebugOverlayVisible] = useState(false);
-  const [dashboardVisible, setDashboardVisible] = useState(false);
+  const [internalDebugVisible, setInternalDebugVisible] = useState(false);
+  const [internalDashboardVisible, setInternalDashboardVisible] = useState(false);
+  const debugOverlayVisible = debugOverlayVisibleProp ?? internalDebugVisible;
+  const setDebugOverlayVisible =
+    onDebugOverlayChange ?? ((v: boolean) => setInternalDebugVisible(v));
+  const dashboardVisible = dashboardVisibleProp ?? internalDashboardVisible;
+  const setDashboardVisible =
+    onDashboardVisibleChange ?? ((v: boolean) => setInternalDashboardVisible(v));
 
   // Traffic system managers (integrated systems)
   const trafficInfrastructureRef = useRef<TrafficInfrastructureManager | null>(
@@ -437,7 +487,16 @@ export default function ThreeMap({
   // Traffic spawner and road network refs (for building-vicinity spawning and lane blocks)
   const spawnerRef = useRef<Spawner | null>(null);
   const roadNetworkRef = useRef<RoadNetwork | null>(null);
-  const barricadesGroupRef = useRef<THREE.Group | null>(null);
+  const speedZonesGroupRef = useRef<THREE.Group | null>(null);
+  const carMeshesRef = useRef<Record<string, THREE.Mesh>>({});
+  const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
+  const [, setCarPanelTick] = useState(0);
+
+  // Construction zone metrics for debug overlay
+  const constructionZoneRef = useRef<{
+    vehiclesInZone: number;
+    avgSpeedInZone: number;
+  }>({ vehiclesInZone: 0, avgSpeedInZone: 0 });
 
   // Performance optimization managers
   const vehiclePoolRef = useRef<VehiclePool | null>(null);
@@ -541,11 +600,11 @@ export default function ThreeMap({
         // Update static geometry matrix after all additions
         groups.staticGeometry.updateMatrix();
 
-        // Group for road barricades (lane blocks near placed buildings)
-        const barricadesGroup = new THREE.Group();
-        barricadesGroup.name = "barricades";
-        groups.dynamicObjects.add(barricadesGroup);
-        barricadesGroupRef.current = barricadesGroup;
+        // Group for construction speed zones (red = very slow, yellow = slightly slow)
+        const speedZonesGroup = new THREE.Group();
+        speedZonesGroup.name = "speedZones";
+        groups.dynamicObjects.add(speedZonesGroup);
+        speedZonesGroupRef.current = speedZonesGroup;
 
         // Initialize spawner
         setLoadingStatus("Initializing traffic simulation...");
@@ -890,6 +949,11 @@ export default function ThreeMap({
             perfMonitorRef.current.recordFrame();
           }
 
+          // Construction zone counters (accumulated during car loop)
+          let czRedCount = 0;
+          let czSpeedSum = 0;
+          let czTotalInZone = 0;
+
           // Update each active car with integrated systems
           activeCars.forEach((spawnedCar) => {
             processedCarIds.add(spawnedCar.id);
@@ -924,6 +988,8 @@ export default function ThreeMap({
               }
 
               carMeshes[spawnedCar.id] = mesh;
+              carMeshesRef.current[spawnedCar.id] = mesh;
+              (mesh as THREE.Mesh).userData.carId = spawnedCar.id;
               spawnedCar.meshRef = mesh; // Link mesh to car data
               console.log(
                 `✅ Mesh ${mesh ? "created" : "FAILED"} for ${spawnedCar.id}, visible: ${mesh?.visible}, parent: ${mesh?.parent?.type}`,
@@ -968,6 +1034,7 @@ export default function ThreeMap({
               spawnedCar.targetSpeed = behaviorResult.targetSpeed;
               spawnedCar.acceleration = behaviorResult.acceleration;
               spawnedCar.currentBehavior = behaviorResult.state;
+              spawnedCar.behaviorReason = behaviorResult.reason;
 
               // Apply behavior to speed
               behaviorControllerRef.current.applyBehavior(
@@ -975,23 +1042,44 @@ export default function ThreeMap({
                 behaviorResult,
                 deltaTime,
               );
-
-              // Debug first car
-              if (
-                spawnedCar.id === "car-0" &&
-                Math.floor(currentTime / 1000) % 2 === 0 &&
-                currentTime % 1000 < 20
-              ) {
-                console.log(
-                  `🚙 Car-0: speed=${spawnedCar.speed.toFixed(1)}, targetSpeed=${spawnedCar.targetSpeed.toFixed(1)}, behavior=${spawnedCar.currentBehavior}`,
-                );
-              }
             } else {
               // FALLBACK: If behavior system not working, just set speed directly!
               if (!spawnedCar.speed || spawnedCar.speed < 5) {
                 spawnedCar.speed = spawnedCar.maxSpeed;
                 spawnedCar.targetSpeed = spawnedCar.maxSpeed;
               }
+            }
+
+            // Construction zone: simple car-to-building distance → 10 km/h + status
+            if (placedBuildings?.length) {
+              const carPoint = turf.point(spawnedCar.position);
+              let minDistM = Infinity;
+              for (const b of placedBuildings) {
+                const d = turf.distance(carPoint, turf.point([b.lng, b.lat]), {
+                  units: "meters",
+                });
+                if (d < minDistM) minDistM = d;
+              }
+              if (minDistM < CONSTRUCTION_ZONE_RADIUS_M) {
+                spawnedCar.targetSpeed = Math.min(spawnedCar.targetSpeed, CONSTRUCTION_ZONE_SPEED_LIMIT);
+                spawnedCar.speed = Math.min(spawnedCar.speed, CONSTRUCTION_ZONE_SPEED_LIMIT);
+                spawnedCar.behaviorReason = "Near construction site – driving slowly";
+                czRedCount++;
+                czSpeedSum += spawnedCar.speed;
+                czTotalInZone++;
+              }
+            }
+
+            // If car is stuck at 0 but not at a signal/sign, force a small creep so it moves
+            const stoppedAtControl =
+              spawnedCar.currentBehavior === "stopped_at_signal" ||
+              spawnedCar.currentBehavior === "stopped_at_sign";
+            if (
+              spawnedCar.speed === 0 &&
+              spawnedCar.route &&
+              !stoppedAtControl
+            ) {
+              spawnedCar.speed = 2; // 2 km/h creep
             }
 
             // 2. Update position along route
@@ -1037,6 +1125,12 @@ export default function ThreeMap({
             }
           });
 
+          // Update construction zone metrics for debug overlay
+          constructionZoneRef.current = {
+            vehiclesInZone: czRedCount,
+            avgSpeedInZone: czTotalInZone > 0 ? czSpeedSum / czTotalInZone : 0,
+          };
+
           // Remove meshes for despawned cars
           Object.entries(carMeshes).forEach(([carId, mesh]) => {
             if (!processedCarIds.has(carId)) {
@@ -1048,6 +1142,7 @@ export default function ThreeMap({
               }
 
               delete carMeshes[carId];
+              delete carMeshesRef.current[carId];
 
               // Unregister from staggered updates
               if (staggeredUpdateRef.current) {
@@ -1175,103 +1270,85 @@ export default function ThreeMap({
     };
   }, []);
 
-  // Sync placed buildings to traffic: barricades, spawns, lane blocks, and burst spawn
+  // Sync placed buildings: speed zones, spawns, burst spawn. Re-run when map becomes ready so burst can run.
   useEffect(() => {
     const spawner = spawnerRef.current;
     const roadNetwork = roadNetworkRef.current;
-    const barricadesGroup = barricadesGroupRef.current;
+    const speedZonesGroup = speedZonesGroupRef.current;
 
     if (!spawner || !roadNetwork) return;
 
     if (!placedBuildings?.length) {
       spawner.setBlockedEdges(new Set());
       spawner.setBuildingVicinitySpawning([]);
-      if (barricadesGroup) {
-        while (barricadesGroup.children.length > 0) {
-          barricadesGroup.remove(barricadesGroup.children[0]);
+      if (speedZonesGroup) {
+        while (speedZonesGroup.children.length > 0) {
+          speedZonesGroup.remove(speedZonesGroup.children[0]);
         }
       }
       return;
     }
 
-    const BUILDING_BLOCK_RADIUS_M = 55;
-    const blockedIds = new Set<string>();
-
-    placedBuildings.forEach((b) => {
-      const pos: [number, number] = [b.lng, b.lat];
-      const nearEdges = roadNetwork.findEdgesNearPosition(
-        pos,
-        BUILDING_BLOCK_RADIUS_M,
-      );
-      if (nearEdges.length > 0) {
-        blockedIds.add(nearEdges[0].id);
-      }
-    });
-
-    spawner.setBlockedEdges(blockedIds);
+    spawner.setBlockedEdges(new Set());
     spawner.setBuildingVicinitySpawning(
       placedBuildings.map((b) => ({ id: b.id, position: [b.lng, b.lat] })),
     );
 
-    // Place barricades at the point(s) on the road nearest to each building (realistic: right at the site)
-    if (barricadesGroup) {
-      while (barricadesGroup.children.length > 0) {
-        barricadesGroup.remove(barricadesGroup.children[0]);
+    // Construction zone: red strips on nearby roads + border ring
+    if (speedZonesGroup) {
+      while (speedZonesGroup.children.length > 0) {
+        speedZonesGroup.remove(speedZonesGroup.children[0]);
       }
-      const OFFSET_ALONG_ROAD_M = 6; // second barricade this many meters along from nearest point
+      const zoneRadiusScene = CONSTRUCTION_ZONE_RADIUS_M * MAP_SCALE;
+      const stripWidth = 6 * MAP_SCALE * 2; // ~2 lanes wide
+
       placedBuildings.forEach((b) => {
         const buildingPos: [number, number] = [b.lng, b.lat];
+        const world = CityProjection.projectToWorld(buildingPos);
+
+        // Thin red ring border around the zone
+        const border = createConstructionZoneBorder(zoneRadiusScene);
+        border.position.set(world.x, world.y, world.z);
+        speedZonesGroup.add(border);
+
+        // Paint entire nearby road edges red
         const nearEdges = roadNetwork.findEdgesNearPosition(
           buildingPos,
-          BUILDING_BLOCK_RADIUS_M,
+          CONSTRUCTION_ZONE_RADIUS_M,
         );
-        if (nearEdges.length === 0) return;
-        const edge = nearEdges[0];
-        if (!edge.geometry || edge.geometry.length < 2) return;
-        const line = turf.lineString(edge.geometry);
-        const buildingPoint = turf.point(buildingPos);
-        const nearest = turf.nearestPointOnLine(line, buildingPoint, {
-          units: "meters",
-        });
-        const nearestCoords = nearest.geometry
-          .coordinates as [number, number];
-        const loc = (nearest.properties?.location ?? 0) as number;
-        const distanceAlongM =
-          loc <= 1 && loc >= 0 ? loc * edge.length : loc;
-        const positions: [number, number][] = [nearestCoords];
-        const secondM = Math.min(
-          edge.length - 1,
-          Math.max(1, distanceAlongM + OFFSET_ALONG_ROAD_M),
-        );
-        const secondAlong = turf.along(line, secondM / 1000, {
-          units: "kilometers",
-        });
-        positions.push(secondAlong.geometry.coordinates as [number, number]);
-        for (let i = 0; i < positions.length; i++) {
-          const lonLat = positions[i];
-          const next = positions[i + 1] ?? positions[i];
-          const world = CityProjection.projectToWorld(lonLat);
-          const barricade = createBarricadeMesh();
-          barricade.position.set(
-            world.x,
-            world.y + BARRICADE_SCALE * 0.4,
-            world.z,
+        nearEdges.forEach((edge) => {
+          if (!edge.geometry || edge.geometry.length < 2) return;
+          const worldPoints = edge.geometry.map((coord) =>
+            CityProjection.projectToWorld(coord as [number, number]),
           );
-          const bearing = turf.bearing(turf.point(lonLat), turf.point(next));
-          barricade.rotation.y = ((-bearing + 90) * Math.PI) / 180;
-          barricadesGroup.add(barricade);
-        }
+          const strip = createRedStripOnRoad(worldPoints, stripWidth);
+          strip.name = "red-strip-road";
+          speedZonesGroup.add(strip);
+        });
       });
     }
 
-    // Burst-spawn a bunch of cars around the building for demo visibility
-    const burstCount = spawner.burstSpawnNearBuildings(
-      placedBuildings.map((b) => ({ id: b.id, position: [b.lng, b.lat] })),
-    );
+    const buildingsList = placedBuildings.map((b) => ({ id: b.id, position: [b.lng, b.lat] as [number, number] }));
+    const burstCount = spawner.burstSpawnNearBuildings(buildingsList);
     if (burstCount > 0) {
       console.log(`🚧 Burst spawned ${burstCount} cars near placed building(s)`);
     }
-  }, [placedBuildings]);
+
+    // Keep spamming cars: if area is empty or below cap, burst again every 2.5s
+    const interval = setInterval(() => {
+      const s = spawnerRef.current;
+      if (!s || !placedBuildings?.length) return;
+      const active = s.getActiveCars().length;
+      const maxCars = 400;
+      if (active >= maxCars) return;
+      const added = s.burstSpawnNearBuildings(buildingsList);
+      if (added > 0) {
+        console.log(`🚧 Top-up spawned ${added} cars (${active + added} total)`);
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [placedBuildings, isReady]);
 
   // Click handler to find coordinates or select buildings
   useEffect(() => {
@@ -1293,6 +1370,28 @@ export default function ThreeMap({
 
       // Update raycaster with mouse position
       raycasterRef.current.setFromCamera(mouse, cameraRef.current);
+
+      // Check if we clicked on a car (show details panel)
+      const carMeshList = Object.values(carMeshesRef.current);
+      if (carMeshList.length > 0) {
+        const carIntersects = raycasterRef.current.intersectObjects(
+          carMeshList,
+          true,
+        );
+        if (carIntersects.length > 0) {
+          let obj: THREE.Object3D | null = carIntersects[0].object;
+          while (obj && obj.userData.carId == null) obj = obj.parent;
+          if (obj?.userData.carId) {
+            setSelectedCarId(obj.userData.carId as string);
+            if (onBuildingSelect) onBuildingSelect(null);
+            setSelectedOsmBuildingId(null);
+            return;
+          }
+        }
+      }
+
+      // Clear car selection when clicking elsewhere
+      setSelectedCarId(null);
 
       // Check if we clicked on a custom placed building first
       const buildingObjects = Array.from(buildingModelsRef.current.values());
@@ -1409,6 +1508,13 @@ export default function ThreeMap({
       return () => canvas.removeEventListener("click", handleCanvasClick);
     }
   }, [onCoordinateClick, onBuildingSelect, isPlacementMode, ghostRotationY]);
+
+  // Refresh car details panel periodically when a car is selected (live speed/behavior)
+  useEffect(() => {
+    if (!selectedCarId) return;
+    const id = setInterval(() => setCarPanelTick((t) => t + 1), 500);
+    return () => clearInterval(id);
+  }, [selectedCarId]);
 
   // Keyboard controls for rotating ghost building during placement mode
   useEffect(() => {
@@ -2165,36 +2271,140 @@ export default function ThreeMap({
         </div>
       )}
 
-      {/* Debug Overlay - Press F3 to toggle */}
-      <DebugOverlay
-        analytics={analyticsRef.current}
-        visible={debugOverlayVisible}
-        onToggle={() => setDebugOverlayVisible(!debugOverlayVisible)}
-      />
+      {/* Panels: portal above sidebars when panelsPortalRef provided, else in-place */}
+      {panelsPortalRef?.current
+        ? createPortal(
+            <>
+              {/* Car details - centered */}
+              {selectedCarId && spawnerRef.current && (() => {
+                const car = spawnerRef.current.getCar(selectedCarId);
+                if (!car) return null;
+                return (
+                  <div className="absolute top-20 left-1/2 -translate-x-1/2 w-80 max-w-[calc(100vw-24rem)] pointer-events-auto rounded-xl bg-gray-900/95 text-white shadow-xl backdrop-blur-sm border border-gray-700 z-10">
+                    <div className="flex items-center justify-between border-b border-gray-700 px-4 py-3">
+                      <h3 className="font-semibold text-sm">Car details</h3>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCarId(null)}
+                        className="text-gray-400 hover:text-white text-lg leading-none"
+                        aria-label="Close"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="p-4 space-y-2 text-sm">
+                      <p><span className="text-gray-400">ID</span> {car.id}</p>
+                      <p><span className="text-gray-400">Speed</span> {car.speed.toFixed(1)} km/h</p>
+                      <p><span className="text-gray-400">Target speed</span> {car.targetSpeed.toFixed(1)} km/h</p>
+                      <p><span className="text-gray-400">Max speed</span> {car.maxSpeed.toFixed(1)} km/h</p>
+                      <p><span className="text-gray-400">State</span> {car.currentBehavior ?? "—"}</p>
+                      {car.behaviorReason && (
+                        <p className="pt-2 border-t border-gray-700">
+                          <span className="text-gray-400 block mb-1">Why</span>
+                          {car.behaviorReason}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* Debug overlay - centered so not behind sidebars */}
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 w-full max-w-md pointer-events-auto z-10">
+                <DebugOverlay
+                  analytics={analyticsRef.current}
+                  visible={debugOverlayVisible}
+                  onToggle={() => setDebugOverlayVisible(!debugOverlayVisible)}
+                  className="pointer-events-none select-none"
+                  constructionZone={placedBuildings?.length ? constructionZoneRef.current : null}
+                />
+              </div>
+              {/* Analytics dashboard - full screen when open */}
+              <AnalyticsDashboard
+                analytics={analyticsRef.current}
+                visible={dashboardVisible}
+                onClose={() => setDashboardVisible(false)}
+              />
+            </>,
+            panelsPortalRef.current,
+          )
+        : (
+          <>
+            {/* Car details panel - in-place when no portal */}
+            {selectedCarId && spawnerRef.current && (() => {
+              const car = spawnerRef.current.getCar(selectedCarId);
+              if (!car) return null;
+              return (
+                <div className="absolute top-20 left-4 z-30 w-80 rounded-xl bg-gray-900/95 text-white shadow-xl backdrop-blur-sm border border-gray-700">
+                  <div className="flex items-center justify-between border-b border-gray-700 px-4 py-3">
+                    <h3 className="font-semibold text-sm">Car details</h3>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCarId(null)}
+                      className="text-gray-400 hover:text-white text-lg leading-none"
+                      aria-label="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="p-4 space-y-2 text-sm">
+                    <p><span className="text-gray-400">ID</span> {car.id}</p>
+                    <p><span className="text-gray-400">Speed</span> {car.speed.toFixed(1)} km/h</p>
+                    <p><span className="text-gray-400">Target speed</span> {car.targetSpeed.toFixed(1)} km/h</p>
+                    <p><span className="text-gray-400">Max speed</span> {car.maxSpeed.toFixed(1)} km/h</p>
+                    <p><span className="text-gray-400">State</span> {car.currentBehavior ?? "—"}</p>
+                    {car.behaviorReason && (
+                      <p className="pt-2 border-t border-gray-700">
+                        <span className="text-gray-400 block mb-1">Why</span>
+                        {car.behaviorReason}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+            <DebugOverlay
+              analytics={analyticsRef.current}
+              visible={debugOverlayVisible}
+              onToggle={() => setDebugOverlayVisible(!debugOverlayVisible)}
+              constructionZone={placedBuildings?.length ? constructionZoneRef.current : null}
+            />
+            <AnalyticsDashboard
+              analytics={analyticsRef.current}
+              visible={dashboardVisible}
+              onClose={() => setDashboardVisible(false)}
+            />
+          </>
+        )}
 
-      {/* Analytics Dashboard */}
-      <AnalyticsDashboard
-        analytics={analyticsRef.current}
-        visible={dashboardVisible}
-        onClose={() => setDashboardVisible(false)}
-      />
+      {/* Right Sidebar - only when parent does not control (e.g. buttons in sidebar) */}
+      {isReady && onDebugOverlayChange == null && (
+        <div className="absolute top-4 right-4 bottom-4 z-40 flex flex-col justify-between w-48">
+          {/* Top section - Building Editor Link */}
+          <div className="flex flex-col gap-2">
+            <a
+              href="/editor"
+              className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-100 border-slate-400/60 text-slate-700 hover:bg-slate-500 hover:border-slate-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(71,85,105,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out text-center"
+            >
+              Building Editor →
+            </a>
+          </div>
 
-      {/* Control Panel */}
-      {isReady && (
-        <div className="absolute bottom-4 right-4 z-40 flex gap-2">
-          <button
-            onClick={() => setDebugOverlayVisible(!debugOverlayVisible)}
-            className="px-4 py-2 bg-gray-800/90 hover:bg-gray-700/90 text-white rounded-lg shadow-lg text-sm font-medium transition-colors backdrop-blur-sm"
-            title="Toggle debug overlay (F3)"
-          >
-            {debugOverlayVisible ? "Hide" : "Show"} Debug
-          </button>
-          <button
-            onClick={() => setDashboardVisible(!dashboardVisible)}
-            className="px-4 py-2 bg-blue-600/90 hover:bg-blue-500/90 text-white rounded-lg shadow-lg text-sm font-medium transition-colors backdrop-blur-sm"
-          >
-            Analytics Dashboard
-          </button>
+          {/* Bottom section - Control buttons */}
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => setDebugOverlayVisible(!debugOverlayVisible)}
+              className="px-4 py-2 bg-gray-800/90 hover:bg-gray-700/90 text-white rounded-lg shadow-lg text-sm font-medium transition-colors backdrop-blur-sm"
+              title="Toggle debug overlay (F3)"
+            >
+              {debugOverlayVisible ? "Hide" : "Show"} Debug
+            </button>
+            <button
+              onClick={() => setDashboardVisible(!dashboardVisible)}
+              className="px-4 py-2 bg-blue-600/90 hover:bg-blue-500/90 text-white rounded-lg shadow-lg text-sm font-medium transition-colors backdrop-blur-sm"
+            >
+              Analytics Dashboard
+            </button>
+          </div>
         </div>
       )}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense, useMemo } from "react";
+import { useState, useEffect, Suspense, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import ThreeMap from "@/components/ThreeMap";
 import {
@@ -112,6 +112,9 @@ function MapPageContent() {
   const [zoningRotationY, setZoningRotationY] = useState(180);
   const [zoningFlipH, setZoningFlipH] = useState(true);
   const [showEnvironmentalReport, setShowEnvironmentalReport] = useState(false);
+  const [debugOverlayVisible, setDebugOverlayVisible] = useState(false);
+  const [dashboardVisible, setDashboardVisible] = useState(false);
+  const panelsPortalRef = useRef<HTMLDivElement | null>(null);
 
   // Pre-fetch map data and available buildings on mount
   useEffect(() => {
@@ -502,19 +505,14 @@ function MapPageContent() {
           zoningOffset={zoningOffset}
           zoningRotationY={zoningRotationY}
           zoningFlipH={zoningFlipH}
+          debugOverlayVisible={debugOverlayVisible}
+          onDebugOverlayChange={setDebugOverlayVisible}
+          dashboardVisible={dashboardVisible}
+          onDashboardVisibleChange={setDashboardVisible}
+          panelsPortalRef={panelsPortalRef}
         />
         {/* Map gradient overlay for better UI contrast */}
         <div className="absolute inset-0 map-gradient pointer-events-none"></div>
-
-        {/* Building placement form modal */}
-        {pendingPlacement && (
-          <BuildingPlacementForm
-            lat={pendingPlacement.lat}
-            lng={pendingPlacement.lng}
-            onSubmit={handlePlacementSubmit}
-            onCancel={() => setPendingPlacement(null)}
-          />
-        )}
 
         {/* Placement Mode Indicator */}
         {isPlacementMode && (
@@ -562,6 +560,48 @@ function MapPageContent() {
             >
               <X size={16} />
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* OVERLAYS: panels and modals above sidebars (z-50) so they are visible */}
+      <div className="absolute inset-0 z-50 pointer-events-none">
+        <div
+          ref={(el) => {
+            panelsPortalRef.current = el;
+          }}
+          className="absolute inset-0"
+          aria-hidden
+        />
+        {pendingPlacement && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-auto">
+            <BuildingPlacementForm
+              lat={pendingPlacement.lat}
+              lng={pendingPlacement.lng}
+              onSubmit={handlePlacementSubmit}
+              onCancel={() => setPendingPlacement(null)}
+            />
+          </div>
+        )}
+        {showEnvironmentalReport && (
+          <div className="absolute inset-0 z-30 pointer-events-auto">
+            <EnvironmentalReportModal
+              visible={showEnvironmentalReport}
+              onClose={() => setShowEnvironmentalReport(false)}
+              buildings={buildingsActiveAtTimeline}
+              snapshot={{
+                timelineDate,
+                co2Emissions: buildingMetrics.co2Emissions,
+                energyConsumption: buildingMetrics.energyConsumption,
+                waterUsage: buildingMetrics.waterUsage,
+                totalFootprint: buildingMetrics.totalFootprint,
+                materialComplexity: buildingMetrics.materialComplexity,
+                sustainabilityScore: buildingMetrics.sustainabilityScore,
+                populationHappiness,
+                avgDb,
+                activeCount,
+              }}
+            />
           </div>
         )}
       </div>
@@ -765,33 +805,6 @@ function MapPageContent() {
             </div>
 
             {/* District Zoning Summary */}
-            <div className="mt-8">
-              <h3 className="ui-label mb-3">District Zoning Summary</h3>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between text-[10px] mb-1">
-                    <span className="font-medium text-slate-600 uppercase">
-                      Princess St. Central
-                    </span>
-                    <span className="text-accent-blue font-bold">NOMINAL</span>
-                  </div>
-                  <div className="w-full bg-slate-200 rounded-sm h-1.5">
-                    <div className="bg-accent-blue h-1.5 rounded-sm w-[85%]"></div>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between text-[10px] mb-1">
-                    <span className="font-medium text-slate-600 uppercase">
-                      Portsmouth District
-                    </span>
-                    <span className="text-amber-700 font-bold">WARNING</span>
-                  </div>
-                  <div className="w-full bg-slate-200 rounded-sm h-1.5">
-                    <div className="bg-amber-600 h-1.5 rounded-sm w-[40%]"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
             {/* Coordinate Finder */}
             <div className="mt-8 pt-6 border-t border-slate-200">
@@ -887,6 +900,24 @@ function MapPageContent() {
           className={`absolute right-6 top-6 w-80 pointer-events-auto sidebar-transition ${placedBuildings.length > 0 ? "bottom-32" : "bottom-6"}`}
         >
           <div className="glass rounded-lg p-5 shadow-md h-full border-slate-200 overflow-y-auto custom-scrollbar">
+            {/* Traffic controls */}
+            <div className="flex gap-2 mb-4 pb-4 border-b border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDebugOverlayVisible(!debugOverlayVisible)}
+                className="flex-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg shadow text-xs font-medium transition-colors"
+                title="Toggle debug overlay (F3)"
+              >
+                {debugOverlayVisible ? "Hide" : "Show"} Debug
+              </button>
+              <button
+                type="button"
+                onClick={() => setDashboardVisible(!dashboardVisible)}
+                className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow text-xs font-medium transition-colors"
+              >
+                Analytics
+              </button>
+            </div>
             {/* Header */}
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
               <div className="flex flex-col gap-0.5">
@@ -1815,25 +1846,6 @@ function MapPageContent() {
           </div>
         </div>
       )}
-
-      {/* Environmental Report Modal - uses snapshot at current timeline when generating */}
-      <EnvironmentalReportModal
-        visible={showEnvironmentalReport}
-        onClose={() => setShowEnvironmentalReport(false)}
-        buildings={buildingsActiveAtTimeline}
-        snapshot={{
-          timelineDate,
-          co2Emissions: buildingMetrics.co2Emissions,
-          energyConsumption: buildingMetrics.energyConsumption,
-          waterUsage: buildingMetrics.waterUsage,
-          totalFootprint: buildingMetrics.totalFootprint,
-          materialComplexity: buildingMetrics.materialComplexity,
-          sustainabilityScore: buildingMetrics.sustainabilityScore,
-          populationHappiness,
-          avgDb,
-          activeCount,
-        }}
-      />
     </div>
   );
 }

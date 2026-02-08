@@ -7,16 +7,27 @@ import {
   NearMissEvent,
 } from "@/lib/analytics";
 
+export interface ConstructionZoneMetrics {
+  vehiclesInZone: number;
+  avgSpeedInZone: number;
+}
+
 interface DebugOverlayProps {
   analytics: TrafficAnalytics | null;
   visible: boolean;
   onToggle: () => void;
+  /** When set (e.g. when portaled above sidebars), overlay is positioned in center */
+  className?: string;
+  /** Live construction zone metrics from the animation loop */
+  constructionZone?: ConstructionZoneMetrics | null;
 }
 
 export default function DebugOverlay({
   analytics,
   visible,
   onToggle,
+  className,
+  constructionZone,
 }: DebugOverlayProps) {
   const [currentSnapshot, setCurrentSnapshot] =
     useState<AnalyticsSnapshot | null>(null);
@@ -72,7 +83,7 @@ export default function DebugOverlay({
   };
 
   return (
-    <div className="fixed top-4 left-4 z-50 pointer-events-none select-none">
+    <div className={className ?? "fixed top-4 left-4 z-50 pointer-events-none select-none"}>
       <div className="bg-black/80 text-white p-4 rounded-lg font-mono text-sm space-y-3 pointer-events-auto backdrop-blur-sm">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-600 pb-2 mb-2">
@@ -160,6 +171,31 @@ export default function DebugOverlay({
             </div>
           </div>
         </div>
+
+        {/* Construction Zone */}
+        {constructionZone && constructionZone.vehiclesInZone > 0 && (
+          <div className="space-y-1">
+            <h4 className="text-orange-400 font-semibold flex items-center gap-2">
+              Construction Zone
+              <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            </h4>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Vehicles in zone:</span>
+                <span className="font-bold text-red-400">{constructionZone.vehiclesInZone}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Avg speed:</span>
+                <span className="text-orange-300">{constructionZone.avgSpeedInZone.toFixed(1)} km/h</span>
+              </div>
+              <div className="flex justify-between col-span-2">
+                <span className="text-gray-400">Speed limit:</span>
+                <span className="text-red-300">10 km/h</span>
+              </div>
+            </div>
+            <p className="text-xs text-orange-300/70 italic">Vehicles slowing for safety</p>
+          </div>
+        )}
 
         {/* Near Misses */}
         <div className="space-y-1">

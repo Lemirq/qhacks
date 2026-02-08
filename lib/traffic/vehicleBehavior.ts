@@ -53,11 +53,15 @@ export interface VehicleState {
   waitingForClearance: boolean; // Waiting for cross-traffic to clear
 }
 
+/** Set to true to make vehicles stop at red/yellow lights */
+const TRAFFIC_SIGNALS_ENABLED = false;
+
 const BEHAVIOR_CONFIG = {
-  // Stop sign behavior
-  STOP_SIGN_DETECTION_DISTANCE: 30, // Detect stop signs within 30m
+  // Stop sign behavior - quick stop and go, not a long crawl
+  STOP_SIGN_DETECTION_DISTANCE: 18, // Only react when close (was 30)
+  STOP_SIGN_BRAKE_START_DISTANCE: 12, // Cruise until this close, then brake
   STOP_SIGN_STOP_DISTANCE: 2, // Stop 2m before stop sign
-  STOP_SIGN_MIN_WAIT: 2000, // Minimum 2 second stop
+  STOP_SIGN_MIN_WAIT: 500, // Brief pause then go (was 2s)
   STOP_SIGN_CLEARANCE_RADIUS: 20, // Check for vehicles within 20m of intersection
 
   // Traffic signal behavior
@@ -70,8 +74,8 @@ const BEHAVIOR_CONFIG = {
   FOLLOWING_MIN_DISTANCE: 12, // Minimum 12m following distance
   DETECTION_RADIUS: 60, // Look ahead 60m for lead vehicles
 
-  // Comfort acceleration/braking
-  COMFORT_ACCELERATION: 28, // 28 km/h per second
+  // Comfort acceleration/braking (higher accel so cars reach ~72 km/h quickly)
+  COMFORT_ACCELERATION: 38, // km/h per second
   COMFORT_DECELERATION: 50, // 50 km/h per second (brake a bit harder when following)
   EMERGENCY_DECELERATION: 120, // 120 km/h per second (strong emergency brake)
 
@@ -99,31 +103,27 @@ export class VehicleBehaviorController {
 
     const state = this.vehicleStates.get(car.id)!;
 
-    // Priority 1: Emergency collision avoidance (highest priority)
-    const emergencyCheck = this.checkEmergencyBraking(car, context);
-    if (emergencyCheck) {
-      return emergencyCheck;
-    }
+    // Collision/emergency braking disabled — cars can overlap, no emergency brake state
 
-    // Priority 2: Stop sign behavior
+    // Priority 1: Stop sign behavior
     const stopSignCheck = this.checkStopSign(car, state, context);
     if (stopSignCheck) {
       return stopSignCheck;
     }
 
-    // Priority 3: Traffic signal behavior
+    // Priority 2: Traffic signal behavior
     const signalCheck = this.checkTrafficSignal(car, state, context);
     if (signalCheck) {
       return signalCheck;
     }
 
-    // Priority 4: Following behavior (maintain safe distance from vehicle ahead)
+    // Priority 3: Following behavior (maintain safe distance from vehicle ahead)
     const followingCheck = this.checkFollowing(car, state, context);
     if (followingCheck) {
       return followingCheck;
     }
 
-    // Priority 5: Normal cruising
+    // Priority 4: Normal cruising
     return this.cruise(car, state, context);
   }
 
@@ -232,25 +232,22 @@ export class VehicleBehaviorController {
       return null;
     }
 
-    // Approaching stop sign
+    // Approaching stop sign - only brake when close; cruise until brake-start distance
     if (
       minDistance > BEHAVIOR_CONFIG.STOP_SIGN_STOP_DISTANCE &&
       state.behaviorState !== "stopped_at_sign"
     ) {
+      if (minDistance > BEHAVIOR_CONFIG.STOP_SIGN_BRAKE_START_DISTANCE) {
+        // Not close enough yet - keep cruising, don't crawl from far away
+        return null;
+      }
+
       state.behaviorState = "approaching_stop_sign";
 
-      // Calculate target speed based on distance
-      const brakingDistance = Math.max(
-        0,
-        minDistance - BEHAVIOR_CONFIG.STOP_SIGN_STOP_DISTANCE,
-      );
-      const targetSpeed = Math.sqrt(
-        (2 * BEHAVIOR_CONFIG.COMFORT_DECELERATION * brakingDistance) / 3.6,
-      );
-
+      // Maintain normal cruising speed while approaching
       return {
-        targetSpeed: Math.min(targetSpeed, car.speed),
-        acceleration: -BEHAVIOR_CONFIG.COMFORT_DECELERATION,
+        targetSpeed: car.maxSpeed,
+        acceleration: BEHAVIOR_CONFIG.COMFORT_ACCELERATION,
         state: "approaching_stop_sign",
         reason: `Approaching stop sign ${nearestStopSign.id} (${minDistance.toFixed(1)}m)`,
       };
@@ -319,6 +316,9 @@ export class VehicleBehaviorController {
     state: VehicleState,
     context: BehaviorContext,
   ): BehaviorResult | null {
+    // Set to true to make cars obey red/yellow lights
+    if (!TRAFFIC_SIGNALS_ENABLED) return null;
+
     const signals = context.infrastructureManager.getSignals();
 
     // Find nearest signal ahead
@@ -467,6 +467,19 @@ export class VehicleBehaviorController {
       return null;
     }
 
+    // Don't follow someone who's at a stop sign or light — drive normal until we reach it ourselves
+    const leadAtControl =
+      leadVehicle.currentBehavior === "stopped_at_sign" ||
+      leadVehicle.currentBehavior === "stopped_at_signal" ||
+      leadVehicle.currentBehavior === "approaching_signal" ||
+      leadVehicle.currentBehavior === "approaching_stop_sign";
+    if (leadAtControl) {
+      if (state.behaviorState === "following") {
+        state.behaviorState = "cruising";
+      }
+      return null;
+    }
+
     const distance = turf.distance(
       turf.point(car.position),
       turf.point(leadVehicle.position),
@@ -588,12 +601,26 @@ export class VehicleBehaviorController {
   }
 
   /**
-   * Find the lead vehicle directly ahead
+   * Find the lead vehicle directly ahead **on the same road**.
+   * Only considers vehicles that share the current edge or the next edge
+   * in our route, so cars on parallel / nearby roads are ignored.
    */
   private findLeadVehicle(
     car: SpawnedCar,
     context: BehaviorContext,
   ): SpawnedCar | null {
+    if (!car.currentEdgeId) return null;
+
+    // Build set of edges we consider "our road": current edge + next edge in route
+    const relevantEdges = new Set<string>();
+    relevantEdges.add(car.currentEdgeId);
+    if (car.route?.edges) {
+      const idx = car.route.edges.indexOf(car.currentEdgeId);
+      if (idx >= 0 && idx + 1 < car.route.edges.length) {
+        relevantEdges.add(car.route.edges[idx + 1]);
+      }
+    }
+
     const nearby = context.collisionSystem.getNearbyVehicles(
       car,
       BEHAVIOR_CONFIG.DETECTION_RADIUS,
@@ -604,6 +631,11 @@ export class VehicleBehaviorController {
     let minDistance = Infinity;
 
     for (const other of nearby) {
+      // Must be on the same road (same edge or our next edge)
+      if (!other.currentEdgeId || !relevantEdges.has(other.currentEdgeId)) {
+        continue;
+      }
+
       // Check if vehicle is ahead (not behind or beside)
       const bearing = turf.bearing(
         turf.point(car.position),
@@ -637,24 +669,40 @@ export class VehicleBehaviorController {
     result: BehaviorResult,
     deltaTime: number,
   ): void {
+    // Use car.targetSpeed if set (e.g. construction zone cap), else result
+    const targetSpeed = car.targetSpeed ?? result.targetSpeed;
+
     // Apply acceleration
     if (result.acceleration !== 0) {
       const deltaSpeed = result.acceleration * deltaTime;
       car.speed = Math.max(0, Math.min(car.maxSpeed, car.speed + deltaSpeed));
     }
 
-    // Move towards target speed
-    if (result.targetSpeed !== car.speed) {
-      const speedDiff = result.targetSpeed - car.speed;
-      const maxChange = Math.abs(result.acceleration) * deltaTime;
-
-      if (Math.abs(speedDiff) < maxChange) {
-        car.speed = result.targetSpeed;
+    // Move towards target speed (even when acceleration is 0, so cars don't get stuck)
+    if (targetSpeed !== car.speed) {
+      const speedDiff = targetSpeed - car.speed;
+      const maxChange =
+        result.acceleration !== 0
+          ? Math.abs(result.acceleration) * deltaTime
+          : 80 * deltaTime;
+      if (Math.abs(speedDiff) <= maxChange) {
+        car.speed = targetSpeed;
+      } else {
+        car.speed += Math.sign(speedDiff) * maxChange;
       }
     }
 
     // Clamp speed
     car.speed = Math.max(0, Math.min(car.maxSpeed, car.speed));
+
+    // When zone imposes a minimum (car.targetSpeed > 0), don't brake below it unless emergency
+    if (
+      car.targetSpeed > 0 &&
+      result.state !== "emergency_braking" &&
+      car.speed < car.targetSpeed
+    ) {
+      car.speed = car.targetSpeed;
+    }
   }
 
   /**
