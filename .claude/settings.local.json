@@ -15,7 +15,8 @@
       "Bash(node scripts/generate-sounds.mjs:*)",
       "Bash(dir:*)",
       "Bash(npx tsc:*)",
-      "Bash(del:*)"
+      "Bash(del:*)",
+      "Bash(npm install:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\phine\\OneDrive\\Laptop\\HACKATHON\\qhacks\\qhacks\\public\\sounds",

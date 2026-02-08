@@ -48,6 +48,7 @@ export function InputPanel() {
         <div className="bg-white p-4 rounded-xl border border-gray-200">
           <BuildingList />
         </div>
+
       </div>
 
       {/* Building Settings Section - 50% of panel */}

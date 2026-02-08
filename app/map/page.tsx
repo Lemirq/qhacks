@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ThreeMap from '@/components/ThreeMap';
 import { BuildingPlacementForm, type BuildingPlacementDetails } from '@/components/BuildingPlacementForm';
-import { Landmark, SlidersHorizontal, Building2, FileText, PlayCircle, Clock, MapPin, Copy, X, Plus, Trash2, Upload, ChevronDown, Check, Volume2, Smile, Frown, Pause } from 'lucide-react';
+import { Landmark, SlidersHorizontal, Building2, TrafficCone, Leaf, FileText, PlayCircle, Clock, Settings, MapPin, Copy, X, Plus, Trash2, Upload, ChevronDown, Check, Volume2, Smile, Frown, Pause, ClipboardList } from 'lucide-react';
 import { computeHappinessScore } from '@/lib/constructionNoise';
+import EnvironmentalReportModal from '@/components/EnvironmentalReportModal';
 import { prefetchMapData } from '@/lib/prefetchMapData';
 
 interface PlacedBuilding {
@@ -68,6 +69,7 @@ function MapPageContent() {
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [showBuildingSelector, setShowBuildingSelector] = useState(false);
   const [showNoiseRipple, setShowNoiseRipple] = useState(true);
+  const [showEnvironmentalReport, setShowEnvironmentalReport] = useState(false);
 
   // Population happiness from construction noise (computed from placed buildings + timeline)
   const { score: populationHappiness, avgDb, activeCount } = computeHappinessScore(
@@ -267,6 +269,72 @@ function MapPageContent() {
   };
 
   const selectedBuilding = placedBuildings.find(b => b.id === selectedBuildingId);
+
+  // Calculate dynamic environmental metrics based on placed buildings
+  const buildingMetrics = useMemo(() => {
+    if (placedBuildings.length === 0) {
+      return {
+        co2Emissions: 0,
+        energyConsumption: 0,
+        waterUsage: 0,
+        totalFootprint: 0,
+        materialComplexity: 'N/A',
+        sustainabilityScore: 100,
+      };
+    }
+
+    // Calculate based on building size and complexity
+    let totalCO2 = 0;
+    let totalEnergy = 0;
+    let totalWater = 0;
+    let totalFootprint = 0;
+    let complexityScore = 0;
+
+    placedBuildings.forEach(building => {
+      // Approximate footprint in sq meters (scale factor * base unit)
+      const footprint = building.scale.x * building.scale.z * 100; // ~100 sq m base
+      const height = building.scale.y * 3; // ~3m per floor equivalent
+      const volume = footprint * height;
+
+      totalFootprint += footprint;
+
+      // CO2 emissions: ~0.5 tonnes per sq meter for construction + 0.02 per sq m annually
+      // Higher buildings = more concrete = more emissions
+      const constructionCO2 = footprint * 0.5 * (1 + height / 30);
+      const annualOperationalCO2 = footprint * 0.02 * (1 + height / 50);
+      totalCO2 += constructionCO2 + annualOperationalCO2;
+
+      // Energy consumption: kWh per sq m annually (~150-300 kWh/sq m for commercial)
+      // Larger and taller buildings are less efficient per unit
+      const energyPerSqM = 180 + (height / 10) * 20;
+      totalEnergy += footprint * energyPerSqM / 1000; // Convert to MWh
+
+      // Water usage: liters per sq m daily (~5-15 L/sq m for commercial)
+      const waterPerSqM = 8 + (height / 20) * 3;
+      totalWater += footprint * waterPerSqM * 365 / 1000; // Convert to cubic meters annually
+
+      // Complexity based on size
+      complexityScore += (footprint > 2000 ? 3 : footprint > 1000 ? 2 : 1);
+    });
+
+    // Average complexity
+    const avgComplexity = complexityScore / placedBuildings.length;
+    const materialComplexity = avgComplexity >= 2.5 ? 'High (Steel/Glass)' :
+      avgComplexity >= 1.5 ? 'Medium (Concrete)' : 'Low (Wood/Brick)';
+
+    // Sustainability score: inverse of environmental impact
+    const impactFactor = (totalCO2 / 100) + (totalEnergy / 50) + (totalWater / 500);
+    const sustainabilityScore = Math.max(0, Math.min(100, 100 - impactFactor));
+
+    return {
+      co2Emissions: totalCO2,
+      energyConsumption: totalEnergy,
+      waterUsage: totalWater,
+      totalFootprint,
+      materialComplexity,
+      sustainabilityScore,
+    };
+  }, [placedBuildings]);
 
   // Keyboard controls for selected building
   useEffect(() => {
@@ -616,55 +684,60 @@ function MapPageContent() {
               </button>
             </div>
 
-            {/* Key Metrics */}
+            {/* Key Environmental Metrics - Dynamic based on placed buildings */}
             <div className="grid grid-cols-1 gap-3 mb-6">
-              <div className="bg-slate-50 rounded-md p-3 border border-slate-200">
-                <p className="ui-label mb-1">CO2 Displacement</p>
-                <p className="text-lg font-bold text-slate-900 font-serif">
-                  142.08 <span className="text-[10px] text-slate-500 font-sans uppercase ml-1">Tonnes / PA</span>
+              <div className={`rounded-md p-3 border ${placedBuildings.length > 0 ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Leaf size={14} className={placedBuildings.length > 0 ? 'text-orange-600' : 'text-slate-400'} />
+                  <p className="ui-label">CO2 Emissions</p>
+                </div>
+                <p className={`text-lg font-bold font-serif ${placedBuildings.length > 0 ? 'text-orange-700' : 'text-slate-400'}`}>
+                  {buildingMetrics.co2Emissions.toFixed(1)} <span className="text-[10px] text-slate-500 font-sans uppercase ml-1">Tonnes / PA</span>
                 </p>
+                <p className="text-[9px] text-slate-500 mt-1">Construction + operational emissions</p>
               </div>
-              <div className="bg-slate-50 rounded-md p-3 border border-slate-200">
-                <p className="ui-label mb-1">Acoustic Profile</p>
-                <p className="text-lg font-bold text-rose-700 font-serif">
-                  64.2 <span className="text-[10px] text-slate-500 font-sans uppercase ml-1">Decibels</span>
+              <div className={`rounded-md p-3 border ${placedBuildings.length > 0 ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Settings size={14} className={placedBuildings.length > 0 ? 'text-blue-600' : 'text-slate-400'} />
+                  <p className="ui-label">Energy Consumption</p>
+                </div>
+                <p className={`text-lg font-bold font-serif ${placedBuildings.length > 0 ? 'text-blue-700' : 'text-slate-400'}`}>
+                  {buildingMetrics.energyConsumption.toFixed(1)} <span className="text-[10px] text-slate-500 font-sans uppercase ml-1">MWh / PA</span>
                 </p>
+                <p className="text-[9px] text-slate-500 mt-1">Annual electricity demand</p>
+              </div>
+              <div className={`rounded-md p-3 border ${placedBuildings.length > 0 ? 'bg-cyan-50 border-cyan-200' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <TrafficCone size={14} className={placedBuildings.length > 0 ? 'text-cyan-600' : 'text-slate-400'} />
+                  <p className="ui-label">Water Usage</p>
+                </div>
+                <p className={`text-lg font-bold font-serif ${placedBuildings.length > 0 ? 'text-cyan-700' : 'text-slate-400'}`}>
+                  {buildingMetrics.waterUsage.toFixed(0)} <span className="text-[10px] text-slate-500 font-sans uppercase ml-1">m³ / PA</span>
+                </p>
+                <p className="text-[9px] text-slate-500 mt-1">Annual water consumption</p>
               </div>
             </div>
 
-            {/* Detailed Metrics */}
+            {/* Environmental Impact Report Button */}
             <div className="space-y-4 text-xs">
-              <div className="flex items-center justify-between border-b border-slate-50 pb-2">
-                <span className="text-slate-500 uppercase font-medium">Maximum Elevation</span>
-                <span className="font-bold text-slate-900">42.50 m</span>
-              </div>
-              <div className="flex items-center justify-between border-b border-slate-50 pb-2">
-                <span className="text-slate-500 uppercase font-medium">Structural Material</span>
-                <span className="font-bold text-slate-900 uppercase">Concrete B40</span>
-              </div>
-              <div className="flex items-center justify-between border-b border-slate-50 pb-2">
-                <span className="text-slate-500 uppercase font-medium">Footprint Area</span>
-                <span className="font-bold text-slate-900">12,400 m²</span>
-              </div>
-
-              {/* Traffic Flow Chart */}
-              <div className="pt-4">
-                <p className="ui-label mb-4">Traffic Flow Projection</p>
-                <div className="h-24 flex items-end justify-between gap-1">
-                  <div className="w-full bg-slate-200 h-[40%]"></div>
-                  <div className="w-full bg-slate-300 h-[60%]"></div>
-                  <div className="w-full bg-slate-400 h-[80%]"></div>
-                  <div className="w-full bg-accent-blue h-[100%]"></div>
-                  <div className="w-full bg-slate-400 h-[75%]"></div>
-                  <div className="w-full bg-slate-300 h-[50%]"></div>
-                  <div className="w-full bg-slate-200 h-[30%]"></div>
-                </div>
-                <div className="flex justify-between text-[8px] text-slate-400 mt-2 font-bold">
-                  <span>0800 HRS</span>
-                  <span>1200 HRS</span>
-                  <span>1700 HRS</span>
-                  <span>2200 HRS</span>
-                </div>
+              <div className="pt-6 mt-6 border-t border-slate-100">
+                <button
+                  onClick={() => setShowEnvironmentalReport(true)}
+                  disabled={placedBuildings.length === 0}
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-black uppercase tracking-tight transition-all ${
+                    placedBuildings.length > 0
+                      ? 'bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg'
+                      : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  <ClipboardList size={18} />
+                  <span>Generate Impact Report</span>
+                </button>
+                <p className="text-[9px] text-slate-500 text-center mt-2">
+                  {placedBuildings.length === 0
+                    ? 'Place buildings on the map to generate a report'
+                    : `Analyze ${placedBuildings.length} building${placedBuildings.length !== 1 ? 's' : ''} with AI`}
+                </p>
               </div>
 
               {/* Building Placement */}
@@ -1279,6 +1352,13 @@ function MapPageContent() {
           </div>
         </div>
       </div>
+
+      {/* Environmental Report Modal */}
+      <EnvironmentalReportModal
+        visible={showEnvironmentalReport}
+        onClose={() => setShowEnvironmentalReport(false)}
+        buildings={placedBuildings}
+      />
     </div>
   );
 }

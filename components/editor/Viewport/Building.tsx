@@ -38,6 +38,12 @@ export function Building({ spec }: BuildingProps) {
       (body.material as THREE.MeshStandardMaterial).needsUpdate = true;
     }
 
+    // Apply wallColor override if specified
+    if (spec.wallColor && body.material instanceof THREE.Material) {
+      (body.material as THREE.MeshStandardMaterial).color.set(spec.wallColor);
+      (body.material as THREE.MeshStandardMaterial).needsUpdate = true;
+    }
+
     group.add(body);
 
     // Create windows

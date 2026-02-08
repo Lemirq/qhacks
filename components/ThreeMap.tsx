@@ -17,6 +17,8 @@ import { fetchBuildings } from "@/lib/buildingData";
 import { renderBuildings } from "@/lib/buildingRenderer";
 import { renderRoads } from "@/lib/roadRenderer";
 import { createGround } from "@/lib/environmentRenderer";
+import { renderTreesAroundBuilding, getDefaultTreeConfigForMap } from "@/lib/treeRenderer";
+import { TreeConfig } from "@/lib/editor/types/buildingSpec";
 
 // Projection and camera
 import { CityProjection } from "@/lib/projection";
@@ -81,6 +83,7 @@ interface PlacedBuilding {
     startDate?: string;
     durationDays?: number;
   };
+  treeConfig?: TreeConfig; // Optional tree configuration for landscaping
 }
 
 interface ThreeMapProps {
@@ -346,6 +349,7 @@ export default function ThreeMap({
   );
   const ghostModelRef = useRef<THREE.Group | null>(null);
   const buildingModelsRef = useRef<Map<string, THREE.Group>>(new Map());
+  const buildingTreesRef = useRef<Map<string, THREE.Group>>(new Map()); // Trees for each placed building
   const osmBuildingMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const composerRef = useRef<EffectComposer | null>(null);
   const outlinePassRef = useRef<OutlinePass | null>(null);
@@ -1392,6 +1396,13 @@ export default function ThreeMap({
           buildingModelsRef.current.delete(id);
           console.log(`🗑️ Removed building ${id}`);
         }
+        // Also remove associated trees
+        const trees = buildingTreesRef.current.get(id);
+        if (trees) {
+          groupsRef.current?.dynamicObjects.remove(trees);
+          buildingTreesRef.current.delete(id);
+          console.log(`🌲 Removed trees for building ${id}`);
+        }
       }
     });
 
@@ -1430,7 +1441,7 @@ export default function ThreeMap({
           const scale = building.scale || buildingScale;
           model.scale.set(scale.x, scale.y, scale.z);
 
-          let toAdd: THREE.Object3D = model;
+          let toAdd: THREE.Group = model as THREE.Group;
 
           if (building.timeline?.startDate && building.timeline?.durationDays) {
             const wrapper = new THREE.Group();
@@ -1472,6 +1483,40 @@ export default function ThreeMap({
           console.log(
             `✅ Loaded building ${building.id} at (${building.position.x.toFixed(1)}, ${building.position.z.toFixed(1)})`,
           );
+
+          // Always generate trees around the building
+          const treeConfig = building.treeConfig || getDefaultTreeConfigForMap();
+          const forcedTreeConfig = { ...treeConfig, enabled: true };
+          if (groupsRef.current) {
+            const bbox = new THREE.Box3().setFromObject(toAdd);
+            const size = bbox.getSize(new THREE.Vector3());
+            const buildingWidth = size.x;
+            const buildingDepth = size.z;
+            const buildingScaleValue = scale.x;
+
+            const otherBuildings: THREE.Object3D[] = [];
+            buildingModelsRef.current.forEach((otherModel, otherId) => {
+              if (otherId !== building.id) {
+                otherBuildings.push(otherModel);
+              }
+            });
+            osmBuildingMeshesRef.current.forEach((osmMesh) => {
+              otherBuildings.push(osmMesh);
+            });
+
+            const treeGroup = renderTreesAroundBuilding(
+              building.position,
+              buildingWidth,
+              buildingDepth,
+              forcedTreeConfig,
+              groupsRef.current.dynamicObjects,
+              buildingScaleValue,
+              toAdd,
+              groupsRef.current.staticGeometry,
+              otherBuildings
+            );
+            buildingTreesRef.current.set(building.id, treeGroup);
+          }
         },
         undefined,
         (error) => {
@@ -1903,31 +1948,13 @@ export default function ThreeMap({
         </div>
       )}
 
-      {/* Selected OSM Building Panel */}
+      {/* Selected OSM Building - Delete Button */}
       {selectedOsmBuildingId && (
-        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 bg-white border border-gray-300 rounded-lg shadow-lg z-20 p-4 min-w-[280px]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-gray-400 rounded"></div>
-              <span className="font-bold text-gray-800 text-sm">
-                OSM Building Selected
-              </span>
-            </div>
-            <button
-              onClick={() => setSelectedOsmBuildingId(null)}
-              className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="text-xs text-gray-600 mb-3 font-mono bg-gray-50 p-2 rounded">
-            ID: {selectedOsmBuildingId}
-          </div>
+        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20">
           <button
             onClick={() => deleteOsmBuilding(selectedOsmBuildingId)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm font-semibold transition-colors"
+            className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg shadow-lg text-sm font-semibold transition-colors"
           >
-            <span>🗑️</span>
             Delete Building
           </button>
         </div>

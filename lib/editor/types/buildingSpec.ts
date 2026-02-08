@@ -51,6 +51,9 @@ export interface BuildingSpecification {
   windowWidth: number;      // meters
   windowHeight: number;     // meters
 
+  // Wall color override (hex string, e.g. "#cc3333")
+  wallColor?: string;
+
   // Door
   doorWidth: number;        // meters
   doorHeight: number;       // meters
