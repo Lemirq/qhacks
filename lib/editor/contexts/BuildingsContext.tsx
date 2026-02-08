@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import type { BuildingInstance, BuildingSpecification, BuildingId } from '@/lib/editor/types/buildingSpec';
-import { DEFAULT_BUILDING_SPEC } from '@/lib/editor/types/buildingSpec';
+import type { BuildingInstance, BuildingSpecification, BuildingId, GroupId } from '@/lib/editor/types/buildingSpec';
+import { DEFAULT_BUILDING_SPEC, GROUP_SYNCED_PROPERTIES } from '@/lib/editor/types/buildingSpec';
 
 interface BuildingsContextType {
   buildings: BuildingInstance[];
@@ -14,13 +14,16 @@ interface BuildingsContextType {
   removeBuilding: (id: BuildingId) => void;
   updateBuilding: (id: BuildingId, updates: Partial<BuildingSpecification>) => void;
   updateBuildingRotation: (id: BuildingId, rotation: number) => void;
+  updateBuildingPosition: (id: BuildingId, position: { x?: number; y?: number; z?: number }) => void;
   selectBuilding: (id: BuildingId | null) => void;
   toggleBuildingSelection: (id: BuildingId) => void;  // For multi-select
   clearSelection: () => void;
 
-  // Merge functionality
+  // Group functionality (formerly merge)
   setMergeMode: (enabled: boolean) => void;
-  mergeBuildings: () => void;  // Merges selected buildings
+  mergeBuildings: () => void;  // Groups selected buildings (keeps rotations, syncs textures/windows)
+  ungroupBuilding: (id: BuildingId) => void;  // Remove building from its group
+  getGroupMembers: (groupId: GroupId) => BuildingInstance[];
 
   // Placement mode
   setPlacementMode: (enabled: boolean) => void;
@@ -73,25 +76,61 @@ export function BuildingsProvider({ children }: BuildingsProviderProps) {
   }, [buildings]);
 
   const updateBuilding = useCallback((id: BuildingId, updates: Partial<BuildingSpecification>) => {
-    setBuildings(prev => prev.map(building => {
-      if (building.id === id) {
-        const newSpec = { ...building.spec, ...updates };
+    setBuildings(prev => {
+      const targetBuilding = prev.find(b => b.id === id);
+      if (!targetBuilding) return prev;
 
-        // Auto-calculate windowColumns from numberOfFloors if not explicitly set
-        if (updates.numberOfFloors !== undefined && updates.windowColumns === undefined) {
-          newSpec.windowColumns = newSpec.numberOfFloors;
+      // Extract synced properties from updates
+      const syncedUpdates: Partial<BuildingSpecification> = {};
+      for (const key of GROUP_SYNCED_PROPERTIES) {
+        if (key in updates) {
+          syncedUpdates[key] = updates[key as keyof BuildingSpecification] as never;
         }
-
-        return { ...building, spec: newSpec };
       }
-      return building;
-    }));
+      const hasSyncedUpdates = Object.keys(syncedUpdates).length > 0;
+      const groupId = targetBuilding.groupId;
+
+      return prev.map(building => {
+        const isTarget = building.id === id;
+        const isGroupMember = groupId && building.groupId === groupId;
+
+        if (isTarget) {
+          // Apply all updates to target building
+          const newSpec = { ...building.spec, ...updates };
+          if (updates.numberOfFloors !== undefined && updates.windowColumns === undefined) {
+            newSpec.windowColumns = newSpec.numberOfFloors;
+          }
+          return { ...building, spec: newSpec };
+        } else if (isGroupMember && hasSyncedUpdates) {
+          // Apply only synced properties to group members
+          const newSpec = { ...building.spec, ...syncedUpdates };
+          return { ...building, spec: newSpec };
+        }
+        return building;
+      });
+    });
   }, []);
 
   const updateBuildingRotation = useCallback((id: BuildingId, rotation: number) => {
     setBuildings(prev => prev.map(building => {
       if (building.id === id) {
         return { ...building, rotation };
+      }
+      return building;
+    }));
+  }, []);
+
+  const updateBuildingPosition = useCallback((id: BuildingId, position: { x?: number; y?: number; z?: number }) => {
+    setBuildings(prev => prev.map(building => {
+      if (building.id === id) {
+        return {
+          ...building,
+          position: {
+            x: position.x ?? building.position.x,
+            y: position.y ?? building.position.y,
+            z: position.z ?? building.position.z,
+          },
+        };
       }
       return building;
     }));
@@ -132,68 +171,55 @@ export function BuildingsProvider({ children }: BuildingsProviderProps) {
   const mergeBuildings = useCallback(() => {
     if (selectedBuildingIds.length < 2) return;
 
-    // Get the first selected building (primary) - its properties will be inherited
+    // Get the first selected building (primary) - its textures/windows will be inherited
     const primaryBuilding = buildings.find(b => b.id === selectedBuildingIds[0]);
     if (!primaryBuilding) return;
 
-    // Get all other selected buildings
-    const buildingsToMerge = buildings.filter(
-      b => selectedBuildingIds.includes(b.id) && b.id !== primaryBuilding.id
-    );
+    // Create a new group ID
+    const newGroupId: GroupId = `group-${Date.now()}`;
 
-    if (buildingsToMerge.length === 0) return;
-
-    // Calculate bounding box of all selected buildings
-    let minX = primaryBuilding.position.x - primaryBuilding.spec.width / 2;
-    let maxX = primaryBuilding.position.x + primaryBuilding.spec.width / 2;
-    let minZ = primaryBuilding.position.z - primaryBuilding.spec.depth / 2;
-    let maxZ = primaryBuilding.position.z + primaryBuilding.spec.depth / 2;
-    let minY = primaryBuilding.position.y;
-    let maxY = primaryBuilding.position.y + primaryBuilding.spec.floorHeight * primaryBuilding.spec.numberOfFloors;
-
-    for (const building of buildingsToMerge) {
-      minX = Math.min(minX, building.position.x - building.spec.width / 2);
-      maxX = Math.max(maxX, building.position.x + building.spec.width / 2);
-      minZ = Math.min(minZ, building.position.z - building.spec.depth / 2);
-      maxZ = Math.max(maxZ, building.position.z + building.spec.depth / 2);
-      minY = Math.min(minY, building.position.y);
-      maxY = Math.max(maxY, building.position.y + building.spec.floorHeight * building.spec.numberOfFloors);
+    // Extract synced properties from primary building
+    const syncedProperties: Partial<BuildingSpecification> = {};
+    for (const key of GROUP_SYNCED_PROPERTIES) {
+      if (primaryBuilding.spec[key] !== undefined) {
+        syncedProperties[key] = primaryBuilding.spec[key] as never;
+      }
     }
 
-    // Create merged building with combined dimensions and primary's properties
-    const mergedWidth = maxX - minX;
-    const mergedDepth = maxZ - minZ;
-    const mergedHeight = maxY - minY;
-    const mergedFloors = Math.round(mergedHeight / primaryBuilding.spec.floorHeight);
+    // Group all selected buildings - keep their positions/rotations, sync textures/windows
+    setBuildings(prev => prev.map(building => {
+      if (selectedBuildingIds.includes(building.id)) {
+        return {
+          ...building,
+          groupId: newGroupId,
+          spec: {
+            ...building.spec,
+            ...syncedProperties,  // Apply primary's textures/windows to all
+          },
+        };
+      }
+      return building;
+    }));
 
-    const mergedBuilding: BuildingInstance = {
-      id: `building-${Date.now()}`,
-      name: `${primaryBuilding.name} (Merged)`,
-      position: {
-        x: (minX + maxX) / 2,
-        y: minY,
-        z: (minZ + maxZ) / 2,
-      },
-      rotation: primaryBuilding.rotation,
-      spec: {
-        ...primaryBuilding.spec,
-        width: mergedWidth,
-        depth: mergedDepth,
-        numberOfFloors: mergedFloors,
-      },
-    };
-
-    // Remove merged buildings and add the new merged one
-    setBuildings(prev => {
-      const filtered = prev.filter(b => !selectedBuildingIds.includes(b.id));
-      return [...filtered, mergedBuilding];
-    });
-
-    // Select the new merged building
-    setSelectedBuildingId(mergedBuilding.id);
-    setSelectedBuildingIds([mergedBuilding.id]);
+    // Select the primary building
+    setSelectedBuildingId(primaryBuilding.id);
+    setSelectedBuildingIds([primaryBuilding.id]);
     setMergeMode(false);
   }, [buildings, selectedBuildingIds]);
+
+  const ungroupBuilding = useCallback((id: BuildingId) => {
+    setBuildings(prev => prev.map(building => {
+      if (building.id === id) {
+        const { groupId, ...rest } = building;
+        return rest as BuildingInstance;
+      }
+      return building;
+    }));
+  }, []);
+
+  const getGroupMembers = useCallback((groupId: GroupId) => {
+    return buildings.filter(b => b.groupId === groupId);
+  }, [buildings]);
 
   const getSelectedBuilding = useCallback(() => {
     if (!selectedBuildingId) return null;
@@ -210,11 +236,14 @@ export function BuildingsProvider({ children }: BuildingsProviderProps) {
     removeBuilding,
     updateBuilding,
     updateBuildingRotation,
+    updateBuildingPosition,
     selectBuilding,
     toggleBuildingSelection,
     clearSelection,
     setMergeMode,
     mergeBuildings,
+    ungroupBuilding,
+    getGroupMembers,
     setPlacementMode,
     getSelectedBuilding,
   };

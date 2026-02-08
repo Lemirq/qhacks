@@ -31,6 +31,8 @@ interface PlacedBuilding {
   id: string;
   modelPath: string;
   position: { x: number; y: number; z: number };
+  rotation?: { x: number; y: number; z: number };
+  scale?: { x: number; y: number; z: number };
   lat: number;
   lng: number;
 }
@@ -50,6 +52,7 @@ interface ThreeMapProps {
   buildingScale?: { x: number; y: number; z: number };
   selectedBuildingId?: string | null;
   onBuildingSelect?: (id: string | null) => void;
+  customModelPath?: string | null;
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -261,6 +264,7 @@ export default function ThreeMap({
   buildingScale = { x: 10, y: 10, z: 10 },
   selectedBuildingId = null,
   onBuildingSelect,
+  customModelPath = null,
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -806,10 +810,18 @@ export default function ThreeMap({
       return;
     }
 
+    // Use custom model path if available, otherwise use default
+    const modelPath = customModelPath || '/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf';
+
     const loader = new GLTFLoader();
     loader.load(
-      '/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf',
+      modelPath,
       (gltf) => {
+        // Remove any existing ghost first
+        if (ghostModelRef.current && groupsRef.current) {
+          groupsRef.current.dynamicObjects.remove(ghostModelRef.current);
+        }
+
         const ghost = gltf.scene;
         ghost.scale.set(buildingScale.x, buildingScale.y, buildingScale.z);
 
@@ -830,6 +842,8 @@ export default function ThreeMap({
         ghostModelRef.current = ghost;
         groupsRef.current?.dynamicObjects.add(ghost);
         ghost.visible = false; // Hide until we have a position
+
+        console.log(`✅ Ghost preview loaded: ${modelPath}`);
       },
       undefined,
       (error) => console.error('Error loading ghost model:', error)
@@ -841,7 +855,7 @@ export default function ThreeMap({
         ghostModelRef.current = null;
       }
     };
-  }, [isPlacementMode, buildingScale]);
+  }, [isPlacementMode, buildingScale, customModelPath]);
 
   // Update ghost scale when buildingScale changes
   useEffect(() => {

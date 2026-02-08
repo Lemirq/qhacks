@@ -19,19 +19,21 @@ export function Building({ spec }: BuildingProps) {
     // Create building body
     const body = createBuildingBody(spec);
 
-    // Apply wall texture
-    let wallTexture: THREE.Texture;
+    // Apply wall texture - clone to avoid affecting other buildings
+    let baseTexture: THREE.Texture | null;
     if (spec.customWallTexture) {
-      wallTexture = loadTextureFromDataURL(spec.customWallTexture);
+      baseTexture = loadTextureFromDataURL(spec.customWallTexture);
     } else {
       const wallTexturePath = getTexturePath(spec.wallTexture, 'wall');
-      wallTexture = loadTexture(wallTexturePath);
+      baseTexture = loadTexture(wallTexturePath);
     }
 
-    const totalHeight = spec.floorHeight * spec.numberOfFloors;
-    wallTexture.repeat.set(spec.width / 3, totalHeight / 3);
-
-    if (body.material instanceof THREE.Material) {
+    // Clone the texture so each building has its own repeat settings
+    if (baseTexture && body.material instanceof THREE.Material) {
+      const wallTexture = baseTexture.clone();
+      wallTexture.needsUpdate = true;
+      const totalHeight = spec.floorHeight * spec.numberOfFloors;
+      wallTexture.repeat.set(spec.width / 3, totalHeight / 3);
       (body.material as THREE.MeshStandardMaterial).map = wallTexture;
       (body.material as THREE.MeshStandardMaterial).needsUpdate = true;
     }

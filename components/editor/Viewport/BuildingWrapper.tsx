@@ -2,7 +2,9 @@ import { useRef } from 'react';
 import * as THREE from 'three';
 import { Building } from './Building';
 import { SelectionIndicator } from './SelectionIndicator';
+import { BuildingTrees } from './Trees';
 import type { BuildingInstance } from '@/lib/editor/types/buildingSpec';
+import { DEFAULT_TREE_CONFIG } from '@/lib/editor/types/buildingSpec';
 import { useBuildings } from '@/lib/editor/contexts/BuildingsContext';
 
 interface BuildingWrapperProps {
@@ -38,15 +40,30 @@ export function BuildingWrapper({ building, isSelected, onSelect }: BuildingWrap
     }
   };
 
+  const treeConfig = building.spec.treeConfig || DEFAULT_TREE_CONFIG;
+
   return (
-    <group
-      ref={groupRef}
-      position={[building.position.x, building.position.y, building.position.z]}
-      rotation={[0, building.rotation, 0]}
-      onClick={handleClick}
-    >
-      <Building spec={building.spec} />
-      {(isSelected || isMergeSelected) && <SelectionIndicator spec={building.spec} isMergeMode={isMergeSelected} />}
-    </group>
+    <>
+      <group
+        ref={groupRef}
+        name={`building-${building.id}`}
+        userData={{ isBuilding: true, buildingId: building.id }}
+        position={[building.position.x, building.position.y, building.position.z]}
+        rotation={[0, building.rotation, 0]}
+        onClick={handleClick}
+      >
+        <Building spec={building.spec} />
+        {(isSelected || isMergeSelected) && <SelectionIndicator spec={building.spec} isMergeMode={isMergeSelected} />}
+      </group>
+      {/* Trees rendered outside rotation group so they stay upright */}
+      {treeConfig.enabled && (
+        <BuildingTrees
+          buildingPosition={building.position}
+          buildingWidth={building.spec.width}
+          buildingDepth={building.spec.depth}
+          config={treeConfig}
+        />
+      )}
+    </>
   );
 }

@@ -183,7 +183,7 @@ export function BlueprintTracer({ blueprintImage, onFootprintComplete }: Bluepri
 
   return (
     <div className="space-y-4">
-      <div className="border-2 border-blue-300 rounded-xl overflow-hidden bg-gray-50 shadow-sm">
+      <div className="border-2 border-amber-300 rounded-xl overflow-hidden bg-gray-50 shadow-sm">
         <canvas
           ref={canvasRef}
           onClick={handleCanvasClick}
@@ -213,15 +213,15 @@ export function BlueprintTracer({ blueprintImage, onFootprintComplete }: Bluepri
 
       <div className="text-sm text-gray-700 bg-white border-2 border-gray-200 rounded-lg p-4 space-y-2 shadow-sm">
         <p className="flex items-start gap-2">
-          <span className="text-blue-600 font-bold">•</span>
+          <span className="text-amber-600 font-bold">•</span>
           <span>Click to add corners of the building</span>
         </p>
         <p className="flex items-start gap-2">
-          <span className="text-blue-600 font-bold">•</span>
+          <span className="text-amber-600 font-bold">•</span>
           <span>Click the first point (red) or press "Complete" when done</span>
         </p>
         <p className="flex items-start gap-2">
-          <span className="text-blue-600 font-bold">•</span>
+          <span className="text-amber-600 font-bold">•</span>
           <span>Need at least 3 points to create a building</span>
         </p>
       </div>
