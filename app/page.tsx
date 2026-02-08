@@ -80,10 +80,10 @@ export default function Landing() {
           <h1 className="lp-hero-title">Reimagine.</h1>
 
           <Link href="/map" className="lp-hero-cta">
-            Explore Kingston&ensp;&rarr;
+            Enter the Golden Age&ensp;&rarr;
           </Link>
 
-          {/* White overlay that fades in */}
+          {/* White overlay that fades in - pointer-events: none so it doesn't block button clicks */}
           <motion.div
             style={{
               position: 'absolute',
@@ -91,6 +91,7 @@ export default function Landing() {
               backgroundColor: '#fff',
               opacity: overlayOpacity,
               zIndex: 10,
+              pointerEvents: 'none',
             }}
           />
         </motion.div>
@@ -111,16 +112,16 @@ export default function Landing() {
           <span className="lp-stmt-rule lp-fade" style={{ animationDelay: '0.1s' }} />
 
           <p className="lp-stmt-small lp-fade" style={{ animationDelay: '0.25s' }}>
-            Cities rise in moments. Legacies last for generations.
+            Every golden age begins with a vision. Legacies are built to last.
           </p>
 
           <div className="lp-stmt-block lp-fade" style={{ animationDelay: '0.5s' }}>
-            <h2 className="lp-stmt-line">Before we build the future,</h2>
-            <h2 className="lp-stmt-line">Kingston deserves to see it.</h2>
+            <h2 className="lp-stmt-line">Kingston stands at the dawn of a new era.</h2>
+            <h2 className="lp-stmt-line">Let&apos;s build it together.</h2>
           </div>
 
           <p className="lp-stmt-sub lp-fade" style={{ animationDelay: '0.75s' }}>
-            Design smarter. Build responsibly.
+            Craft the next chapter of prosperity.
           </p>
 
           <h2 className="lp-stmt-main lp-fade" style={{ animationDelay: '0.95s' }}>
@@ -132,37 +133,37 @@ export default function Landing() {
             className="lp-stmt-cta lp-fade"
             style={{ animationDelay: '1.35s' }}
           >
-            Explore the Future&ensp;&rarr;
+            Enter the Golden Age&ensp;&rarr;
           </Link>
         </section>
 
         {/* ───── YOUR JOURNEY ───── */}
         <section className="bg-[#f4efe6]">
           <FeatureSteps
-            title="Your Journey Starts Here"
-            subtitle="Kingston is entering a new golden age. New housing, hotels, and public spaces are creating jobs, attracting investment, and strengthening the local economy. Real progress is not about building fast. It is about building wisely and planning for the years ahead."
+            title="Building Kingston's Golden Age"
+            subtitle="A new era of prosperity is rising. Housing, hotels, and public spaces are creating jobs, attracting investment, and strengthening our community. The Golden Age is not built in haste — it is crafted with vision, wisdom, and care for generations to come."
             features={[
               {
                 step: 'Step 1',
-                title: 'Build With Purpose',
+                title: 'Design for the Ages',
                 content:
-                  'Transform blueprints and ideas into accurate 3D buildings in minutes. Design spaces that support economic growth, community needs, and long-term stability.',
+                  'Transform blueprints and ideas into accurate 3D buildings in minutes. Create spaces worthy of a Golden Age — supporting growth, community, and lasting prosperity.',
                 image:
                   'https://images.unsplash.com/photo-1686164748261-33e13eef70b6?q=80&w=2070&auto=format&fit=crop',
               },
               {
                 step: 'Step 2',
-                title: 'Place With Intention',
+                title: 'Weave Into the City',
                 content:
-                  'Position your building in real Kingston locations. Evaluate how new projects fit into neighborhoods, transit systems, and long-term development plans.',
+                  'Place your vision in real Kingston locations. See how new projects fit into the fabric of neighborhoods, transit, and the long-term flourishing of the city.',
                 image:
                   'https://images.unsplash.com/photo-1598897270268-f7091c801c3d?q=80&w=2070&auto=format&fit=crop',
               },
               {
                 step: 'Step 3',
-                title: 'Grow Responsibly',
+                title: 'Leave a Lasting Legacy',
                 content:
-                  'Simulate environmental, traffic, and community impacts before construction begins. Use data to refine designs and protect Kingston\'s future.',
+                  'Simulate environmental, traffic, and community impacts before construction begins. Refine designs with data and ensure Kingston\'s Golden Age endures.',
                 image:
                   'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?q=80&w=2070&auto=format&fit=crop',
               },
@@ -172,49 +173,14 @@ export default function Landing() {
           />
         </section>
 
-        {/* ───── DETAILS ───── */}
-        <section className="lp-details">
-          <div className="lp-detail">
-            <span className="lp-detail-num">I</span>
-            <h3>The City in 3D</h3>
-            <p>
-              Kingston&apos;s buildings pulled from OpenStreetMap, extruded into
-              real geometry with satellite-textured roads and live traffic
-              simulation — 30 AI vehicles navigating signals in real time.
-            </p>
-            <Link href="/map" className="lp-detail-link">Enter the city &rarr;</Link>
-          </div>
-
-          <div className="lp-detail">
-            <span className="lp-detail-num">II</span>
-            <h3>Design &amp; Place</h3>
-            <p>
-              Create buildings from blueprints or from scratch — floors, roofs,
-              windows, textures — then drop them onto the map and export as
-              GLB models for any 3D workflow.
-            </p>
-            <Link href="/editor" className="lp-detail-link">Open the editor &rarr;</Link>
-          </div>
-
-          <div className="lp-detail">
-            <span className="lp-detail-num">III</span>
-            <h3>Measure the Impact</h3>
-            <p>
-              Simulate the construction timeline. Watch traffic reroute around
-              closures. Track CO&#8322; emissions, noise levels, and air quality
-              before the first shovel hits the ground.
-            </p>
-          </div>
-        </section>
-
         {/* ───── CLOSING ───── */}
         <section className="lp-closing">
           <p className="lp-closing-text">
-            Built for the City of Kingston at QHacks 2025.
+            Shaping the Golden Age — Built for the City of Kingston at QHacks 2025.
           </p>
           <div className="lp-closing-ctas">
-            <Link href="/map" className="lp-btn-warm">Explore Kingston</Link>
-            <Link href="/editor" className="lp-btn-outline">Building Editor</Link>
+            <Link href="/map" className="lp-btn-warm">Enter the Golden Age</Link>
+            <Link href="/editor" className="lp-btn-outline">Build the Future</Link>
           </div>
         </section>
 

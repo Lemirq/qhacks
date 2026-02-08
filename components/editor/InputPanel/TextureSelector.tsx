@@ -1,5 +1,6 @@
 import { BuildingSpecification } from '@/lib/editor/types/buildingSpec';
 import { WALL_TEXTURES, WINDOW_TEXTURES } from '@/lib/editor/utils/textureLoader';
+import { useBuildingSound } from '@/lib/editor/hooks/useBuildingSound';
 
 interface TextureSelectorProps {
   spec: BuildingSpecification;
@@ -7,6 +8,8 @@ interface TextureSelectorProps {
 }
 
 export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
+  const { play: playSound } = useBuildingSound();
+
   const handleWallTextureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -14,6 +17,7 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string;
         onUpdate({ wallTexture: 'custom', customWallTexture: dataUrl });
+        playSound('change_texture');
       };
       reader.readAsDataURL(file);
     }
@@ -26,6 +30,7 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string;
         onUpdate({ windowTexture: 'custom', customWindowTexture: dataUrl });
+        playSound('change_texture');
       };
       reader.readAsDataURL(file);
     }
@@ -44,7 +49,7 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
           {WALL_TEXTURES.map((texture) => (
             <button
               key={texture.name}
-              onClick={() => onUpdate({ wallTexture: texture.name, customWallTexture: undefined })}
+              onClick={() => { onUpdate({ wallTexture: texture.name, customWallTexture: undefined }); playSound('change_texture'); }}
               className={`w-full px-5 py-2.5 rounded-full text-sm font-medium border-2 text-left transition-all duration-200 ease-out ${
                 spec.wallTexture === texture.name && !spec.customWallTexture
                   ? 'bg-amber-500 border-amber-400 text-white shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)]'
@@ -90,7 +95,7 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
           {WINDOW_TEXTURES.map((texture) => (
             <button
               key={texture.name}
-              onClick={() => onUpdate({ windowTexture: texture.name, customWindowTexture: undefined })}
+              onClick={() => { onUpdate({ windowTexture: texture.name, customWindowTexture: undefined }); playSound('change_texture'); }}
               className={`w-full px-5 py-2.5 rounded-full text-sm font-medium border-2 text-left transition-all duration-200 ease-out ${
                 spec.windowTexture === texture.name && !spec.customWindowTexture
                   ? 'bg-amber-500 border-amber-400 text-white shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)]'

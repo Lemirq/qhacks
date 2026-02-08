@@ -6,6 +6,7 @@ import { BuildingWrapper } from './BuildingWrapper';
 import { GoldEffects, GoldBurst } from './GoldParticles';
 import { useBuildings } from '@/lib/editor/contexts/BuildingsContext';
 import { DEFAULT_BUILDING_SPEC } from '@/lib/editor/types/buildingSpec';
+import { useBuildingSound } from '@/lib/editor/hooks/useBuildingSound';
 
 const SNAP_THRESHOLD = 5; // Units within which snapping activates
 
@@ -16,6 +17,7 @@ interface SceneContentProps {
 function SceneContent({ sceneRef }: SceneContentProps) {
   const { buildings, selectedBuildingId, selectBuilding, addBuilding, placementMode, clearSelection } = useBuildings();
   const { scene } = useThree();
+  const { play: playSound } = useBuildingSound();
   const gridPlaneRef = useRef<THREE.Mesh>(null);
   const [ghostPosition, setGhostPosition] = useState<{ x: number; y: number; z: number } | null>(null);
   const [isSnapped, setIsSnapped] = useState(false);
@@ -167,6 +169,7 @@ function SceneContent({ sceneRef }: SceneContentProps) {
     }]);
 
     addBuilding({ x, y, z });
+    playSound('brick_place');
     setGhostPosition(null);
     setIsSnapped(false);
   };

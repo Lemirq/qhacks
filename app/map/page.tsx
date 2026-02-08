@@ -117,6 +117,7 @@ function MapPageContent() {
     worldX: number;
     worldY: number;
     worldZ: number;
+    ghostRotationY?: number;
   } | null) => {
     if (coordinate) {
       if (isPlacementMode) {
@@ -129,12 +130,12 @@ function MapPageContent() {
           modelPath = '/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf';
         }
 
-        // Place a building at the clicked location
+        // Place a building at the clicked location with the ghost rotation
         const newBuilding: PlacedBuilding = {
           id: `building-${Date.now()}`,
           modelPath,
           position: { x: coordinate.worldX, y: coordinate.worldY, z: coordinate.worldZ },
-          rotation: { x: 0, y: 0, z: 0 },
+          rotation: { x: 0, y: coordinate.ghostRotationY || 0, z: 0 },
           scale: { x: buildingScale.x, y: buildingScale.y, z: buildingScale.z },
           lat: coordinate.lat,
           lng: coordinate.lng,

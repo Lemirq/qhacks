@@ -1,6 +1,7 @@
 import { BuildingSpecification, BuildingId } from '@/lib/editor/types/buildingSpec';
 import { useBuildings } from '@/lib/editor/contexts/BuildingsContext';
 import { useCallback } from 'react';
+import { useBuildingSound } from '@/lib/editor/hooks/useBuildingSound';
 
 interface DimensionsFormProps {
   spec: BuildingSpecification;
@@ -10,6 +11,7 @@ interface DimensionsFormProps {
 
 export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormProps) {
   const { buildings } = useBuildings();
+  const { play: playSound } = useBuildingSound();
 
   // Get current building
   const currentBuilding = buildings.find(b => b.id === buildingId);
@@ -137,7 +139,7 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
             max={maxWidth}
             step="0.5"
             value={Math.min(spec.width, maxWidth)}
-            onChange={(e) => onUpdate({ width: parseFloat(e.target.value) })}
+            onChange={(e) => { onUpdate({ width: parseFloat(e.target.value) }); playSound('resize_object'); }}
             className="flex-4 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
           />
           <input
@@ -149,6 +151,7 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
             onChange={(e) => {
               const val = parseFloat(e.target.value);
               onUpdate({ width: Math.min(val, maxWidth) });
+              playSound('resize_object');
             }}
             className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg text-sm text-center focus:border-amber-400 focus:outline-none transition-colors duration-200"
           />
@@ -167,7 +170,7 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
             max={maxDepth}
             step="0.5"
             value={Math.min(spec.depth, maxDepth)}
-            onChange={(e) => onUpdate({ depth: parseFloat(e.target.value) })}
+            onChange={(e) => { onUpdate({ depth: parseFloat(e.target.value) }); playSound('resize_object'); }}
             className="flex-4 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
           />
           <input
@@ -179,6 +182,7 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
             onChange={(e) => {
               const val = parseFloat(e.target.value);
               onUpdate({ depth: Math.min(val, maxDepth) });
+              playSound('resize_object');
             }}
             className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg text-sm text-center focus:border-amber-400 focus:outline-none transition-colors duration-200"
           />
@@ -197,7 +201,7 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
             max={maxFloors}
             step="1"
             value={Math.min(spec.numberOfFloors, maxFloors)}
-            onChange={(e) => onUpdate({ numberOfFloors: parseInt(e.target.value) })}
+            onChange={(e) => { onUpdate({ numberOfFloors: parseInt(e.target.value) }); playSound('add_floor'); }}
             className="flex-4 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
           />
           <input
@@ -209,6 +213,7 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
             onChange={(e) => {
               const val = parseInt(e.target.value);
               onUpdate({ numberOfFloors: Math.min(val, maxFloors) });
+              playSound('add_floor');
             }}
             className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg text-sm text-center focus:border-amber-400 focus:outline-none transition-colors duration-200"
           />
@@ -227,7 +232,7 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
             max={maxFloorHeight}
             step="0.1"
             value={Math.min(spec.floorHeight, maxFloorHeight)}
-            onChange={(e) => onUpdate({ floorHeight: parseFloat(e.target.value) })}
+            onChange={(e) => { onUpdate({ floorHeight: parseFloat(e.target.value) }); playSound('resize_object'); }}
             className="flex-4 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
           />
           <input
@@ -239,6 +244,7 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
             onChange={(e) => {
               const val = parseFloat(e.target.value);
               onUpdate({ floorHeight: Math.min(val, maxFloorHeight) });
+              playSound('resize_object');
             }}
             className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg text-sm text-center focus:border-amber-400 focus:outline-none transition-colors duration-200"
           />

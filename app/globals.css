@@ -51,11 +51,16 @@ body {
     text-transform: uppercase;
     color: #3d362c;
     text-decoration: none;
-    transition: color 0.2s;
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    outline: none;
+    transition: color 0.2s, border-color 0.2s;
   }
 
   .lp-nav-links a:hover {
     color: #1a1611;
+    border-color: #1a1611;
   }
 
   .lp-hero-wrap {
