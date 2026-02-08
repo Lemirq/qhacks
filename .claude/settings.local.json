@@ -8,7 +8,9 @@
       "Bash(curl:*)",
       "Bash(npx tsx:*)",
       "Bash(python3:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(wc:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

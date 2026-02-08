@@ -105,7 +105,7 @@ function createBuildingMesh(
 
   // Use uniform color for all buildings
   const material = new THREE.MeshLambertMaterial({
-    color: 0xcccccc, // Light gray for all buildings
+    color: 0xf5f5f5, // Very light white/gray for all buildings
     flatShading: false,
   });
 

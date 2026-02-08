@@ -107,10 +107,10 @@ export function createGround(
   // Rotate geometry to be horizontal (in XZ plane) BEFORE creating mesh
   geometry.rotateX(-Math.PI / 2);
 
-  // Create material - light gray ground (#EEE)
+  // Create material - white ground
   const material = new THREE.MeshStandardMaterial({
     map: satelliteTexture || null,
-    color: satelliteTexture ? 0xffffff : 0xeeeeee, // #EEE light gray
+    color: satelliteTexture ? 0xffffff : 0xffffff, // Pure white
     roughness: 0.9,
     metalness: 0.0,
     side: THREE.DoubleSide,

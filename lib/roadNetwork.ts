@@ -370,4 +370,25 @@ export class RoadNetwork {
   getDestinations(): Destination[] {
     return Array.from(this.destinations.values());
   }
+
+  /**
+   * Get intersection node by ID
+   * Returns intersection nodes (nodes with 3+ connected edges)
+   */
+  getIntersectionById(id: string): RoadNode | undefined {
+    const node = this.nodes.get(id);
+    if (node && node.type === "intersection") {
+      return node;
+    }
+    return undefined;
+  }
+
+  /**
+   * Get all intersection nodes
+   */
+  getIntersections(): RoadNode[] {
+    return Array.from(this.nodes.values()).filter(
+      (node) => node.type === "intersection"
+    );
+  }
 }

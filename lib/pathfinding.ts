@@ -218,4 +218,51 @@ export class Pathfinder {
 
     return route.edges[currentIndex + 1];
   }
+
+  /**
+   * Get upcoming turn angle for turn signal detection
+   * Returns bearing change in degrees (positive = right, negative = left)
+   * Returns 0 if no turn ahead or route complete
+   */
+  getUpcomingTurn(route: Route, currentEdge: string): number {
+    const currentIndex = route.edges.indexOf(currentEdge);
+
+    if (currentIndex === -1 || currentIndex >= route.edges.length - 1) {
+      return 0; // No turn ahead
+    }
+
+    const currentEdgeData = this.network.getEdge(currentEdge);
+    const nextEdgeData = this.network.getEdge(route.edges[currentIndex + 1]);
+
+    if (!currentEdgeData || !nextEdgeData) {
+      return 0;
+    }
+
+    // Get bearing of current edge (last segment)
+    const currentGeom = currentEdgeData.geometry;
+    if (currentGeom.length < 2) return 0;
+
+    const currentBearing = turf.bearing(
+      turf.point(currentGeom[currentGeom.length - 2]),
+      turf.point(currentGeom[currentGeom.length - 1])
+    );
+
+    // Get bearing of next edge (first segment)
+    const nextGeom = nextEdgeData.geometry;
+    if (nextGeom.length < 2) return 0;
+
+    const nextBearing = turf.bearing(
+      turf.point(nextGeom[0]),
+      turf.point(nextGeom[1])
+    );
+
+    // Calculate bearing change
+    let bearingChange = nextBearing - currentBearing;
+
+    // Normalize to -180 to 180
+    while (bearingChange > 180) bearingChange -= 360;
+    while (bearingChange < -180) bearingChange += 360;
+
+    return bearingChange;
+  }
 }

@@ -4,8 +4,10 @@
  */
 
 import * as turf from '@turf/turf';
+import * as THREE from 'three';
 import { RoadNetwork, RoadNode, Destination } from './roadNetwork';
 import { Pathfinder, Route } from './pathfinding';
+import { VehiclePhysicsConfig } from './vehiclePhysics';
 
 export type CarType = 'sedan' | 'suv' | 'truck' | 'compact';
 
@@ -34,6 +36,18 @@ export interface SpawnedCar {
   maxSpeed: number; // Maximum speed for this car (km/h)
   bearing: number; // Current direction (degrees)
   stoppedAtLight: boolean;
+
+  // Physics integration fields
+  physicsProfile: VehiclePhysicsConfig;
+  targetSpeed: number; // Target speed from behavior controller (km/h)
+  acceleration: number; // Current acceleration (m/s²)
+
+  // Behavior fields
+  currentBehavior?: string; // Current behavior state (for debugging)
+  behaviorTimer: number; // Timer for behavior state changes
+
+  // Rendering fields
+  meshRef?: THREE.Object3D; // Reference to 3D mesh for light updates
 }
 
 export interface SpawnerConfig {
@@ -221,20 +235,49 @@ export class Spawner {
     // Select random destination (weighted)
     const destination = this.selectDestination();
     if (!destination) {
-      console.warn('No destinations available');
+      console.warn('⚠️ No destinations available');
       return null;
     }
 
+    console.log(`🚀 Attempting to spawn car from ${spawnPoint.id} [${spawnPoint.position}] to ${destination.name} [${destination.position}]`);
+
     // Find route from spawn point to destination
-    const route = this.pathfinder.findRoute(spawnPoint.position, destination.position);
+    let route = this.pathfinder.findRoute(spawnPoint.position, destination.position);
+
+    // FALLBACK: If pathfinding fails, create a simple route with just the spawn position
     if (!route) {
-      console.warn(`Could not find route from ${spawnPoint.id} to ${destination.id}`);
-      return null;
+      console.warn(`⚠️ Could not find route, creating fallback route at spawn point`);
+      // Create a minimal route that just stays at the spawn point for now
+      const edges = this.roadNetwork.getEdges();
+      if (edges.length > 0) {
+        const randomEdge = edges[Math.floor(Math.random() * edges.length)];
+        route = {
+          nodes: [],
+          edges: [randomEdge.id],
+          totalDistance: randomEdge.length,
+          estimatedTime: randomEdge.length / 10, // ~10 m/s
+          waypoints: randomEdge.geometry,
+        };
+        console.log(`✅ Created fallback route on edge ${randomEdge.id}`);
+      } else {
+        console.error(`❌ No edges available for fallback route`);
+        return null;
+      }
+    } else {
+      console.log(`✅ Route found! ${route.waypoints.length} waypoints, ${route.edges.length} edges`);
     }
 
     // Select car type based on distribution
     const carType = this.selectCarType();
     const color = this.selectCarColor();
+
+    // Get physics profile for this car type
+    const physicsProfile = this.getPhysicsProfileForType(carType);
+
+    // Use first waypoint of route as actual spawn position (on the road)
+    const actualSpawnPos = route.waypoints.length > 0
+      ? route.waypoints[0] as [number, number]
+      : spawnPoint.position;
 
     const car: SpawnedCar = {
       id: `car-${this.nextCarId++}`,
@@ -242,7 +285,7 @@ export class Spawner {
       color,
       spawnPointId: spawnPoint.id,
       spawnTime: Date.now(),
-      position: spawnPoint.position,
+      position: actualSpawnPos,  // Use route waypoint, not spawn point
       destination,
       route,
       currentEdgeId: route.edges[0] || null,
@@ -251,6 +294,18 @@ export class Spawner {
       maxSpeed: this.config.defaultCarSpeed + (Math.random() * 20 - 10), // ±10 km/h variance
       bearing: 0,
       stoppedAtLight: false,
+
+      // Physics integration
+      physicsProfile,
+      targetSpeed: this.config.defaultCarSpeed,
+      acceleration: 0,
+
+      // Behavior fields
+      currentBehavior: 'cruising',
+      behaviorTimer: 0,
+
+      // Mesh reference (set later in ThreeMap)
+      meshRef: undefined,
     };
 
     // Calculate initial bearing
@@ -271,7 +326,11 @@ export class Spawner {
    * Select destination using weighted random selection
    */
   private selectDestination(): Destination | null {
-    return this.roadNetwork.getRandomDestination();
+    const dest = this.roadNetwork.getRandomDestination();
+    if (!dest) {
+      console.error('❌ No destinations available in road network!');
+    }
+    return dest;
   }
 
   /**
@@ -296,6 +355,52 @@ export class Spawner {
    */
   private selectCarColor(): string {
     return CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)];
+  }
+
+  /**
+   * Get physics profile for car type
+   */
+  private getPhysicsProfileForType(type: CarType): VehiclePhysicsConfig {
+    const profiles: Record<CarType, VehiclePhysicsConfig> = {
+      sedan: {
+        maxAcceleration: 3.0,
+        maxDeceleration: 8.0,
+        comfortDeceleration: 3.5,
+        reactionTime: 1.0,
+        minFollowDistance: 2.0,
+        timeHeadway: 1.5,
+        speedVariance: 0.1,
+      },
+      suv: {
+        maxAcceleration: 2.5,
+        maxDeceleration: 7.0,
+        comfortDeceleration: 3.0,
+        reactionTime: 1.1,
+        minFollowDistance: 2.5,
+        timeHeadway: 1.8,
+        speedVariance: 0.12,
+      },
+      truck: {
+        maxAcceleration: 1.8,
+        maxDeceleration: 6.0,
+        comfortDeceleration: 2.5,
+        reactionTime: 1.3,
+        minFollowDistance: 3.5,
+        timeHeadway: 2.2,
+        speedVariance: 0.08,
+      },
+      compact: {
+        maxAcceleration: 3.2,
+        maxDeceleration: 8.5,
+        comfortDeceleration: 4.0,
+        reactionTime: 0.9,
+        minFollowDistance: 1.8,
+        timeHeadway: 1.3,
+        speedVariance: 0.15,
+      },
+    };
+
+    return profiles[type];
   }
 
   /**
