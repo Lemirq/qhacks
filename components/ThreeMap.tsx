@@ -17,6 +17,8 @@ import { fetchBuildings } from "@/lib/buildingData";
 import { renderBuildings } from "@/lib/buildingRenderer";
 import { renderRoads } from "@/lib/roadRenderer";
 import { createGround } from "@/lib/environmentRenderer";
+import { renderTreesAroundBuilding, getDefaultTreeConfigForMap } from "@/lib/treeRenderer";
+import { TreeConfig } from "@/lib/editor/types/buildingSpec";
 
 // Projection and camera
 import { CityProjection } from "@/lib/projection";
@@ -72,6 +74,7 @@ interface PlacedBuilding {
   scale?: { x: number; y: number; z: number };
   lat: number;
   lng: number;
+  treeConfig?: TreeConfig; // Optional tree configuration for landscaping
 }
 
 interface ThreeMapProps {
@@ -333,6 +336,7 @@ export default function ThreeMap({
   );
   const ghostModelRef = useRef<THREE.Group | null>(null);
   const buildingModelsRef = useRef<Map<string, THREE.Group>>(new Map());
+  const buildingTreesRef = useRef<Map<string, THREE.Group>>(new Map()); // Trees for each placed building
   const osmBuildingMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const composerRef = useRef<EffectComposer | null>(null);
   const outlinePassRef = useRef<OutlinePass | null>(null);
@@ -1360,6 +1364,13 @@ export default function ThreeMap({
           buildingModelsRef.current.delete(id);
           console.log(`🗑️ Removed building ${id}`);
         }
+        // Also remove associated trees
+        const trees = buildingTreesRef.current.get(id);
+        if (trees) {
+          groupsRef.current?.dynamicObjects.remove(trees);
+          buildingTreesRef.current.delete(id);
+          console.log(`🌲 Removed trees for building ${id}`);
+        }
       }
     });
 
@@ -1409,6 +1420,46 @@ export default function ThreeMap({
           // Need to update matrix world for accurate bounding box calculation
           model.updateMatrixWorld(true);
           checkAndDeleteCollidingBuildings(model);
+
+          // Always generate trees around the building
+          const treeConfig = building.treeConfig || getDefaultTreeConfigForMap();
+          // Force enabled to true so trees are always generated
+          const forcedTreeConfig = { ...treeConfig, enabled: true };
+          if (groupsRef.current) {
+            // Calculate building dimensions from bounding box
+            const bbox = new THREE.Box3().setFromObject(model);
+            const size = bbox.getSize(new THREE.Vector3());
+            const buildingWidth = size.x;
+            const buildingDepth = size.z;
+
+            // Use the same scale as the building for trees
+            const buildingScaleValue = scale.x; // Assuming uniform scale
+
+            // Collect other buildings for collision detection (exclude current building)
+            const otherBuildings: THREE.Object3D[] = [];
+            buildingModelsRef.current.forEach((otherModel, otherId) => {
+              if (otherId !== building.id) {
+                otherBuildings.push(otherModel);
+              }
+            });
+            // Also include OSM buildings
+            osmBuildingMeshesRef.current.forEach((osmMesh) => {
+              otherBuildings.push(osmMesh);
+            });
+
+            const treeGroup = renderTreesAroundBuilding(
+              building.position,
+              buildingWidth,
+              buildingDepth,
+              forcedTreeConfig,
+              groupsRef.current.dynamicObjects,
+              buildingScaleValue, // Pass building scale to trees
+              model, // Pass the building model for collision detection
+              groupsRef.current.staticGeometry, // Pass static geometry (roads) for collision detection
+              otherBuildings // Pass other buildings for collision detection
+            );
+            buildingTreesRef.current.set(building.id, treeGroup);
+          }
         },
         undefined,
         (error) => {
@@ -1719,31 +1770,13 @@ export default function ThreeMap({
         </div>
       )}
 
-      {/* Selected OSM Building Panel */}
+      {/* Selected OSM Building - Delete Button */}
       {selectedOsmBuildingId && (
-        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 bg-white border border-gray-300 rounded-lg shadow-lg z-20 p-4 min-w-[280px]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-gray-400 rounded"></div>
-              <span className="font-bold text-gray-800 text-sm">
-                OSM Building Selected
-              </span>
-            </div>
-            <button
-              onClick={() => setSelectedOsmBuildingId(null)}
-              className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="text-xs text-gray-600 mb-3 font-mono bg-gray-50 p-2 rounded">
-            ID: {selectedOsmBuildingId}
-          </div>
+        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20">
           <button
             onClick={() => deleteOsmBuilding(selectedOsmBuildingId)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm font-semibold transition-colors"
+            className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg shadow-lg text-sm font-semibold transition-colors"
           >
-            <span>🗑️</span>
             Delete Building
           </button>
         </div>
