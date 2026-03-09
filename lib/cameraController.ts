@@ -60,19 +60,17 @@ export function flyToQueens(
     const queensPosition = CityProjection.projectToWorld([queensLng, queensLat]);
 
     // Starting position: High altitude view of Kingston area
-    // Position camera far above and to the southwest for dramatic approach
     const startPosition = {
-      x: queensPosition.x - 3000, // 3km southwest
-      y: 5000, // 5km altitude
-      z: queensPosition.z + 3000,
+      x: queensPosition.x - 400,
+      y: 600,
+      z: queensPosition.z + 400,
     };
 
     // End position: Closer view of Queen's campus
-    // Lower altitude, centered on campus for good overview
     const endPosition = {
-      x: queensPosition.x - 500, // 500m offset for angled view
-      y: 800, // 800m altitude for campus overview
-      z: queensPosition.z + 500,
+      x: queensPosition.x - 100,
+      y: 200,
+      z: queensPosition.z + 100,
     };
 
     // Starting lookAt target: General Kingston area
@@ -144,7 +142,7 @@ export function flyToLocation(
   camera: THREE.Camera,
   controls: OrbitControls,
   lngLat: [number, number],
-  altitude: number = 800,
+  altitude: number = 200,
   duration: number = 2000
 ): Promise<void> {
   return new Promise((resolve) => {
@@ -159,9 +157,9 @@ export function flyToLocation(
 
     // End position with offset for angled view
     const endPosition = {
-      x: targetPosition.x - 500,
+      x: targetPosition.x - 100,
       y: altitude,
-      z: targetPosition.z + 500,
+      z: targetPosition.z + 100,
     };
 
     // Current target

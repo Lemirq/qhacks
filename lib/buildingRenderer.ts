@@ -7,14 +7,8 @@ import * as THREE from "three";
 import { Building } from "./buildingData";
 import { CityProjection } from "./projection";
 
-// ==================== BUILDING HEIGHT CONFIGURATION ====================
-// Adjust this multiplier to make buildings taller or shorter
-// Examples:
-//   1.0 = Real-world proportions (with scale factor applied)
-//   2.0 = Buildings appear twice as tall (more dramatic)
-//   0.5 = Buildings appear half as tall (more subtle)
-export const HEIGHT_MULTIPLIER = 8.0;
-// ======================================================================
+// Height multiplier: 1.0 = real-world proportions (height scales same as XZ)
+export const HEIGHT_MULTIPLIER = 1.0;
 
 /**
  * Render buildings as 3D meshes and add them to the scene
@@ -116,11 +110,10 @@ function createBuildingMesh(
   // Create mesh
   const mesh = new THREE.Mesh(geometry, material);
 
-  // Position at ground level (y=0)
-  // After rotation, the extruded geometry is centered, so we need to lift it
-  // by half its height to make the base sit at y=0 and extend upward
+  // After rotateX(PI/2), extrusion goes from y=0 down to y=-depth.
+  // Translate geometry up so base sits at y=0.
   const scaledHeight = building.height * SCALE_FACTOR * HEIGHT_MULTIPLIER;
-  mesh.position.y = scaledHeight / 2;
+  geometry.translate(0, scaledHeight, 0);
 
   // Enable shadows
   mesh.castShadow = true;

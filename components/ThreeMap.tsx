@@ -149,76 +149,77 @@ const TRAFFIC_LIGHT_TIMINGS = {
   red: 8000,
 };
 
-// Create 3D car models
+// Create 3D car models (real-world meters × map SCALE_FACTOR)
 function createCarModel(type: CarType, color: string): THREE.Mesh {
+  const S = 10 / 1.4; // map scale factor
   const group = new THREE.Group();
   const material = new THREE.MeshPhongMaterial({ color });
 
   switch (type) {
     case "sedan": {
-      const bodyGeometry = new THREE.BoxGeometry(1.8, 0.8, 4.2);
+      const bodyGeometry = new THREE.BoxGeometry(1.8 * S, 0.8 * S, 4.2 * S);
       const body = new THREE.Mesh(bodyGeometry, material);
-      body.position.y = 0.4;
+      body.position.y = 0.4 * S;
       group.add(body);
 
-      const cabinGeometry = new THREE.BoxGeometry(1.6, 0.6, 2.2);
+      const cabinGeometry = new THREE.BoxGeometry(1.6 * S, 0.6 * S, 2.2 * S);
       const cabin = new THREE.Mesh(cabinGeometry, material);
-      cabin.position.y = 1.1;
-      cabin.position.z = -0.3;
+      cabin.position.y = 1.1 * S;
+      cabin.position.z = -0.3 * S;
       group.add(cabin);
       break;
     }
     case "suv": {
-      const bodyGeometry = new THREE.BoxGeometry(2.0, 1.0, 4.5);
+      const bodyGeometry = new THREE.BoxGeometry(2.0 * S, 1.0 * S, 4.5 * S);
       const body = new THREE.Mesh(bodyGeometry, material);
-      body.position.y = 0.5;
+      body.position.y = 0.5 * S;
       group.add(body);
 
-      const cabinGeometry = new THREE.BoxGeometry(1.9, 0.8, 2.5);
+      const cabinGeometry = new THREE.BoxGeometry(1.9 * S, 0.8 * S, 2.5 * S);
       const cabin = new THREE.Mesh(cabinGeometry, material);
-      cabin.position.y = 1.3;
-      cabin.position.z = -0.2;
+      cabin.position.y = 1.3 * S;
+      cabin.position.z = -0.2 * S;
       group.add(cabin);
       break;
     }
     case "truck": {
-      const cabGeometry = new THREE.BoxGeometry(2.0, 1.2, 2.0);
+      const cabGeometry = new THREE.BoxGeometry(2.0 * S, 1.2 * S, 2.0 * S);
       const cab = new THREE.Mesh(cabGeometry, material);
-      cab.position.y = 1.0;
-      cab.position.z = 1.5;
+      cab.position.y = 1.0 * S;
+      cab.position.z = 1.5 * S;
       group.add(cab);
 
-      const bedGeometry = new THREE.BoxGeometry(2.0, 0.8, 3.0);
+      const bedGeometry = new THREE.BoxGeometry(2.0 * S, 0.8 * S, 3.0 * S);
       const bed = new THREE.Mesh(bedGeometry, material);
-      bed.position.y = 0.4;
-      bed.position.z = -1.0;
+      bed.position.y = 0.4 * S;
+      bed.position.z = -1.0 * S;
       group.add(bed);
       break;
     }
     case "compact": {
-      const bodyGeometry = new THREE.BoxGeometry(1.6, 0.7, 3.5);
+      const bodyGeometry = new THREE.BoxGeometry(1.6 * S, 0.7 * S, 3.5 * S);
       const body = new THREE.Mesh(bodyGeometry, material);
-      body.position.y = 0.35;
+      body.position.y = 0.35 * S;
       group.add(body);
 
-      const cabinGeometry = new THREE.BoxGeometry(1.5, 0.5, 2.0);
+      const cabinGeometry = new THREE.BoxGeometry(1.5 * S, 0.5 * S, 2.0 * S);
       const cabin = new THREE.Mesh(cabinGeometry, material);
-      cabin.position.y = 0.95;
-      cabin.position.z = -0.2;
+      cabin.position.y = 0.95 * S;
+      cabin.position.z = -0.2 * S;
       group.add(cabin);
       break;
     }
   }
 
   // Add wheels
-  const wheelGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 16);
+  const wheelGeometry = new THREE.CylinderGeometry(0.3 * S, 0.3 * S, 0.2 * S, 16);
   const wheelMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
 
   const wheelPositions = [
-    [0.7, 0.3, 1.2],
-    [-0.7, 0.3, 1.2],
-    [0.7, 0.3, -1.2],
-    [-0.7, 0.3, -1.2],
+    [0.7 * S, 0.3 * S, 1.2 * S],
+    [-0.7 * S, 0.3 * S, 1.2 * S],
+    [0.7 * S, 0.3 * S, -1.2 * S],
+    [-0.7 * S, 0.3 * S, -1.2 * S],
   ];
 
   wheelPositions.forEach(([x, y, z]) => {
@@ -229,7 +230,7 @@ function createCarModel(type: CarType, color: string): THREE.Mesh {
   });
 
   // Wrap in parent mesh for consistent handling
-  const finalGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const finalGeometry = new THREE.BoxGeometry(0.01, 0.01, 0.01);
   const finalMesh = new THREE.Mesh(finalGeometry, material);
   finalMesh.add(group);
   finalMesh.visible = true;
@@ -237,34 +238,35 @@ function createCarModel(type: CarType, color: string): THREE.Mesh {
   return finalMesh;
 }
 
-// Create traffic light 3D model
+// Create traffic light 3D model (real-world scale, then multiplied by map SCALE_FACTOR)
 function createTrafficLightModel(): THREE.Group {
+  const S = 10 / 1.4; // map scale factor
   const group = new THREE.Group();
 
-  // Pole - 50% smaller
-  const poleGeometry = new THREE.CylinderGeometry(2.5, 2.5, 25, 8);
+  // Pole: ~0.15m radius, 5m tall
+  const poleGeometry = new THREE.CylinderGeometry(0.15 * S, 0.15 * S, 5 * S, 8);
   const poleMaterial = new THREE.MeshPhongMaterial({
     color: 0x444444,
     emissive: 0x222222,
     emissiveIntensity: 0.5,
   });
   const pole = new THREE.Mesh(poleGeometry, poleMaterial);
-  pole.position.y = 12.5;
+  pole.position.y = 2.5 * S;
   group.add(pole);
 
-  // Light housing - 50% smaller
-  const housingGeometry = new THREE.BoxGeometry(10, 30, 7.5);
+  // Light housing: ~0.6m wide, 1.5m tall, 0.4m deep
+  const housingGeometry = new THREE.BoxGeometry(0.6 * S, 1.5 * S, 0.4 * S);
   const housingMaterial = new THREE.MeshPhongMaterial({
     color: 0x222222,
     emissive: 0x111111,
     emissiveIntensity: 0.3,
   });
   const housing = new THREE.Mesh(housingGeometry, housingMaterial);
-  housing.position.y = 25;
+  housing.position.y = 5.5 * S;
   group.add(housing);
 
-  // Lights (red, yellow, green) - 50% smaller
-  const lightGeometry = new THREE.SphereGeometry(4, 16, 16);
+  // Lights: ~0.2m radius
+  const lightGeometry = new THREE.SphereGeometry(0.2 * S, 16, 16);
 
   const redLight = new THREE.Mesh(
     lightGeometry,
@@ -274,7 +276,7 @@ function createTrafficLightModel(): THREE.Group {
       emissiveIntensity: 2,
     }),
   );
-  redLight.position.set(0, 35, 5);
+  redLight.position.set(0, 6.1 * S, 0.25 * S);
   redLight.name = "red";
   group.add(redLight);
 
@@ -286,7 +288,7 @@ function createTrafficLightModel(): THREE.Group {
       emissiveIntensity: 2,
     }),
   );
-  yellowLight.position.set(0, 25, 5);
+  yellowLight.position.set(0, 5.5 * S, 0.25 * S);
   yellowLight.name = "yellow";
   group.add(yellowLight);
 
@@ -298,7 +300,7 @@ function createTrafficLightModel(): THREE.Group {
       emissiveIntensity: 2,
     }),
   );
-  greenLight.position.set(0, 15, 5);
+  greenLight.position.set(0, 4.9 * S, 0.25 * S);
   greenLight.name = "green";
   group.add(greenLight);
 
@@ -345,10 +347,10 @@ function createRedStripOnRoad(
     const perpZ = (dx / len) * half;
 
     const i0 = vertices.length / 3;
-    vertices.push(p1.x - perpX, p1.y + 0.04, p1.z - perpZ);
-    vertices.push(p1.x + perpX, p1.y + 0.04, p1.z + perpZ);
-    vertices.push(p2.x - perpX, p2.y + 0.04, p2.z - perpZ);
-    vertices.push(p2.x + perpX, p2.y + 0.04, p2.z + perpZ);
+    vertices.push(p1.x - perpX, p1.y + 0.2, p1.z - perpZ);
+    vertices.push(p1.x + perpX, p1.y + 0.2, p1.z + perpZ);
+    vertices.push(p2.x - perpX, p2.y + 0.2, p2.z - perpZ);
+    vertices.push(p2.x + perpX, p2.y + 0.2, p2.z + perpZ);
 
     indices.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2);
   }
@@ -375,7 +377,7 @@ function createConstructionZoneBorder(radiusScene: number): THREE.Group {
     ringMat,
   );
   ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.03;
+  ring.position.y = 0.15;
   ring.name = "construction-zone-border";
   group.add(ring);
   return group;
@@ -627,6 +629,8 @@ export default function ThreeMap({
         speedZonesGroupRef.current = speedZonesGroup;
 
         // Initialize spawner
+        // TODO: Re-enable car simulation
+        if (false) {
         setLoadingStatus("Initializing traffic simulation...");
         spawner = new Spawner(roadNetwork, {
           maxCars: 650,
@@ -708,6 +712,8 @@ export default function ThreeMap({
         console.log(
           `✅ Vehicle pool meshes added to scene (${groups.dynamicObjects.children.length} total objects in dynamicObjects)`,
         );
+
+        } // end disabled car simulation
 
         // Fetch and setup traffic lights using Traffic Infrastructure Manager
         setLoadingStatus("Setting up traffic lights...");

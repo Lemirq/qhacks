@@ -55,19 +55,18 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
   scene.add(ambientLight);
 
   const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
-  // Position as sun (from above and to the side)
-  directionalLight.position.set(1000, 2000, 500);
+  directionalLight.position.set(500, 800, 300);
   directionalLight.castShadow = true;
 
   // Configure shadow properties
   directionalLight.shadow.mapSize.width = 2048;
   directionalLight.shadow.mapSize.height = 2048;
-  directionalLight.shadow.camera.near = 500;
-  directionalLight.shadow.camera.far = 4000;
-  directionalLight.shadow.camera.left = -2000;
-  directionalLight.shadow.camera.right = 2000;
-  directionalLight.shadow.camera.top = 2000;
-  directionalLight.shadow.camera.bottom = -2000;
+  directionalLight.shadow.camera.near = 10;
+  directionalLight.shadow.camera.far = 3000;
+  directionalLight.shadow.camera.left = -1500;
+  directionalLight.shadow.camera.right = 1500;
+  directionalLight.shadow.camera.top = 1500;
+  directionalLight.shadow.camera.bottom = -1500;
 
   scene.add(directionalLight);
 
@@ -80,8 +79,7 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
   );
 
   // Initial position for zoomed out Kingston view
-  // Position above and to the side for good overview
-  camera.position.set(0, 3000, 5000);
+  camera.position.set(0, 500, 800);
   camera.lookAt(0, 0, 0);
 
   // Setup renderer

@@ -20,6 +20,8 @@ import {
   Trash2,
   Upload,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Check,
   Volume2,
   Smile,
@@ -27,6 +29,7 @@ import {
   Pause,
   ClipboardList,
   Map,
+  Navigation,
 } from "lucide-react";
 import { prefetchMapData } from "@/lib/prefetchMapData";
 import {
@@ -81,8 +84,8 @@ function MapPageContent() {
 
   const [placedBuildings, setPlacedBuildings] = useState<PlacedBuilding[]>([]);
   const [isPlacementMode, setIsPlacementMode] = useState(false);
-  // Default scale now matches the calibrated building size (was 1.4, now scaled to 10)
-  const [buildingScale, setBuildingScale] = useState({ x: 20, y: 20, z: 10 });
+  // Default scale for placed GLB buildings (map uses SCALE_FACTOR = 10/1.4 ≈ 7.14)
+  const [buildingScale, setBuildingScale] = useState({ x: 10, y: 10, z: 10 });
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(
     null,
   );
@@ -115,6 +118,9 @@ function MapPageContent() {
   const [debugOverlayVisible, setDebugOverlayVisible] = useState(false);
   const [dashboardVisible, setDashboardVisible] = useState(false);
   const panelsPortalRef = useRef<HTMLDivElement | null>(null);
+  const [flyToTarget, setFlyToTarget] = useState<{ lngLat: [number, number]; id: number } | undefined>(undefined);
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
 
   // Pre-fetch map data and available buildings on mount
   useEffect(() => {
@@ -510,6 +516,7 @@ function MapPageContent() {
           dashboardVisible={dashboardVisible}
           onDashboardVisibleChange={setDashboardVisible}
           panelsPortalRef={panelsPortalRef}
+          flyToTarget={flyToTarget}
         />
         {/* Map gradient overlay for better UI contrast */}
         <div className="absolute inset-0 map-gradient pointer-events-none"></div>
@@ -609,15 +616,29 @@ function MapPageContent() {
       {/* SIDEBARS CONTAINER */}
       <div className="absolute inset-0 z-40 pointer-events-none">
         {/* LEFT SIDEBAR: LAYERS & PROJECTS */}
+        {!leftSidebarOpen && (
+          <button
+            onClick={() => setLeftSidebarOpen(true)}
+            className="absolute left-6 top-6 pointer-events-auto w-10 h-10 glass rounded-lg flex items-center justify-center shadow-sm border-slate-200 hover:bg-slate-100 transition-colors"
+          >
+            <ChevronRight size={18} className="text-slate-600" />
+          </button>
+        )}
         <aside
-          className={`absolute left-6 top-6 w-72 pointer-events-auto flex flex-col gap-3 sidebar-transition ${placedBuildings.length > 0 ? "bottom-32" : "bottom-6"}`}
+          className={`absolute left-6 top-6 w-72 pointer-events-auto flex flex-col gap-3 sidebar-transition ${placedBuildings.length > 0 ? "bottom-32" : "bottom-6"} ${!leftSidebarOpen ? "hidden" : ""}`}
         >
           {/* Municipal Branding */}
 
           {/* Geospatial Layers Panel */}
           <div className="flex-1 glass rounded-lg p-4 flex flex-col overflow-hidden shadow-sm border-slate-200">
-            <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center justify-between mb-3">
               <span className="text-3!xl lp-nav-logo">KingsView</span>
+              <button
+                onClick={() => setLeftSidebarOpen(false)}
+                className="w-7 h-7 rounded flex items-center justify-center hover:bg-slate-100 transition-colors"
+              >
+                <ChevronLeft size={16} className="text-slate-400" />
+              </button>
             </div>
             <div className="flex items-center justify-between mb-5">
               <h3 className="ui-label">Geospatial Layers</h3>
@@ -896,28 +917,20 @@ function MapPageContent() {
         </aside>
 
         {/* RIGHT SIDEBAR: METRIC ANALYSIS */}
+        {!rightSidebarOpen && (
+          <button
+            onClick={() => setRightSidebarOpen(true)}
+            className="absolute right-6 top-6 pointer-events-auto w-10 h-10 glass rounded-lg flex items-center justify-center shadow-sm border-slate-200 hover:bg-slate-100 transition-colors"
+          >
+            <ChevronLeft size={18} className="text-slate-600" />
+          </button>
+        )}
         <aside
-          className={`absolute right-6 top-6 w-80 pointer-events-auto sidebar-transition ${placedBuildings.length > 0 ? "bottom-32" : "bottom-6"}`}
+          className={`absolute right-6 top-6 w-80 pointer-events-auto sidebar-transition ${placedBuildings.length > 0 ? "bottom-32" : "bottom-6"} ${!rightSidebarOpen ? "hidden" : ""}`}
         >
           <div className="glass rounded-lg p-5 shadow-md h-full border-slate-200 overflow-y-auto custom-scrollbar">
             {/* Traffic controls */}
-            <div className="flex gap-2 mb-4 pb-4 border-b border-slate-100">
-              <button
-                type="button"
-                onClick={() => setDebugOverlayVisible(!debugOverlayVisible)}
-                className="flex-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg shadow text-xs font-medium transition-colors"
-                title="Toggle debug overlay (F3)"
-              >
-                {debugOverlayVisible ? "Hide" : "Show"} Debug
-              </button>
-              <button
-                type="button"
-                onClick={() => setDashboardVisible(!dashboardVisible)}
-                className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow text-xs font-medium transition-colors"
-              >
-                Analytics
-              </button>
-            </div>
+
             {/* Header */}
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
               <div className="flex flex-col gap-0.5">
@@ -942,6 +955,12 @@ function MapPageContent() {
                   )}
                 </p>
               </div>
+              <button
+                onClick={() => setRightSidebarOpen(false)}
+                className="w-7 h-7 rounded flex items-center justify-center hover:bg-slate-100 transition-colors"
+              >
+                <ChevronRight size={16} className="text-slate-400" />
+              </button>
             </div>
 
             {/* Key Environmental Metrics - Dynamic based on buildings active at current timeline date */}
@@ -1844,8 +1863,36 @@ function MapPageContent() {
               </button>
             </div>
           </div>
+          <div className="flex gap-2 mb-4 pb-4 border-b border-slate-100">
+            <button
+              type="button"
+              onClick={() => setDebugOverlayVisible(!debugOverlayVisible)}
+              className="flex-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg shadow text-xs font-medium transition-colors"
+              title="Toggle debug overlay (F3)"
+            >
+              {debugOverlayVisible ? "Hide" : "Show"} Debug
+            </button>
+            <button
+              type="button"
+              onClick={() => setDashboardVisible(!dashboardVisible)}
+              className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow text-xs font-medium transition-colors"
+            >
+              Analytics
+            </button>
+          </div>
         </div>
       )}
+      {/* Fly To Downtown Button - Bottom Right */}
+      <button
+        onClick={() =>
+          setFlyToTarget({ lngLat: [-76.47965, 44.232703], id: Date.now() })
+        }
+        className="fixed bottom-6 right-6 z-[60] flex items-center gap-2 px-4 py-3 bg-accent-blue text-white rounded-lg shadow-lg hover:bg-slate-900 transition-colors"
+        title="Fly to 44.232703°, -76.479650°"
+      >
+        <Navigation size={18} />
+        <span className="text-xs font-black uppercase tracking-tight">Fly to Downtown</span>
+      </button>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 **A 3D urban planning platform where you design buildings with your voice, place them on a live map of Kingston, and simulate environmental impact -- before the first shovel hits the ground.**
 
-Built for the City of Kingston at QHacks 2025.
+Built for the City of Kingston at QHacks 2026.
 
 ---
 
@@ -209,9 +209,9 @@ npm run generate-sounds    # Regenerate ElevenLabs sound effects
 
 ---
 
-## 13. Team
+## 11. Team
 
-Built at QHacks 2025 by:
+Built at QHacks 2026 by:
 
 
 - **Phineas Truong**

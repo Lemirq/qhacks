@@ -211,11 +211,11 @@ else:
 
 ## Testing
 
-Run the test suite:
+Test files are located alongside the source code:
 
-```bash
-npm test lib/traffic/collisionSystem.test.ts
-```
+- `collisionSystem.test.ts`
+- `signalCoordination.test.ts`
+- `vehicleBehavior.test.ts`
 
 Tests cover:
 - Grid management and spatial partitioning

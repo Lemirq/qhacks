@@ -112,24 +112,22 @@ export function createGround(
   // Rotate geometry to be horizontal (in XZ plane) BEFORE creating mesh
   geometry.rotateX(-Math.PI / 2);
 
-  // Create material - white ground
+  // Create material - white ground with polygon offset to prevent z-fighting with roads
   const material = new THREE.MeshStandardMaterial({
     map: satelliteTexture || null,
-    color: satelliteTexture ? 0xffffff : 0xffffff, // Pure white
+    color: 0xffffff,
     roughness: 0.9,
     metalness: 0.0,
     side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
   });
 
   const ground = new THREE.Mesh(geometry, material);
 
-  // Position with calibrated offset for proper alignment with buildings
-  // These values were manually adjusted to align satellite imagery with 3D buildings
-  // Calibrated values: Position (33.3, -10.0, -750.9), Scale (0.980, 1.000, 0.920)
-  ground.position.set(centerX + 33.3, -10.0, centerZ - 750.9);
-
-  // Scale calibration for perfect alignment
-  ground.scale.set(0.98, 1.0, 0.92);
+  // Position ground at y=0, centered on the map
+  ground.position.set(centerX, 0, centerZ);
 
   ground.receiveShadow = true;
 

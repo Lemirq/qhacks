@@ -23,13 +23,16 @@ export async function fetchBuildings(
   console.log("Fetching buildings from cached API...");
 
   try {
-    const response = await fetch(
+    // Try the API route first, fall back to static file
+    let response = await fetch(
       `/api/map/buildings?south=${south}&west=${west}&north=${north}&east=${east}`,
-      {
-        cache: 'force-cache', // Use browser cache
-        next: { revalidate: 86400 }, // Revalidate every 24 hours
-      }
+      { cache: 'force-cache' }
     );
+
+    if (!response.ok) {
+      console.warn(`API returned ${response.status}, falling back to static file`);
+      response = await fetch('/map-data/buildings.json', { cache: 'force-cache' });
+    }
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);

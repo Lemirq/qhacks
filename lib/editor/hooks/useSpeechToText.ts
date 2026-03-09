@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from "react";
 
-export type SpeechStatus = 'idle' | 'listening' | 'done' | 'error';
+export type SpeechStatus = "idle" | "listening" | "done" | "error";
 
 interface SpeechToTextResult {
   status: SpeechStatus;
@@ -13,9 +13,9 @@ interface SpeechToTextResult {
 }
 
 export function useSpeechToText(): SpeechToTextResult {
-  const [status, setStatus] = useState<SpeechStatus>('idle');
-  const [transcript, setTranscript] = useState('');
-  const [error, setError] = useState('');
+  const [status, setStatus] = useState<SpeechStatus>("idle");
+  const [transcript, setTranscript] = useState("");
+  const [error, setError] = useState("");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   const reset = useCallback(() => {
@@ -27,35 +27,35 @@ export function useSpeechToText(): SpeechToTextResult {
       }
       recognitionRef.current = null;
     }
-    setStatus('idle');
-    setTranscript('');
-    setError('');
+    setStatus("idle");
+    setTranscript("");
+    setError("");
   }, []);
 
   const startListening = useCallback(() => {
-    setError('');
-    setTranscript('');
+    setError("");
+    setTranscript("");
 
     const SpeechRecognitionAPI =
-      typeof window !== 'undefined'
+      typeof window !== "undefined"
         ? window.SpeechRecognition || window.webkitSpeechRecognition
         : null;
 
     if (!SpeechRecognitionAPI) {
-      setStatus('error');
-      setError('Speech recognition is not supported in this browser.');
+      setStatus("error");
+      setError("Speech recognition is not supported in this browser.");
       return;
     }
 
     const recognition = new SpeechRecognitionAPI();
-    recognition.lang = 'en-US';
+    recognition.lang = "en-US";
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognitionRef.current = recognition;
 
     recognition.onstart = () => {
-      setStatus('listening');
+      setStatus("listening");
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
@@ -63,30 +63,32 @@ export function useSpeechToText(): SpeechToTextResult {
       if (result && result.isFinal) {
         const text = result[0].transcript.trim();
         if (!text || /^(um|uh|hmm|ah|er|like)$/i.test(text)) {
-          setStatus('error');
-          setError('I did not catch that. Try again.');
+          setStatus("error");
+          setError("I did not catch that. Try again.");
         } else {
           setTranscript(text);
-          setStatus('done');
+          setStatus("done");
         }
       }
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      setStatus('error');
+      setStatus("error");
       switch (event.error) {
-        case 'not-allowed':
-          setError('Microphone access was denied. Please allow microphone permissions.');
+        case "not-allowed":
+          setError(
+            "Microphone access was denied. Please allow microphone permissions.",
+          );
           break;
-        case 'no-speech':
-          setError('I did not catch that. Try again.');
+        case "no-speech":
+          setError("I did not catch that. Try again.");
           break;
-        case 'network':
-          setError('Network error during speech recognition.');
+        case "network":
+          setError("Network error during speech recognition.");
           break;
-        case 'aborted':
+        case "aborted":
           // User cancelled, no error to show
-          setStatus('idle');
+          setStatus("idle");
           break;
         default:
           setError(`Speech recognition error: ${event.error}`);
@@ -96,17 +98,17 @@ export function useSpeechToText(): SpeechToTextResult {
     recognition.onend = () => {
       recognitionRef.current = null;
       // Only set idle if still in listening state (no result/error happened)
-      setStatus((current) => (current === 'listening' ? 'error' : current));
-      if (status === 'listening') {
-        setError('I did not catch that. Try again.');
+      setStatus((current) => (current === "listening" ? "error" : current));
+      if (status === "listening") {
+        setError("I did not catch that. Try again.");
       }
     };
 
     try {
       recognition.start();
     } catch (startError) {
-      setStatus('error');
-      setError('Failed to start speech recognition.');
+      setStatus("error");
+      setError("Failed to start speech recognition.");
     }
   }, []);
 

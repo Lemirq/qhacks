@@ -33,56 +33,51 @@ const HEADLIGHT_COLOR = 0xffffee; // Warm white
 export function createEnhancedCarModel(type: CarType, color: string): EnhancedVehicleMesh {
   const group = new THREE.Group();
   const material = new THREE.MeshPhongMaterial({
-    color: 0xff0000,  // BRIGHT RED - ignore passed color for debugging
+    color,
     shininess: 50,
     specular: 0x444444,
-    emissive: 0xff0000,
-    emissiveIntensity: 0.3,
   });
 
-  // MAKE CARS HUGE for debugging!
-  let bodyLength = 42;   // 10x bigger!
-  let bodyWidth = 18;
-  let bodyHeight = 8;
-  let cabinLength = 22;
-  let cabinWidth = 16;
-  let cabinHeight = 6;
+  // Real-world dimensions in meters, scaled by map SCALE_FACTOR (10/1.4)
+  const S = 10 / 1.4;
+  let bodyLength: number, bodyWidth: number, bodyHeight: number;
+  let cabinLength: number, cabinWidth: number, cabinHeight: number;
 
   switch (type) {
     case 'sedan': {
-      bodyLength = 42;   // All 10x bigger for debugging!
-      bodyWidth = 18;
-      bodyHeight = 8;
-      cabinLength = 22;
-      cabinWidth = 16;
-      cabinHeight = 6;
+      bodyLength = 4.2 * S;
+      bodyWidth = 1.8 * S;
+      bodyHeight = 0.8 * S;
+      cabinLength = 2.2 * S;
+      cabinWidth = 1.6 * S;
+      cabinHeight = 0.6 * S;
       break;
     }
     case 'suv': {
-      bodyLength = 45;
-      bodyWidth = 20;
-      bodyHeight = 10;
-      cabinLength = 25;
-      cabinWidth = 19;
-      cabinHeight = 8;
+      bodyLength = 4.5 * S;
+      bodyWidth = 2.0 * S;
+      bodyHeight = 1.0 * S;
+      cabinLength = 2.5 * S;
+      cabinWidth = 1.9 * S;
+      cabinHeight = 0.8 * S;
       break;
     }
     case 'truck': {
-      bodyLength = 50;
-      bodyWidth = 20;
-      bodyHeight = 8;
-      cabinLength = 20;
-      cabinWidth = 20;
-      cabinHeight = 12;
+      bodyLength = 5.0 * S;
+      bodyWidth = 2.0 * S;
+      bodyHeight = 0.8 * S;
+      cabinLength = 2.0 * S;
+      cabinWidth = 2.0 * S;
+      cabinHeight = 1.2 * S;
       break;
     }
     case 'compact': {
-      bodyLength = 35;
-      bodyWidth = 16;
-      bodyHeight = 7;
-      cabinLength = 20;
-      cabinWidth = 1.5;
-      cabinHeight = 0.5;
+      bodyLength = 3.5 * S;
+      bodyWidth = 1.6 * S;
+      bodyHeight = 0.7 * S;
+      cabinLength = 2.0 * S;
+      cabinWidth = 1.5 * S;
+      cabinHeight = 0.5 * S;
       break;
     }
   }
@@ -122,15 +117,17 @@ export function createEnhancedCarModel(type: CarType, color: string): EnhancedVe
   group.add(rearWindshield);
 
   // Wheels with better detail
-  const wheelGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 16);
+  const wheelRadius = 0.3 * S;
+  const wheelWidth = 0.2 * S;
+  const wheelGeometry = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelWidth, 16);
   const wheelMaterial = new THREE.MeshPhongMaterial({ color: 0x222222 });
   const rimMaterial = new THREE.MeshPhongMaterial({ color: 0x888888, shininess: 80 });
 
   const wheelPositions = [
-    [bodyWidth * 0.45, 0.3, bodyLength * 0.28],
-    [-bodyWidth * 0.45, 0.3, bodyLength * 0.28],
-    [bodyWidth * 0.45, 0.3, -bodyLength * 0.28],
-    [-bodyWidth * 0.45, 0.3, -bodyLength * 0.28],
+    [bodyWidth * 0.45, wheelRadius, bodyLength * 0.28],
+    [-bodyWidth * 0.45, wheelRadius, bodyLength * 0.28],
+    [bodyWidth * 0.45, wheelRadius, -bodyLength * 0.28],
+    [-bodyWidth * 0.45, wheelRadius, -bodyLength * 0.28],
   ];
 
   wheelPositions.forEach(([x, y, z]) => {
@@ -140,7 +137,7 @@ export function createEnhancedCarModel(type: CarType, color: string): EnhancedVe
     group.add(wheel);
 
     // Add rim
-    const rimGeometry = new THREE.CylinderGeometry(0.15, 0.15, 0.25, 16);
+    const rimGeometry = new THREE.CylinderGeometry(0.15 * S, 0.15 * S, 0.25 * S, 16);
     const rim = new THREE.Mesh(rimGeometry, rimMaterial);
     rim.rotation.z = Math.PI / 2;
     rim.position.set(x, y, z);
@@ -148,7 +145,7 @@ export function createEnhancedCarModel(type: CarType, color: string): EnhancedVe
   });
 
   // Headlights (white point lights at front)
-  const headlightGeometry = new THREE.SphereGeometry(0.12, 16, 16);
+  const headlightGeometry = new THREE.SphereGeometry(0.12 * S, 16, 16);
   const headlightMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffee,
     emissive: 0xffffaa,
@@ -167,21 +164,21 @@ export function createEnhancedCarModel(type: CarType, color: string): EnhancedVe
     group.add(headlightMesh);
 
     // Add point light
-    const headlight = new THREE.PointLight(HEADLIGHT_COLOR, 0.3, 15);
+    const headlight = new THREE.PointLight(HEADLIGHT_COLOR, 0.3, 15 * S);
     headlight.position.set(x, y, z);
     group.add(headlight);
     headlights.push(headlight);
   });
 
   // Turn signals (orange lights on front corners)
-  const turnSignalGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+  const turnSignalGeometry = new THREE.SphereGeometry(0.1 * S, 16, 16);
   const turnSignalMaterial = new THREE.MeshStandardMaterial({
     color: TURN_SIGNAL_COLOR,
     emissive: 0x000000, // Start off
     emissiveIntensity: 0,
   });
 
-  const turnSignalLeft = new THREE.PointLight(TURN_SIGNAL_COLOR, 0, 8);
+  const turnSignalLeft = new THREE.PointLight(TURN_SIGNAL_COLOR, 0, 8 * S);
   turnSignalLeft.position.set(-bodyWidth * 0.45, bodyHeight * 0.4, bodyLength * 0.45);
   group.add(turnSignalLeft);
 
@@ -189,7 +186,7 @@ export function createEnhancedCarModel(type: CarType, color: string): EnhancedVe
   turnSignalLeftMesh.position.copy(turnSignalLeft.position);
   group.add(turnSignalLeftMesh);
 
-  const turnSignalRight = new THREE.PointLight(TURN_SIGNAL_COLOR, 0, 8);
+  const turnSignalRight = new THREE.PointLight(TURN_SIGNAL_COLOR, 0, 8 * S);
   turnSignalRight.position.set(bodyWidth * 0.45, bodyHeight * 0.4, bodyLength * 0.45);
   group.add(turnSignalRight);
 
@@ -198,7 +195,7 @@ export function createEnhancedCarModel(type: CarType, color: string): EnhancedVe
   group.add(turnSignalRightMesh);
 
   // Brake lights (red lights at rear)
-  const brakeLightGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+  const brakeLightGeometry = new THREE.SphereGeometry(0.1 * S, 16, 16);
   const brakeLightMaterial = new THREE.MeshStandardMaterial({
     color: BRAKE_LIGHT_COLOR,
     emissive: 0x330000, // Dim red when off
@@ -218,14 +215,14 @@ export function createEnhancedCarModel(type: CarType, color: string): EnhancedVe
     group.add(brakeLightMesh);
 
     // Add point light
-    const brakeLight = new THREE.PointLight(BRAKE_LIGHT_COLOR, 0.5, 10);
+    const brakeLight = new THREE.PointLight(BRAKE_LIGHT_COLOR, 0.5, 10 * S);
     brakeLight.position.set(x, y, z);
     group.add(brakeLight);
     brakeLights.push(brakeLight);
   });
 
   // Wrap in parent mesh for consistent handling
-  const finalGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const finalGeometry = new THREE.BoxGeometry(0.01, 0.01, 0.01);
   const finalMesh = new THREE.Mesh(finalGeometry, material) as EnhancedVehicleMesh;
   finalMesh.add(group);
   finalMesh.visible = true;

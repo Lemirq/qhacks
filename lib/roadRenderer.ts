@@ -40,8 +40,8 @@ export function renderRoads(
     // Create road mesh
     const roadMesh = createRoadMesh(points, width);
 
-    // Position at ground level (same as building bases)
-    roadMesh.position.y = 0;
+    // Above ground to avoid z-fighting with ground plane
+    roadMesh.position.y = 0.5;
 
     // Mark as road for collision detection
     roadMesh.name = `road-${edge.id || 'segment'}`;
@@ -96,10 +96,13 @@ function createStraightRoad(
   const angle = Math.atan2(direction.x, -direction.z);
   geometry.rotateZ(angle);
 
-  // Create material
+  // Create material with polygon offset to render above ground
   const material = new THREE.MeshBasicMaterial({
     color: 0x333333,
     side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
   });
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -133,16 +136,16 @@ function createCurvedRoad(points: THREE.Vector3[], width: number): THREE.Mesh {
     // Create quad vertices (left and right side of road)
     const startIdx = i * 2;
 
-    // Left side
-    vertices.push(p1.x - right.x, p1.y, p1.z - right.z);
+    // Left side (y offset handled by roadMesh.position.y)
+    vertices.push(p1.x - right.x, 0, p1.z - right.z);
 
     // Right side
-    vertices.push(p1.x + right.x, p1.y, p1.z + right.z);
+    vertices.push(p1.x + right.x, 0, p1.z + right.z);
 
     // Add last segment's end points
     if (i === points.length - 2) {
-      vertices.push(p2.x - right.x, p2.y, p2.z - right.z);
-      vertices.push(p2.x + right.x, p2.y, p2.z + right.z);
+      vertices.push(p2.x - right.x, 0, p2.z - right.z);
+      vertices.push(p2.x + right.x, 0, p2.z + right.z);
     }
 
     // Create triangles for this segment
@@ -162,10 +165,13 @@ function createCurvedRoad(points: THREE.Vector3[], width: number): THREE.Mesh {
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
 
-  // Create material
+  // Create material with polygon offset to render above ground
   const material = new THREE.MeshBasicMaterial({
     color: 0x333333,
     side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
   });
 
   return new THREE.Mesh(geometry, material);

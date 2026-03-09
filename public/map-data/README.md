@@ -4,22 +4,9 @@ This directory contains pre-processed OpenStreetMap data for the Kingston/Queen'
 
 ## Data Files
 
-- `buildings.json` - 4,800 buildings with footprints and heights (includes 1 custom building)
+- `buildings.json` - 4,776 buildings with footprints and heights
 - `roads.json` - 387 nodes and 704 road edges with routing information
 - `traffic-signals.json` - 344 traffic signals and stop signs
-
-## Custom Buildings
-
-### 20-Story Commercial Building
-- **ID**: `building-custom-20story`
-- **Location**: 44°13'54"N 76°28'47"W (Queen's University area)
-- **Height**: 70 meters (20 stories)
-- **Type**: Commercial
-- **Footprint Coordinates**:
-  - 44°13'54"N 76°28'45"W
-  - 44°13'55"N 76°28'50"W
-  - 44°13'54"N 76°28'50"W
-  - 44°13'53"N 76°28'46"W
 
 ## Bounding Box
 
