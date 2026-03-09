@@ -1,6 +1,4 @@
 import { BuildingSpecification, WindowPattern, WindowShape } from '@/lib/editor/types/buildingSpec';
-import { useBuildingSound } from '@/lib/editor/hooks/useBuildingSound';
-
 interface WindowFormProps {
   spec: BuildingSpecification;
   onUpdate: (updates: Partial<BuildingSpecification>) => void;
@@ -20,11 +18,8 @@ const WINDOW_SHAPES: { value: WindowShape; label: string; icon: string }[] = [
 ];
 
 export function WindowForm({ spec, onUpdate }: WindowFormProps) {
-  const { play: playSound } = useBuildingSound();
-
   const handleWindowUpdate = (updates: Partial<BuildingSpecification>) => {
     onUpdate(updates);
-    playSound('window_edit');
   };
 
   return (
@@ -86,7 +81,7 @@ export function WindowForm({ spec, onUpdate }: WindowFormProps) {
               max="10"
               step="1"
               value={spec.windowRows}
-              onChange={(e) => { onUpdate({ windowRows: parseInt(e.target.value) }); playSound('window_add'); }}
+              onChange={(e) => onUpdate({ windowRows: parseInt(e.target.value) })}
               className="w-full h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
             />
           </div>

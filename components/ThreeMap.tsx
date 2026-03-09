@@ -127,6 +127,8 @@ interface ThreeMapProps {
   onDashboardVisibleChange?: (visible: boolean) => void;
   /** When set, panels (car details, debug, analytics) are portaled here so they appear above sidebars */
   panelsPortalRef?: React.RefObject<HTMLDivElement | null>;
+  /** When set, camera flies to this [lng, lat]. Change the value to trigger a new fly-to. */
+  flyToTarget?: { lngLat: [number, number]; id: number };
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -434,6 +436,7 @@ export default function ThreeMap({
   dashboardVisible: dashboardVisibleProp,
   onDashboardVisibleChange,
   panelsPortalRef,
+  flyToTarget,
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -465,10 +468,19 @@ export default function ThreeMap({
   const rippleTimeRef = useRef(0);
   const zoningGroupRef = useRef<THREE.Group | null>(null);
 
+  // Fly to target location when prop changes
+  useEffect(() => {
+    if (!flyToTarget || !cameraRef.current || !controlsRef.current) return;
+    flyToLocation(
+      cameraRef.current,
+      controlsRef.current,
+      flyToTarget.lngLat,
+      600,
+      2000,
+    );
+  }, [flyToTarget]);
+
   // Street-level ambient sound
-  const streetSoundRef = useRef<HTMLAudioElement | null>(null);
-  const isStreetLevelRef = useRef(false);
-  const streetSoundLoadingRef = useRef(false);
 
   const analyticsRef = useRef<TrafficAnalytics | null>(null);
   const [internalDebugVisible, setInternalDebugVisible] = useState(false);
@@ -1221,76 +1233,6 @@ export default function ThreeMap({
         // Update controls
         controlsRef.current.update();
 
-        // Street-level ambient sound: detect zoom and play city ambiance via ElevenLabs
-        if (cameraRef.current && controlsRef.current) {
-          const camDistance = cameraRef.current.position.distanceTo(
-            controlsRef.current.target,
-          );
-          const STREET_THRESHOLD = 1500;
-          const STREET_FULL_VOL = 400;
-
-          if (camDistance < STREET_THRESHOLD) {
-            const t =
-              1 -
-              Math.max(
-                0,
-                Math.min(
-                  1,
-                  (camDistance - STREET_FULL_VOL) /
-                    (STREET_THRESHOLD - STREET_FULL_VOL),
-                ),
-              );
-            const vol = t * 0.4;
-
-            if (!isStreetLevelRef.current) {
-              isStreetLevelRef.current = true;
-
-              if (streetSoundRef.current) {
-                streetSoundRef.current.volume = vol;
-                streetSoundRef.current.play().catch(() => {});
-              } else if (!streetSoundLoadingRef.current) {
-                streetSoundLoadingRef.current = true;
-                console.log(
-                  "🔊 Street-level zoom detected — calling ElevenLabs for city ambiance...",
-                );
-                fetch("/api/street-sound")
-                  .then((res) => {
-                    if (!res.ok) throw new Error(`API ${res.status}`);
-                    return res.blob();
-                  })
-                  .then((blob) => {
-                    const url = URL.createObjectURL(blob);
-                    const audio = new Audio(url);
-                    audio.loop = true;
-                    audio.volume = vol;
-                    streetSoundRef.current = audio;
-                    if (isStreetLevelRef.current) {
-                      audio.play().catch(() => {});
-                    }
-                    console.log(
-                      "🔊 ElevenLabs city ambiance loaded and playing",
-                    );
-                  })
-                  .catch((err) => console.warn("Street sound error:", err))
-                  .finally(() => {
-                    streetSoundLoadingRef.current = false;
-                  });
-              }
-            }
-
-            // Smoothly adjust volume based on distance
-            if (streetSoundRef.current && !streetSoundRef.current.paused) {
-              streetSoundRef.current.volume = vol;
-            }
-          } else if (isStreetLevelRef.current) {
-            isStreetLevelRef.current = false;
-            if (streetSoundRef.current) {
-              streetSoundRef.current.pause();
-              streetSoundRef.current.currentTime = 0;
-            }
-          }
-        }
-
         // Analytics: Track render start
         const renderStartTime = performance.now();
 
@@ -1356,11 +1298,6 @@ export default function ThreeMap({
         controlsRef.current.dispose();
       }
 
-      // Clean up street-level ambient sound
-      if (streetSoundRef.current) {
-        streetSoundRef.current.pause();
-        streetSoundRef.current = null;
-      }
     };
   }, []);
 

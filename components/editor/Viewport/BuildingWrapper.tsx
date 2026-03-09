@@ -6,8 +6,6 @@ import { BuildingTrees } from './Trees';
 import type { BuildingInstance } from '@/lib/editor/types/buildingSpec';
 import { DEFAULT_TREE_CONFIG } from '@/lib/editor/types/buildingSpec';
 import { useBuildings } from '@/lib/editor/contexts/BuildingsContext';
-import { useBuildingSound } from '@/lib/editor/hooks/useBuildingSound';
-
 interface BuildingWrapperProps {
   building: BuildingInstance;
   isSelected: boolean;
@@ -17,8 +15,6 @@ interface BuildingWrapperProps {
 export function BuildingWrapper({ building, isSelected, onSelect }: BuildingWrapperProps) {
   const groupRef = useRef<THREE.Group>(null);
   const { placementMode, addBuilding, mergeMode, toggleBuildingSelection, selectedBuildingIds } = useBuildings();
-  const { play: playSound } = useBuildingSound();
-
   // Check if this building is selected in merge mode
   const isMergeSelected = mergeMode && selectedBuildingIds.includes(building.id);
 
@@ -34,7 +30,6 @@ export function BuildingWrapper({ building, isSelected, onSelect }: BuildingWrap
         y: newY,
         z: building.position.z
       });
-      playSound('add_floor');
     } else if (mergeMode) {
       // In merge mode, toggle selection
       toggleBuildingSelection(building.id);

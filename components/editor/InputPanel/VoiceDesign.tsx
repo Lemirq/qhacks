@@ -6,7 +6,7 @@ import { useBuildings } from '@/lib/editor/contexts/BuildingsContext';
 import { applyBuildingConfig } from '@/lib/editor/utils/voiceAdapter';
 import type { BuildingConfig } from '@/lib/buildingConfig';
 
-type VoicePhase = 'idle' | 'listening' | 'designing' | 'speaking' | 'error';
+type VoicePhase = 'idle' | 'listening' | 'designing' | 'error';
 
 interface VoiceResult {
   transcript: string;
@@ -32,8 +32,6 @@ export function VoiceDesign() {
         return 'Listening...';
       case 'designing':
         return 'Designing...';
-      case 'speaking':
-        return 'Speaking...';
       case 'error':
         return errorMessage || 'Error. Try again.';
     }
@@ -117,35 +115,7 @@ export function VoiceDesign() {
           addBuilding({ x: 0, y: 0, z: 0 }, specUpdates);
         }
 
-        setPhase('speaking');
-        try {
-          const speakResponse = await fetch('/api/speak', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: confirmation }),
-          });
-
-          if (speakResponse.ok) {
-            const audioBlob = await speakResponse.blob();
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioUrl);
-            audio.onended = () => {
-              URL.revokeObjectURL(audioUrl);
-              setPhase('idle');
-            };
-            audio.onerror = () => {
-              URL.revokeObjectURL(audioUrl);
-              setPhase('idle');
-            };
-            await audio.play();
-          } else {
-            console.warn('Voice unavailable: /api/speak returned', speakResponse.status);
-            setPhase('idle');
-          }
-        } catch (speakError) {
-          console.warn('Voice unavailable:', speakError);
-          setPhase('idle');
-        }
+        setPhase('idle');
       } catch (designError) {
         setPhase('error');
         setErrorMessage(
@@ -178,8 +148,6 @@ export function VoiceDesign() {
         return 'ring-4 ring-blue-400/50 animate-pulse';
       case 'designing':
         return 'ring-4 ring-amber-400/50 animate-pulse';
-      case 'speaking':
-        return 'ring-4 ring-green-400/50';
       default:
         return '';
     }
@@ -191,8 +159,6 @@ export function VoiceDesign() {
         return 'bg-blue-500 text-white';
       case 'designing':
         return 'bg-amber-500 text-white';
-      case 'speaking':
-        return 'bg-green-500 text-white';
       case 'error':
         return 'bg-red-100 text-red-500';
       default:
