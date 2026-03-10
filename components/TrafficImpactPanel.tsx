@@ -1,0 +1,231 @@
+"use client";
+
+import { useMemo } from "react";
+import { X, Car, AlertTriangle } from "lucide-react";
+import {
+  TrafficImpactResult,
+  getLOSDescription,
+} from "@/lib/trafficImpact";
+
+interface TrafficImpactPanelProps {
+  impactResult: TrafficImpactResult | null;
+  visible: boolean;
+  onClose: () => void;
+}
+
+function LOSBadge({ los }: { los: string }) {
+  const colors: Record<string, string> = {
+    A: "bg-green-600 text-white",
+    B: "bg-green-500 text-white",
+    C: "bg-yellow-500 text-white",
+    D: "bg-orange-500 text-white",
+    E: "bg-red-500 text-white",
+    F: "bg-red-700 text-white",
+  };
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded ${colors[los] || "bg-zinc-500 text-white"}`}
+      title={getLOSDescription(los)}
+    >
+      LOS {los}
+    </span>
+  );
+}
+
+function CongestionBar({ level }: { level: number }) {
+  const pct = Math.round(level * 100);
+  const barColor =
+    level < 0.5
+      ? "bg-green-500"
+      : level < 0.75
+        ? "bg-yellow-500"
+        : level < 0.9
+          ? "bg-orange-500"
+          : "bg-red-500";
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+        <div
+          className={`h-full rounded-full ${barColor} transition-all`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-[10px] text-zinc-400 w-8 text-right">{pct}%</span>
+    </div>
+  );
+}
+
+export function TrafficImpactPanel({
+  impactResult,
+  visible,
+  onClose,
+}: TrafficImpactPanelProps) {
+  const sortedEdges = useMemo(() => {
+    if (!impactResult) return [];
+    return Array.from(impactResult.edgeImpact.values())
+      .filter((e) => e.delta > 0)
+      .sort((a, b) => b.delta - a.delta)
+      .slice(0, 12);
+  }, [impactResult]);
+
+  if (!visible) return null;
+
+  const { buildings, totalDailyTrips, totalPeakHourTrips, congestedIntersections } =
+    impactResult || { buildings: [], totalDailyTrips: 0, totalPeakHourTrips: 0, congestedIntersections: [] };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-zinc-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-white/10 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-white/10 bg-gradient-to-r from-orange-950/50 to-amber-950/50">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-orange-600 flex items-center justify-center">
+              <Car className="text-white" size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-black text-white uppercase tracking-tight">
+                Traffic Impact Analysis
+              </h2>
+              <p className="text-[10px] text-zinc-400">
+                ITE Trip Generation + Road Segment Impact
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors text-zinc-400 hover:text-white"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+          {!impactResult ? (
+            <div className="text-center py-8 text-zinc-500 text-sm">
+              Place buildings with zoning types to see traffic impact analysis.
+            </div>
+          ) : (
+            <>
+              {/* Summary stats */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div className="text-[10px] font-bold text-zinc-500 uppercase">
+                    Daily Trips
+                  </div>
+                  <div className="text-xl font-black text-zinc-100">
+                    {totalDailyTrips.toLocaleString()}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div className="text-[10px] font-bold text-zinc-500 uppercase">
+                    Peak Hour
+                  </div>
+                  <div className="text-xl font-black text-zinc-100">
+                    {totalPeakHourTrips.toLocaleString()}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div className="text-[10px] font-bold text-zinc-500 uppercase">
+                    Congested
+                  </div>
+                  <div className={`text-xl font-black ${congestedIntersections.length > 0 ? "text-red-400" : "text-green-400"}`}>
+                    {congestedIntersections.length}
+                  </div>
+                  <div className="text-[9px] text-zinc-500">intersections</div>
+                </div>
+              </div>
+
+              {/* Congestion warnings */}
+              {congestedIntersections.length > 0 && (
+                <div className="flex gap-2 p-3 rounded-lg bg-red-500/10 border border-red-400/20">
+                  <AlertTriangle className="shrink-0 text-red-400 mt-0.5" size={16} />
+                  <div>
+                    <p className="text-xs font-bold text-red-300">
+                      {congestedIntersections.length} Intersection{congestedIntersections.length > 1 ? "s" : ""} at LOS D or Worse
+                    </p>
+                    <p className="text-[10px] text-red-400/70 mt-0.5">
+                      These intersections are highlighted with red rings on the map. Consider traffic mitigation measures.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Per-building trip generation */}
+              <div>
+                <h4 className="text-[10px] font-bold text-zinc-500 uppercase mb-2">
+                  Trip Generation by Building
+                </h4>
+                <div className="space-y-2">
+                  {buildings.map((b) => (
+                    <div
+                      key={b.buildingId}
+                      className="bg-white/5 rounded-lg p-3 border border-white/10"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-zinc-200">
+                          {b.iteRate.label}
+                        </span>
+                        <span className="text-[10px] text-zinc-400 bg-white/10 px-1.5 py-0.5 rounded">
+                          {b.units}{" "}
+                          {b.iteRate.unitType === "dwelling_unit"
+                            ? "units"
+                            : b.iteRate.unitType === "1000_sqft"
+                              ? "k sqft"
+                              : b.iteRate.unitType}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-zinc-400">
+                          <span className="font-bold text-zinc-200">{b.dailyTrips}</span> daily
+                          {" / "}
+                          <span className="font-bold text-orange-400">{b.peakHourTrips}</span> peak hr
+                        </span>
+                        <span className="text-zinc-500">
+                          ITE rate: {b.iteRate.rate}/{b.iteRate.unitType === "dwelling_unit" ? "unit" : "1000sf"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Impacted road segments */}
+              {sortedEdges.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] font-bold text-zinc-500 uppercase mb-2">
+                    Most Impacted Road Segments
+                  </h4>
+                  <div className="space-y-2">
+                    {sortedEdges.map((edge) => (
+                      <div
+                        key={edge.edgeId}
+                        className="bg-white/5 rounded-lg p-3 border border-white/10"
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-medium text-zinc-200 truncate max-w-[200px]">
+                            {edge.edgeName || `Segment ${edge.edgeId.slice(4, 16)}`}
+                          </span>
+                          <LOSBadge los={edge.los} />
+                        </div>
+                        <CongestionBar level={edge.level} />
+                        <div className="flex items-center justify-between mt-1.5 text-[10px]">
+                          <span className="text-zinc-400">
+                            {edge.before} &rarr; {edge.after} veh/hr
+                          </span>
+                          <span className="font-bold text-orange-400">
+                            +{edge.delta} trips
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

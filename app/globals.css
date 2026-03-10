@@ -70,31 +70,20 @@ body {
 
   .lp-hero-wrap {
     padding: 1.25rem;
-    /* Add height for scroll animation */
-    min-height: 200vh;
+    padding-top: 5rem;
+    min-height: auto;
     position: relative;
-  }
-
-  .lp-hero-wrap-fixed {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100vh;
-    padding: 1.25rem;
-    z-index: 10;
   }
 
   .lp-hero {
     position: relative;
     width: 100%;
-    height: 100%;
-    min-height: 520px;
+    height: 70vh;
+    min-height: 420px;
+    max-height: 600px;
     border-radius: 24px;
     overflow: hidden;
     cursor: default;
-    --mx: 0px;
-    --my: 0px;
   }
 
   .lp-hero-img {
@@ -117,33 +106,6 @@ body {
         transparent 40%,
         rgba(0, 0, 0, 0.25) 100%
       );
-  }
-
-  .lp-fireflies {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 2;
-    transition: transform 0.4s ease-out;
-    transform: translate(calc(var(--mx) * 1.8), calc(var(--my) * 1.5));
-  }
-
-  .lp-firefly {
-    position: absolute;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: #e8d49a;
-    box-shadow:
-      0 0 6px 2px rgba(232, 212, 154, 0.6),
-      0 0 18px 6px rgba(232, 212, 154, 0.2);
-    animation: fireflyPulse 3s ease-in-out infinite alternate;
-  }
-
-  .lp-firefly:nth-child(odd) {
-    width: 3px;
-    height: 3px;
-    background: #f0e6c0;
   }
 
   .lp-hero-title {
@@ -187,11 +149,6 @@ body {
   .lp-hero-cta:hover {
     background: rgba(255, 255, 255, 0.18);
     transform: translateY(-2px);
-  }
-
-  .lp-content-sticky {
-    /* Sticky so content appears in view as overlay finishes, then scrolls normally */
-    min-height: 0;
   }
 
   .lp-statement {
@@ -252,29 +209,6 @@ body {
     text-transform: uppercase;
     color: #8a8279;
     margin: 0 0 3.5rem;
-  }
-
-  /* gold accent — the showpiece */
-  .lp-stmt-gold {
-    font-family: var(--font-script), "Instrument Serif", serif;
-    font-size: clamp(2.4rem, 5vw, 3.8rem);
-    font-style: italic;
-    font-weight: 400;
-    line-height: 1;
-    letter-spacing: -0.01em;
-    background: linear-gradient(
-      135deg,
-      #b8942f 0%,
-      #e8c44a 25%,
-      #f5dfa0 50%,
-      #d4a843 75%,
-      #c5944a 100%
-    );
-    background-size: 200% 200%;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: goldShimmer 6s ease-in-out infinite;
   }
 
   /* CTA button */
@@ -472,38 +406,10 @@ body {
   }
 }
 
-@keyframes goldShimmer {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
-@keyframes fireflyPulse {
-  0% {
-    opacity: 0.15;
-    transform: scale(0.8) translateY(0px);
-  }
-  50% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0.3;
-    transform: scale(1.1) translateY(-6px);
-  }
-}
-
 @media (max-width: 768px) {
   .lp-hero-wrap {
     padding: 0.75rem;
-    min-height: 180vh;
-  }
-
-  .lp-hero-wrap-fixed {
-    padding: 0.75rem;
+    padding-top: 5rem;
   }
 
   .lp-hero {

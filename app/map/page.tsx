@@ -35,6 +35,12 @@ import {
   ClipboardList,
   Map,
   Navigation,
+  Eye,
+  ArrowUp,
+  Droplets,
+  Wind,
+  Users,
+  Car,
 } from "lucide-react";
 import { prefetchMapData } from "@/lib/prefetchMapData";
 import {
@@ -47,6 +53,15 @@ import {
   BuildingPlacementForm,
   type BuildingPlacementDetails,
 } from "@/components/BuildingPlacementForm";
+import ShadowAnalysisPanel from "@/components/ShadowAnalysisPanel";
+import DrainagePanel from "@/components/DrainagePanel";
+import StakeholderImpactPanel from "@/components/StakeholderImpactPanel";
+import type { ShadowAnalysisSummary, BuildingShadowImpact } from "@/lib/sun/shadowAnalysis";
+import { analyzeStakeholderImpact, type StakeholderAnalysis, type ImpactRadius } from "@/lib/stakeholderImpact";
+import type { Building } from "@/lib/buildingData";
+import { analyzeTrafficImpact, type TrafficImpactResult } from "@/lib/trafficImpact";
+import { TrafficImpactPanel } from "@/components/TrafficImpactPanel";
+import { RoadNetwork } from "@/lib/roadNetwork";
 
 interface PlacedBuilding {
   id: string;
@@ -115,6 +130,7 @@ function MapPageContent() {
   const [showBuildingSelector, setShowBuildingSelector] = useState(false);
   const [showNoiseRipple, setShowNoiseRipple] = useState(true);
   const [showZoningLayer, setShowZoningLayer] = useState(false);
+  const [showWindLayer, setShowWindLayer] = useState(false);
   // Correct config for Kingston zoning layer (Official Plan)
   const [zoningOffset, setZoningOffset] = useState({ x: 0, z: 0 });
   const [zoningRotationY, setZoningRotationY] = useState(180);
@@ -127,6 +143,36 @@ function MapPageContent() {
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
   const [timeOfDayHour, setTimeOfDayHour] = useState(12);
+  const [streetViewTarget, setStreetViewTarget] = useState<{ worldX: number; worldZ: number; id: number } | null>(null);
+  const [isStreetView, setIsStreetView] = useState(false);
+  const [exitStreetViewTrigger, setExitStreetViewTrigger] = useState(0);
+
+  // Drainage analysis state
+  const [showDrainagePanel, setShowDrainagePanel] = useState(false);
+
+  // Stakeholder impact state
+  const [showStakeholderPanel, setShowStakeholderPanel] = useState(false);
+  const [stakeholderRadius, setStakeholderRadius] = useState<ImpactRadius>(250);
+  const [stakeholderAnalysis, setStakeholderAnalysis] = useState<StakeholderAnalysis | null>(null);
+  const osmBuildingsDataRef = useRef<Building[]>([]);
+
+  // Traffic impact analysis state
+  const [showTrafficImpact, setShowTrafficImpact] = useState(false);
+  const [trafficImpactResult, setTrafficImpactResult] = useState<TrafficImpactResult | null>(null);
+  const roadNetworkRef = useRef<RoadNetwork | null>(null);
+
+  // Shadow analysis state
+  const [shadowEnabled, setShadowEnabled] = useState(false);
+  const [shadowDayOfYear, setShadowDayOfYear] = useState(172); // Summer solstice default
+  const [shadowResults, setShadowResults] = useState<ShadowAnalysisSummary | null>(null);
+  const [isShadowAnalyzing, setIsShadowAnalyzing] = useState(false);
+  const [showProposedBuilding, setShowProposedBuilding] = useState(true);
+  const [showShadowOverlay, setShowShadowOverlay] = useState(false);
+  const shadowAnalysisRef = useRef<{
+    runAnalysis: (dayOfYear: number) => ShadowAnalysisSummary | null;
+    applyShadowOverlay: (impacts: BuildingShadowImpact[]) => void;
+    clearShadowOverlay: () => void;
+  } | null>(null);
 
   // Pre-fetch map data and available buildings on mount
   useEffect(() => {
@@ -193,6 +239,40 @@ function MapPageContent() {
       console.log(`✅ Imported building from editor: ${modelPath}`);
     }
   }, [searchParams]);
+
+  // Shadow analysis handlers
+  const handleRunShadowAnalysis = (doy: number) => {
+    if (!shadowAnalysisRef.current) return;
+    setIsShadowAnalyzing(true);
+    // Use requestAnimationFrame to avoid blocking UI
+    requestAnimationFrame(() => {
+      const results = shadowAnalysisRef.current?.runAnalysis(doy) ?? null;
+      setShadowResults(results);
+      setIsShadowAnalyzing(false);
+      // Auto-enable overlay if there are results
+      if (results && results.totalAffected > 0) {
+        setShowShadowOverlay(true);
+        shadowAnalysisRef.current?.applyShadowOverlay(results.impacts);
+      }
+    });
+  };
+
+  const handleToggleShadowOverlay = (show: boolean) => {
+    setShowShadowOverlay(show);
+    if (show && shadowResults) {
+      shadowAnalysisRef.current?.applyShadowOverlay(shadowResults.impacts);
+    } else {
+      shadowAnalysisRef.current?.clearShadowOverlay();
+    }
+  };
+
+  // Clean up shadow overlay when disabling shadow mode
+  useEffect(() => {
+    if (!shadowEnabled) {
+      shadowAnalysisRef.current?.clearShadowOverlay();
+      setShowShadowOverlay(false);
+    }
+  }, [shadowEnabled]);
 
   const handleMapClick = (
     coordinate: {
@@ -289,6 +369,47 @@ function MapPageContent() {
       );
     });
   }, [placedBuildings, timelineDate]);
+
+  // Stakeholder impact: re-analyze whenever placed buildings or radius changes
+  useEffect(() => {
+    if (!showStakeholderPanel || placedBuildings.length === 0 || osmBuildingsDataRef.current.length === 0) {
+      setStakeholderAnalysis(null);
+      return;
+    }
+    // Analyze impact of the most recently placed building
+    const latest = placedBuildings[placedBuildings.length - 1];
+    const result = analyzeStakeholderImpact(
+      [latest.lng, latest.lat],
+      (latest.scale?.y ?? 10) * 3, // approximate height from scale
+      (latest.scale?.x ?? 10) * 5, // approximate width from scale
+      osmBuildingsDataRef.current,
+      stakeholderRadius,
+    );
+    result.placedBuildingId = latest.id;
+    setStakeholderAnalysis(result);
+  }, [showStakeholderPanel, placedBuildings, stakeholderRadius]);
+
+  // Traffic impact analysis: re-analyze whenever placed buildings change
+  useEffect(() => {
+    if (!showTrafficImpact || placedBuildings.length === 0 || !roadNetworkRef.current) {
+      setTrafficImpactResult(null);
+      return;
+    }
+    const buildingsForAnalysis = placedBuildings
+      .filter((b) => b.timeline?.zoneType)
+      .map((b) => ({
+        id: b.id,
+        position: [b.lng, b.lat] as [number, number],
+        zoneCode: b.timeline!.zoneType!,
+        scale: b.scale,
+      }));
+    if (buildingsForAnalysis.length === 0) {
+      setTrafficImpactResult(null);
+      return;
+    }
+    const result = analyzeTrafficImpact(buildingsForAnalysis, roadNetworkRef.current);
+    setTrafficImpactResult(result);
+  }, [showTrafficImpact, placedBuildings]);
 
   // Timeline range from earliest start to latest end across all placed buildings
   const timelineRange = useMemo(() => {
@@ -498,6 +619,18 @@ function MapPageContent() {
     return () => window.removeEventListener("keydown", handleKeyPress);
   }, [selectedBuildingId, selectedBuilding, placedBuildings]);
 
+  // Escape key exits street view
+  useEffect(() => {
+    if (!isStreetView) return;
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setExitStreetViewTrigger((n) => n + 1);
+      }
+    }
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [isStreetView]);
+
   return (
     <div className="relative min-h-screen w-full bg-zinc-950 text-zinc-100 overflow-hidden">
       {/* MAP BACKGROUND (3D Simulation) */}
@@ -514,6 +647,7 @@ function MapPageContent() {
           timelineDate={timelineDate}
           showNoiseRipple={showNoiseRipple}
           showZoningLayer={showZoningLayer}
+          showWindLayer={showWindLayer}
           zoningOffset={zoningOffset}
           zoningRotationY={zoningRotationY}
           zoningFlipH={zoningFlipH}
@@ -524,9 +658,46 @@ function MapPageContent() {
           panelsPortalRef={panelsPortalRef}
           flyToTarget={flyToTarget}
           timeOfDayHour={timeOfDayHour}
+          streetViewTarget={streetViewTarget}
+          onStreetViewChange={setIsStreetView}
+          exitStreetViewTrigger={exitStreetViewTrigger}
+          dayOfYear={shadowEnabled ? shadowDayOfYear : undefined}
+          showProposedBuilding={showProposedBuilding}
+          shadowAnalysisRef={shadowAnalysisRef}
+          onOsmBuildingsLoaded={(buildings) => { osmBuildingsDataRef.current = buildings; }}
+          stakeholderImpactAnalysis={showStakeholderPanel ? stakeholderAnalysis : null}
+          showTrafficHeatmap={showTrafficImpact}
+          trafficImpactResult={showTrafficImpact ? trafficImpactResult : null}
+          onRoadNetworkLoaded={(rn) => { roadNetworkRef.current = rn; }}
         />
         {/* Map gradient overlay for better UI contrast */}
         <div className="absolute inset-0 map-gradient pointer-events-none"></div>
+
+        {/* Street View HUD */}
+        {isStreetView && (
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex flex-col items-center gap-3">
+            <div className="glass rounded-lg px-5 py-3 flex items-center gap-4 border border-indigo-400/30">
+              <div className="flex items-center gap-2">
+                <Eye size={16} className="text-indigo-400" />
+                <span className="text-xs font-bold text-indigo-300 uppercase tracking-tight">
+                  Street View
+                </span>
+              </div>
+              <span className="text-[9px] text-zinc-400">
+                WASD to walk · Mouse to look
+              </span>
+              <button
+                onClick={() => {
+                  setExitStreetViewTrigger((n) => n + 1);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-tight bg-zinc-700 hover:bg-zinc-600 text-white transition-colors"
+              >
+                <ArrowUp size={12} />
+                Exit
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Placement Mode Indicator */}
         {isPlacementMode && (
@@ -618,6 +789,26 @@ function MapPageContent() {
             />
           </div>
         )}
+        {/* Drainage Panel */}
+        <DrainagePanel
+          visible={showDrainagePanel}
+          onClose={() => setShowDrainagePanel(false)}
+          buildings={buildingsActiveAtTimeline}
+        />
+        {/* Stakeholder Impact Panel */}
+        <StakeholderImpactPanel
+          analysis={stakeholderAnalysis}
+          visible={showStakeholderPanel}
+          onClose={() => setShowStakeholderPanel(false)}
+          radius={stakeholderRadius}
+          onRadiusChange={setStakeholderRadius}
+        />
+        {/* Traffic Impact Panel */}
+        <TrafficImpactPanel
+          impactResult={trafficImpactResult}
+          visible={showTrafficImpact}
+          onClose={() => setShowTrafficImpact(false)}
+        />
       </div>
 
       {/* SIDEBARS CONTAINER */}
@@ -793,6 +984,44 @@ function MapPageContent() {
                   </div>
                 </div>
               )} */}
+
+              <div
+                className={`p-2.5 rounded-md border transition-all cursor-pointer group ${
+                  showWindLayer
+                    ? "border-white/15 bg-white/10"
+                    : "border-white/5 hover:border-white/15 bg-white/5"
+                }`}
+                onClick={() => setShowWindLayer(!showWindLayer)}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-7 h-7 rounded bg-white/5 border border-white/10 flex items-center justify-center transition-colors ${
+                      showWindLayer
+                        ? "text-cyan-400"
+                        : "text-zinc-500 group-hover:text-cyan-400"
+                    }`}
+                  >
+                    <Wind size={14} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[11px] font-bold text-zinc-200">
+                      Wind Effects
+                    </p>
+                    <p className="text-[9px] text-zinc-500">
+                      Flow simulation · Venturi zones · Comfort
+                    </p>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={showWindLayer}
+                      onChange={(e) => setShowWindLayer(e.target.checked)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="accent-accent-blue h-3.5 w-3.5"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Time of Day */}
@@ -852,6 +1081,24 @@ function MapPageContent() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Shadow / Sunlight Analysis */}
+            <div className="mt-6">
+              <ShadowAnalysisPanel
+                isEnabled={shadowEnabled}
+                onToggle={setShadowEnabled}
+                results={shadowResults}
+                isAnalyzing={isShadowAnalyzing}
+                onRunAnalysis={handleRunShadowAnalysis}
+                dayOfYear={shadowDayOfYear}
+                onDayOfYearChange={setShadowDayOfYear}
+                showProposedBuilding={showProposedBuilding}
+                onToggleProposedBuilding={setShowProposedBuilding}
+                showShadowOverlay={showShadowOverlay}
+                onToggleShadowOverlay={handleToggleShadowOverlay}
+                hasPlacedBuildings={placedBuildings.length > 0}
+              />
             </div>
 
             {/* Population Happiness Score */}
@@ -974,6 +1221,19 @@ function MapPageContent() {
                     >
                       <Copy size={12} />
                       Copy Coordinates
+                    </button>
+                    <button
+                      onClick={() => {
+                        setStreetViewTarget({
+                          worldX: clickedCoordinate.worldX,
+                          worldZ: clickedCoordinate.worldZ,
+                          id: Date.now(),
+                        });
+                      }}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600/20 border border-indigo-400/30 hover:border-indigo-400/50 hover:bg-indigo-600/30 rounded text-[10px] font-bold text-indigo-300 hover:text-indigo-200 transition-colors uppercase tracking-wider"
+                    >
+                      <Eye size={12} />
+                      View from Street
                     </button>
                   </div>
                 </div>
@@ -1131,6 +1391,48 @@ function MapPageContent() {
                     ? "Move timeline to a date with active construction to generate a report"
                     : `Snapshot at current date · ${buildingsActiveAtTimeline.length} building${buildingsActiveAtTimeline.length !== 1 ? "s" : ""}`}
                 </p>
+                <button
+                  onClick={() => setShowDrainagePanel(!showDrainagePanel)}
+                  disabled={buildingsActiveAtTimeline.length === 0}
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-black uppercase tracking-tight transition-all mt-3 ${
+                    showDrainagePanel
+                      ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                      : buildingsActiveAtTimeline.length > 0
+                      ? "bg-blue-600/20 border border-blue-400/30 hover:border-blue-400/50 hover:bg-blue-600/30 text-blue-300"
+                      : "bg-white/5 text-zinc-500 cursor-not-allowed"
+                  }`}
+                >
+                  <Droplets size={18} />
+                  <span>Drainage Analysis</span>
+                </button>
+                <button
+                  onClick={() => setShowStakeholderPanel(!showStakeholderPanel)}
+                  disabled={placedBuildings.length === 0}
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-black uppercase tracking-tight transition-all mt-3 ${
+                    showStakeholderPanel
+                      ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-md"
+                      : placedBuildings.length > 0
+                      ? "bg-indigo-600/20 border border-indigo-400/30 hover:border-indigo-400/50 hover:bg-indigo-600/30 text-indigo-300"
+                      : "bg-white/5 text-zinc-500 cursor-not-allowed"
+                  }`}
+                >
+                  <Users size={18} />
+                  <span>Stakeholder Impact</span>
+                </button>
+                <button
+                  onClick={() => setShowTrafficImpact(!showTrafficImpact)}
+                  disabled={placedBuildings.length === 0}
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-black uppercase tracking-tight transition-all mt-3 ${
+                    showTrafficImpact
+                      ? "bg-orange-600 hover:bg-orange-700 text-white shadow-md"
+                      : placedBuildings.length > 0
+                      ? "bg-orange-600/20 border border-orange-400/30 hover:border-orange-400/50 hover:bg-orange-600/30 text-orange-300"
+                      : "bg-white/5 text-zinc-500 cursor-not-allowed"
+                  }`}
+                >
+                  <Car size={18} />
+                  <span>Traffic Impact</span>
+                </button>
               </div>
 
               {/* Building Placement */}
@@ -1370,6 +1672,23 @@ function MapPageContent() {
                       <X size={14} />
                     </button>
                   </div>
+
+                  {/* View from Street button */}
+                  <button
+                    onClick={() => {
+                      if (selectedBuilding) {
+                        setStreetViewTarget({
+                          worldX: selectedBuilding.position.x,
+                          worldZ: selectedBuilding.position.z,
+                          id: Date.now(),
+                        });
+                      }
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 mb-3 rounded-lg text-xs font-bold uppercase tracking-tight transition-all bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg"
+                  >
+                    <Eye size={14} />
+                    <span>View from Street</span>
+                  </button>
 
                   <div className="bg-blue-50 rounded-md p-3 border border-accent-blue space-y-3">
                     {/* Position Controls */}

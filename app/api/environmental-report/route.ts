@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextRequest, NextResponse } from 'next/server';
+import { analyzeDrainage, type BuildingSpec } from '@/lib/water';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
@@ -76,6 +77,20 @@ export async function POST(request: NextRequest) {
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
+    // Run drainage analysis for each building
+    const drainageResults = buildings.map((b) => {
+      const widthM = Math.max(5, Math.round(b.scale.x * 10));
+      const lengthM = Math.max(5, Math.round(b.scale.z * 10));
+      const heightM = Math.max(3, Math.round(b.scale.y * 3));
+      const floors = Math.max(1, Math.round(heightM / 3.5));
+      const spec: BuildingSpec = {
+        widthM, lengthM, floors,
+        roofStyle: 'flat',
+        zoneType: b.timeline?.zoneType,
+      };
+      return analyzeDrainage(spec);
+    });
+
     // Build rich details for Gemini: dimensions, zoning, type so it can estimate impacts
     const buildingDetails = buildings.map((b, i) => {
       const footprint = Math.round(b.scale.x * b.scale.z * 100);
@@ -84,6 +99,9 @@ export async function POST(request: NextRequest) {
       const buildingType = b.modelPath?.includes('custom') || b.modelPath?.includes('editor')
         ? 'Custom building (user-designed)'
         : b.modelPath?.includes('let_me_sleep') ? 'Default model (Let Me Sleep Building)' : 'Placed building';
+      const drainage = drainageResults[i];
+      const storm2yr = drainage.runoff[0];
+      const storm100yr = drainage.runoff.find(r => r.returnPeriod === '100-year');
       return `
 Building ${i + 1}:
 - ID: ${b.id}
@@ -93,6 +111,12 @@ Building ${i + 1}:
 - Approximate height: ~${heightM} m
 - Zoning: ${zoneType}
 - Building type: ${buildingType}
+- CALCULATED DRAINAGE DATA (use these exact numbers for waterImpact):
+  · Net impervious surface increase: ${drainage.surface.netImperviousIncrease} m²
+  · Impervious coverage: ${drainage.surface.imperviousPercentBefore}% → ${drainage.surface.imperviousPercentAfter}%
+  · 2-year storm runoff increase: +${storm2yr?.runoffVolumeIncreaseL ?? 0} L (+${storm2yr?.peakFlowIncreaseLps ?? 0} L/s peak)
+  · 100-year storm runoff increase: +${storm100yr?.runoffVolumeIncreaseL ?? 0} L (+${storm100yr?.peakFlowIncreaseLps ?? 0} L/s peak)
+  · Mitigation offset potential: ${drainage.offsetPercent}% (green roof, permeable paving, rain gardens)
 `;
     }).join('\n');
 

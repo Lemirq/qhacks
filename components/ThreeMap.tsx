@@ -16,9 +16,10 @@ import { createSceneManager, handleResize } from "@/lib/sceneManager";
 // Rendering systems
 import { fetchBuildings } from "@/lib/buildingData";
 import { renderBuildings } from "@/lib/buildingRenderer";
-import { renderRoads } from "@/lib/roadRenderer";
+import { renderRoads, renderTrafficHeatmap, renderCongestionMarkers } from "@/lib/roadRenderer";
 import { createGround, fetchSatelliteImagery, createSky, createCelestialBodies } from "@/lib/environmentRenderer";
 import { computeTimeOfDay, applyTimeOfDay } from "@/lib/sun/timeOfDay";
+import { analyzeShadowImpact, applyShadowOverlay as applyShadowOverlayFn } from "@/lib/sun/shadowAnalysis";
 import {
   renderTreesAroundBuilding,
   getDefaultTreeConfigForMap,
@@ -33,6 +34,10 @@ import {
   updateTweens,
   attachKeyboardControls,
   updateKeyboardMovement,
+  flyToStreetLevel,
+  exitStreetLevel,
+  isInStreetMode,
+  updateStreetWalkMovement,
 } from "@/lib/cameraController";
 
 // Traffic simulation
@@ -70,6 +75,7 @@ import {
 
 // Analytics
 import { TrafficAnalytics } from "@/lib/analytics";
+import { applyImpactColors } from "@/lib/stakeholderImpact";
 import DebugOverlay from "./DebugOverlay";
 import AnalyticsDashboard from "./AnalyticsDashboard";
 import {
@@ -77,6 +83,7 @@ import {
   getConstructionSourceDb,
 } from "@/lib/constructionNoise";
 import { loadAndRenderZoningLayer } from "@/lib/zoningRenderer";
+import { createWindVisualization, WindVisualization } from "@/lib/windSimulation";
 
 interface PlacedBuilding {
   id: string;
@@ -117,6 +124,8 @@ interface ThreeMapProps {
   timelineDate?: string;
   showNoiseRipple?: boolean;
   showZoningLayer?: boolean;
+  /** Show wind effect visualization overlay */
+  showWindLayer?: boolean;
   /** Offset to align zoning layer (world units) */
   zoningOffset?: { x: number; z: number };
   /** Rotation in degrees (Y axis) */
@@ -134,6 +143,32 @@ interface ThreeMapProps {
   flyToTarget?: { lngLat: [number, number]; id: number };
   /** Time of day as decimal hour (0-24). Controls sun position, lighting, sky, and ground tint. */
   timeOfDayHour?: number;
+  /** When set, triggers a street-level fly-to at the given world position. Change id to trigger again. */
+  streetViewTarget?: { worldX: number; worldZ: number; id: number } | null;
+  /** Called when street view mode changes */
+  onStreetViewChange?: (active: boolean) => void;
+  /** Increment to trigger exit from street view back to bird-eye */
+  exitStreetViewTrigger?: number;
+  /** Day of year (1-365) for sun angle calculation. Default 80 (spring equinox). */
+  dayOfYear?: number;
+  /** When false, hides all placed buildings (before/after comparison). Default true. */
+  showProposedBuilding?: boolean;
+  /** Ref-based API for shadow analysis — parent can call methods on this ref */
+  shadowAnalysisRef?: React.MutableRefObject<{
+    runAnalysis: (dayOfYear: number) => import("@/lib/sun/shadowAnalysis").ShadowAnalysisSummary | null;
+    applyShadowOverlay: (impacts: import("@/lib/sun/shadowAnalysis").BuildingShadowImpact[]) => void;
+    clearShadowOverlay: () => void;
+  } | null>;
+  /** Called once after OSM buildings are fetched, passing the raw building data array */
+  onOsmBuildingsLoaded?: (buildings: import("@/lib/buildingData").Building[]) => void;
+  /** When set, applies stakeholder impact color-coding to OSM building meshes */
+  stakeholderImpactAnalysis?: import("@/lib/stakeholderImpact").StakeholderAnalysis | null;
+  /** Show traffic impact heatmap overlay on roads */
+  showTrafficHeatmap?: boolean;
+  /** Traffic impact analysis result — drives heatmap + congestion markers */
+  trafficImpactResult?: import("@/lib/trafficImpact").TrafficImpactResult | null;
+  /** Called once after road network is loaded, passing the RoadNetwork instance */
+  onRoadNetworkLoaded?: (roadNetwork: RoadNetwork) => void;
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -435,6 +470,7 @@ export default function ThreeMap({
   timelineDate = new Date().toISOString().slice(0, 10),
   showNoiseRipple = false,
   showZoningLayer = false,
+  showWindLayer = false,
   zoningOffset = { x: 0, z: 0 },
   zoningRotationY = 0,
   zoningFlipH = false,
@@ -445,6 +481,17 @@ export default function ThreeMap({
   panelsPortalRef,
   flyToTarget,
   timeOfDayHour,
+  streetViewTarget,
+  onStreetViewChange,
+  exitStreetViewTrigger,
+  dayOfYear = 80,
+  showProposedBuilding = true,
+  shadowAnalysisRef,
+  onOsmBuildingsLoaded,
+  stakeholderImpactAnalysis,
+  showTrafficHeatmap = false,
+  trafficImpactResult,
+  onRoadNetworkLoaded,
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -460,6 +507,8 @@ export default function ThreeMap({
   const moonMeshRef = useRef<THREE.Mesh | null>(null);
   const groundGroupRef = useRef<THREE.Group | null>(null);
   const timeOfDayHourRef = useRef<number>(12);
+  const dayOfYearRef = useRef<number>(80);
+  const shadowOverlayCleanupRef = useRef<(() => void) | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const initialized = useRef(false);
 
@@ -483,11 +532,133 @@ export default function ThreeMap({
   const noiseRippleGroupRef = useRef<THREE.Group | null>(null);
   const rippleTimeRef = useRef(0);
   const zoningGroupRef = useRef<THREE.Group | null>(null);
+  const windVizRef = useRef<WindVisualization | null>(null);
+  const buildingsDataRef = useRef<import("@/lib/buildingData").Building[]>([]);
 
   // Sync time-of-day prop into ref for animation loop
   useEffect(() => {
     timeOfDayHourRef.current = timeOfDayHour ?? 12;
   }, [timeOfDayHour]);
+
+  // Sync dayOfYear prop into ref
+  useEffect(() => {
+    dayOfYearRef.current = dayOfYear;
+  }, [dayOfYear]);
+
+  // Before/after toggle: show/hide placed building models
+  useEffect(() => {
+    buildingModelsRef.current.forEach((model) => {
+      model.visible = showProposedBuilding;
+    });
+    // Also show/hide trees for placed buildings
+    buildingTreesRef.current.forEach((treeGroup) => {
+      treeGroup.visible = showProposedBuilding;
+    });
+  }, [showProposedBuilding, isReady]);
+
+  // Expose shadow analysis API via ref
+  useEffect(() => {
+    if (!shadowAnalysisRef) return;
+    shadowAnalysisRef.current = {
+      runAnalysis: (doy: number) => {
+        if (!sceneRef.current) return null;
+        const proposedObjs = Array.from(buildingModelsRef.current.values());
+        if (proposedObjs.length === 0) return null;
+        return analyzeShadowImpact(
+          sceneRef.current,
+          proposedObjs,
+          osmBuildingMeshesRef.current,
+          doy,
+          1, // 1-hour intervals for performance with ~4776 buildings
+        );
+      },
+      applyShadowOverlay: (impacts) => {
+        // Clear previous overlay
+        if (shadowOverlayCleanupRef.current) {
+          shadowOverlayCleanupRef.current();
+        }
+        shadowOverlayCleanupRef.current = applyShadowOverlayFn(
+          impacts,
+          osmBuildingMeshesRef.current,
+        );
+      },
+      clearShadowOverlay: () => {
+        if (shadowOverlayCleanupRef.current) {
+          shadowOverlayCleanupRef.current();
+          shadowOverlayCleanupRef.current = null;
+        }
+      },
+    };
+    return () => {
+      if (shadowAnalysisRef) shadowAnalysisRef.current = null;
+    };
+  }, [shadowAnalysisRef, isReady]);
+
+  // Stakeholder impact: apply color-coding to OSM buildings
+  useEffect(() => {
+    if (!isReady || osmBuildingMeshesRef.current.size === 0) return;
+    if (!stakeholderImpactAnalysis) return;
+
+    const cleanup = applyImpactColors(stakeholderImpactAnalysis, osmBuildingMeshesRef.current);
+    return cleanup;
+  }, [stakeholderImpactAnalysis, isReady]);
+
+  // Traffic impact heatmap overlay
+  useEffect(() => {
+    if (!isReady || !groupsRef.current) return;
+    const groups = groupsRef.current;
+
+    // Remove existing heatmap/markers
+    if (trafficHeatmapGroupRef.current) {
+      groups.dynamicObjects.remove(trafficHeatmapGroupRef.current);
+      trafficHeatmapGroupRef.current = null;
+    }
+    if (congestionMarkersGroupRef.current) {
+      groups.dynamicObjects.remove(congestionMarkersGroupRef.current);
+      congestionMarkersGroupRef.current = null;
+    }
+
+    if (!showTrafficHeatmap || !trafficImpactResult || !roadNetworkRef.current) return;
+
+    const roadNetwork = roadNetworkRef.current;
+    const allEdges = roadNetwork.getEdges();
+
+    // Render heatmap overlay on impacted roads
+    const heatmapGroup = renderTrafficHeatmap(
+      trafficImpactResult.edgeImpact,
+      allEdges,
+      CityProjection,
+    );
+    groups.dynamicObjects.add(heatmapGroup);
+    trafficHeatmapGroupRef.current = heatmapGroup;
+
+    // Render congestion markers at congested intersections
+    if (trafficImpactResult.congestedIntersections.length > 0) {
+      const nodePositions = new Map<string, [number, number]>();
+      for (const nodeId of trafficImpactResult.congestedIntersections) {
+        const node = roadNetwork.getNode(nodeId);
+        if (node) nodePositions.set(nodeId, node.position);
+      }
+      const markersGroup = renderCongestionMarkers(
+        trafficImpactResult.congestedIntersections,
+        nodePositions,
+        CityProjection,
+      );
+      groups.dynamicObjects.add(markersGroup);
+      congestionMarkersGroupRef.current = markersGroup;
+    }
+
+    return () => {
+      if (trafficHeatmapGroupRef.current) {
+        groups.dynamicObjects.remove(trafficHeatmapGroupRef.current);
+        trafficHeatmapGroupRef.current = null;
+      }
+      if (congestionMarkersGroupRef.current) {
+        groups.dynamicObjects.remove(congestionMarkersGroupRef.current);
+        congestionMarkersGroupRef.current = null;
+      }
+    };
+  }, [showTrafficHeatmap, trafficImpactResult, isReady]);
 
   // Fly to target location when prop changes
   useEffect(() => {
@@ -501,7 +672,27 @@ export default function ThreeMap({
     );
   }, [flyToTarget]);
 
-  // Street-level ambient sound
+  // Street-level POV: fly down when streetViewTarget changes
+  useEffect(() => {
+    if (!streetViewTarget || !cameraRef.current || !controlsRef.current) return;
+    flyToStreetLevel(
+      cameraRef.current,
+      controlsRef.current,
+      streetViewTarget.worldX,
+      streetViewTarget.worldZ,
+    ).then(() => {
+      onStreetViewChange?.(true);
+    });
+  }, [streetViewTarget]);
+
+  // Exit street view when trigger increments
+  useEffect(() => {
+    if (!exitStreetViewTrigger || !cameraRef.current || !controlsRef.current) return;
+    if (!isInStreetMode()) return;
+    exitStreetLevel(cameraRef.current, controlsRef.current).then(() => {
+      onStreetViewChange?.(false);
+    });
+  }, [exitStreetViewTrigger]);
 
   const analyticsRef = useRef<TrafficAnalytics | null>(null);
   const [internalDebugVisible, setInternalDebugVisible] = useState(false);
@@ -529,6 +720,8 @@ export default function ThreeMap({
   const spawnerRef = useRef<Spawner | null>(null);
   const roadNetworkRef = useRef<RoadNetwork | null>(null);
   const speedZonesGroupRef = useRef<THREE.Group | null>(null);
+  const trafficHeatmapGroupRef = useRef<THREE.Group | null>(null);
+  const congestionMarkersGroupRef = useRef<THREE.Group | null>(null);
   const carMeshesRef = useRef<Record<string, THREE.Mesh>>({});
   const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
   const [, setCarPanelTick] = useState(0);
@@ -657,6 +850,9 @@ export default function ThreeMap({
         );
         // Store OSM building meshes for click detection
         osmBuildingMeshesRef.current = osmMeshes;
+        // Store buildings data for wind simulation and stakeholder analysis
+        buildingsDataRef.current = buildings;
+        onOsmBuildingsLoaded?.(buildings);
 
         // Initialize road network
         setLoadingStatus("Fetching road network from OpenStreetMap...");
@@ -710,6 +906,7 @@ export default function ThreeMap({
         spawner.initializeFromRoadNetwork(70);
         spawnerRef.current = spawner;
         roadNetworkRef.current = roadNetwork;
+        onRoadNetworkLoaded?.(roadNetwork);
         console.log(
           `✅ Spawner initialized with ${spawner.getSpawnPoints().length} spawn points`,
         );
@@ -922,21 +1119,23 @@ export default function ThreeMap({
               const greenMaterial =
                 greenLight.material as THREE.MeshStandardMaterial;
 
-              if (redMaterial.emissive) {
-                redMaterial.emissive.setHex(
-                  signal.state === "red" ? 0xff0000 : 0x330000,
-                );
-              }
-              if (yellowMaterial.emissive) {
-                yellowMaterial.emissive.setHex(
-                  signal.state === "yellow" ? 0xffff00 : 0x333300,
-                );
-              }
-              if (greenMaterial.emissive) {
-                greenMaterial.emissive.setHex(
-                  signal.state === "green" ? 0x00ff00 : 0x003300,
-                );
-              }
+              // Fix: update BOTH base color and emissive so inactive lights
+              // appear dark/off rather than staying their bright base color.
+              const isRed = signal.state === "red";
+              const isYellow = signal.state === "yellow";
+              const isGreen = signal.state === "green";
+
+              redMaterial.color.setHex(isRed ? 0xff0000 : 0x1a0000);
+              redMaterial.emissive.setHex(isRed ? 0xff0000 : 0x1a0000);
+              redMaterial.emissiveIntensity = isRed ? 2.5 : 0.1;
+
+              yellowMaterial.color.setHex(isYellow ? 0xffff00 : 0x1a1a00);
+              yellowMaterial.emissive.setHex(isYellow ? 0xffff00 : 0x1a1a00);
+              yellowMaterial.emissiveIntensity = isYellow ? 2.5 : 0.1;
+
+              greenMaterial.color.setHex(isGreen ? 0x00ff00 : 0x001a00);
+              greenMaterial.emissive.setHex(isGreen ? 0x00ff00 : 0x001a00);
+              greenMaterial.emissiveIntensity = isGreen ? 2.5 : 0.1;
             }
           }
         });
@@ -1283,14 +1482,23 @@ export default function ThreeMap({
           });
         }
 
+        // Update wind particle simulation
+        if (windVizRef.current) {
+          windVizRef.current.update(deltaTime);
+        }
+
         // Update WASD keyboard movement + orbit controls
-        updateKeyboardMovement(cameraRef.current, controlsRef.current, deltaTime);
+        if (isInStreetMode()) {
+          updateStreetWalkMovement(cameraRef.current, controlsRef.current, deltaTime);
+        } else {
+          updateKeyboardMovement(cameraRef.current, controlsRef.current, deltaTime);
+        }
         controlsRef.current.update();
 
         // Apply time-of-day lighting
         if (directionalLightRef.current && ambientLightRef.current) {
           const hour = timeOfDayHourRef.current;
-          const todConfig = computeTimeOfDay(hour);
+          const todConfig = computeTimeOfDay(hour, dayOfYearRef.current);
           applyTimeOfDay(
             todConfig,
             sceneRef.current,
@@ -2277,6 +2485,40 @@ export default function ThreeMap({
       zoningGroupRef.current.scale.x = zoningFlipH ? -1 : 1;
     }
   }, [zoningOffset.x, zoningOffset.z, zoningRotationY, zoningFlipH]);
+
+  // Wind effect visualization layer
+  useEffect(() => {
+    if (!groupsRef.current || !isReady) return;
+
+    const removeWind = () => {
+      if (windVizRef.current) {
+        groupsRef.current?.dynamicObjects.remove(windVizRef.current.group);
+        windVizRef.current.dispose();
+        windVizRef.current = null;
+      }
+    };
+
+    if (!showWindLayer) {
+      removeWind();
+      return;
+    }
+
+    if (buildingsDataRef.current.length === 0) {
+      console.warn("Wind layer: no buildings data available yet");
+      return;
+    }
+
+    removeWind();
+
+    const viz = createWindVisualization(buildingsDataRef.current, CityProjection);
+    windVizRef.current = viz;
+    groupsRef.current.dynamicObjects.add(viz.group);
+    console.log("✅ Wind visualization layer enabled");
+
+    return () => {
+      removeWind();
+    };
+  }, [showWindLayer, isReady]);
 
   // Update ghost position on mouse move
   useEffect(() => {
