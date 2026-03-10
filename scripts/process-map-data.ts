@@ -11,36 +11,249 @@ const PUBLIC_DIR = path.join(process.cwd(), 'public', 'map-data');
 
 // ==================== BUILDINGS ====================
 
+type RoofShape = 'flat' | 'gabled' | 'hipped' | 'pyramidal' | 'dome' | 'skillion';
+
 interface Building {
   id: string;
   footprint: [number, number][];
   height: number;
   type?: string;
+  roofShape: RoofShape;
+  roofHeight: number;
+  color?: string;
+  roofColor?: string;
+  material?: string;
+  levels?: number;
 }
 
-function calculateBuildingHeight(tags: any): number {
-  // Try explicit height tag
-  if (tags.height) {
-    const heightStr = tags.height.toString();
-    const heightMatch = heightStr.match(/[\d.]+/);
-    if (heightMatch) {
-      const parsedHeight = parseFloat(heightMatch[0]);
-      if (!isNaN(parsedHeight) && parsedHeight > 0) {
-        return parsedHeight;
+function parseHeight(value: string | undefined): number | null {
+  if (!value) return null;
+  const match = value.toString().match(/[\d.]+/);
+  if (match) {
+    const h = parseFloat(match[0]);
+    if (!isNaN(h) && h > 0) return h;
+  }
+  return null;
+}
+
+/**
+ * Infer roof shape from building type when not explicitly tagged
+ */
+function inferRoofShape(type: string | undefined): RoofShape {
+  switch (type) {
+    case 'house':
+    case 'detached':
+    case 'semidetached_house':
+    case 'terrace':
+    case 'bungalow':
+    case 'farm':
+    case 'cabin':
+      return 'gabled';
+
+    case 'residential':
+      return 'hipped'; // multi-unit residential often hipped
+
+    case 'church':
+    case 'cathedral':
+    case 'chapel':
+      return 'gabled'; // steep gable
+
+    case 'garage':
+    case 'garages':
+    case 'carport':
+    case 'shed':
+      return 'skillion';
+
+    case 'apartments':
+    case 'commercial':
+    case 'retail':
+    case 'office':
+    case 'industrial':
+    case 'warehouse':
+    case 'school':
+    case 'university':
+    case 'hospital':
+    case 'civic':
+    case 'public':
+    case 'government':
+      return 'flat';
+
+    default:
+      return 'flat';
+  }
+}
+
+/**
+ * Infer roof height based on shape and building dimensions
+ */
+function inferRoofHeight(shape: RoofShape, wallHeight: number, type?: string): number {
+  switch (shape) {
+    case 'gabled':
+      // Churches get steeper roofs
+      if (type === 'church' || type === 'cathedral' || type === 'chapel') {
+        return wallHeight * 0.5;
+      }
+      return wallHeight * 0.3;
+    case 'hipped':
+      return wallHeight * 0.25;
+    case 'pyramidal':
+      return wallHeight * 0.4;
+    case 'dome':
+      return wallHeight * 0.35;
+    case 'skillion':
+      return wallHeight * 0.15;
+    case 'flat':
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Default wall height by building type when no height/levels data exists
+ */
+function defaultHeightForType(type: string | undefined): number {
+  switch (type) {
+    case 'house':
+    case 'detached':
+    case 'semidetached_house':
+    case 'bungalow':
+    case 'cabin':
+      return 6; // ~2 stories
+    case 'garage':
+    case 'garages':
+    case 'carport':
+    case 'shed':
+      return 3;
+    case 'church':
+    case 'cathedral':
+      return 15;
+    case 'chapel':
+      return 8;
+    case 'industrial':
+    case 'warehouse':
+      return 8;
+    case 'apartments':
+      return 14; // ~4 stories
+    case 'commercial':
+    case 'retail':
+    case 'office':
+      return 12;
+    case 'school':
+    case 'university':
+    case 'hospital':
+      return 12;
+    case 'civic':
+    case 'public':
+    case 'government':
+      return 12;
+    default:
+      return 8;
+  }
+}
+
+/**
+ * Parse a CSS-style color from OSM tags
+ */
+function parseColor(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const v = value.trim().toLowerCase();
+  // Already a hex color
+  if (v.startsWith('#')) return v;
+  // Named colors used in OSM
+  const named: Record<string, string> = {
+    white: '#ffffff', grey: '#999999', gray: '#999999',
+    red: '#b04040', brown: '#8b6a4a', tan: '#d2b48c',
+    beige: '#f5f0dc', yellow: '#e8d44d', cream: '#fffdd0',
+    brick: '#b35a38', sandstone: '#d4c4a0', limestone: '#d9d0b8',
+    black: '#333333', blue: '#5577aa', green: '#558855',
+    orange: '#cc7733',
+  };
+  return named[v] || undefined;
+}
+
+/**
+ * Remove buildings that are contained within larger buildings (OSM data artifacts).
+ * Uses two checks:
+ * 1. Centroid-in-polygon for simple containment
+ * 2. Convex hull check for complex concave buildings (where smaller buildings sit in indentations)
+ */
+function removeContainedBuildings(buildings: Building[]): Building[] {
+  const enriched = buildings.map((b) => {
+    const coords = [...b.footprint];
+    if (
+      coords.length > 0 &&
+      (coords[0][0] !== coords[coords.length - 1][0] ||
+        coords[0][1] !== coords[coords.length - 1][1])
+    ) {
+      coords.push(coords[0]);
+    }
+    const poly = turf.polygon([coords]);
+    const area = turf.area(poly);
+    const bbox = turf.bbox(poly);
+    const centroid = turf.centroid(poly);
+    return { building: b, poly, area, bbox, centroid };
+  });
+
+  // Sort by area descending (largest first)
+  enriched.sort((a, b) => b.area - a.area);
+
+  // Precompute convex hulls for large complex buildings (many vertices = likely concave)
+  const hulls = new Map<string, ReturnType<typeof turf.convex>>();
+  for (const e of enriched) {
+    if (e.building.footprint.length >= 20) {
+      hulls.set(e.building.id, turf.convex(turf.explode(e.poly)));
+    }
+  }
+
+  const removed = new Set<string>();
+
+  for (let i = 0; i < enriched.length; i++) {
+    if (removed.has(enriched[i].building.id)) continue;
+
+    const larger = enriched[i];
+    const largerHull = hulls.get(larger.building.id);
+
+    for (let j = i + 1; j < enriched.length; j++) {
+      if (removed.has(enriched[j].building.id)) continue;
+
+      const smaller = enriched[j];
+
+      // Quick bbox overlap check
+      if (
+        smaller.bbox[2] < larger.bbox[0] ||
+        smaller.bbox[0] > larger.bbox[2] ||
+        smaller.bbox[3] < larger.bbox[1] ||
+        smaller.bbox[1] > larger.bbox[3]
+      ) {
+        continue;
+      }
+
+      // Check 1: centroid directly inside the polygon
+      if (turf.booleanPointInPolygon(smaller.centroid, larger.poly)) {
+        removed.add(smaller.building.id);
+        continue;
+      }
+
+      // Check 2: for complex concave buildings, check if the smaller building
+      // sits inside the convex hull (i.e., in an indentation of the larger building)
+      if (largerHull && turf.booleanPointInPolygon(smaller.centroid, largerHull)) {
+        // Verify: majority of smaller building's vertices should be inside the hull
+        let insideCount = 0;
+        for (const pt of smaller.building.footprint) {
+          if (turf.booleanPointInPolygon(turf.point(pt), largerHull)) {
+            insideCount++;
+          }
+        }
+        if (insideCount / smaller.building.footprint.length >= 0.5) {
+          removed.add(smaller.building.id);
+        }
       }
     }
   }
 
-  // Try building:levels tag (assume 3.5m per level)
-  if (tags['building:levels']) {
-    const levels = parseInt(tags['building:levels']);
-    if (!isNaN(levels) && levels > 0) {
-      return levels * 3.5;
-    }
-  }
-
-  // Default height
-  return 10;
+  const result = buildings.filter((b) => !removed.has(b.id));
+  console.log(`  Removed ${removed.size} contained/duplicate buildings`);
+  return result;
 }
 
 function parseBuildingsFromOSM(osmData: any): Building[] {
@@ -71,13 +284,49 @@ function parseBuildingsFromOSM(osmData: any): Building[] {
       // Skip if footprint is invalid
       if (footprint.length < 3) return;
 
-      const height = calculateBuildingHeight(tags);
+      const type = tags.building !== 'yes' ? tags.building : undefined;
+      const levels = tags['building:levels'] ? parseInt(tags['building:levels']) : undefined;
+
+      // Calculate wall height
+      let height = parseHeight(tags.height);
+      if (height === null && levels && levels > 0) {
+        height = levels * 3.5;
+      }
+      if (height === null) {
+        height = defaultHeightForType(type);
+      }
+
+      // Determine roof shape: explicit tag > inference from type
+      let roofShape: RoofShape;
+      const explicitRoof = tags['roof:shape'] as RoofShape | undefined;
+      if (explicitRoof && ['flat', 'gabled', 'hipped', 'pyramidal', 'dome', 'skillion'].includes(explicitRoof)) {
+        roofShape = explicitRoof;
+      } else {
+        roofShape = inferRoofShape(type);
+      }
+
+      // Roof height: explicit tag > inference
+      let roofHeight = parseHeight(tags['roof:height']);
+      if (roofHeight === null) {
+        roofHeight = inferRoofHeight(roofShape, height, type);
+      }
+
+      // Colors
+      const color = parseColor(tags['building:colour'] || tags['building:color']);
+      const roofColor = parseColor(tags['roof:colour'] || tags['roof:color']);
+      const material = tags['building:material'] as string | undefined;
 
       const building: Building = {
         id: `building-${element.id}`,
         footprint,
         height,
-        type: tags.building !== 'yes' ? tags.building : undefined,
+        type,
+        roofShape,
+        roofHeight,
+        color,
+        roofColor,
+        material,
+        levels: levels && levels > 0 ? levels : undefined,
       };
 
       buildings.push(building);
@@ -273,7 +522,8 @@ async function main() {
   const buildingsRaw = JSON.parse(
     fs.readFileSync(path.join(PUBLIC_DIR, 'buildings-raw.json'), 'utf-8')
   );
-  const buildings = parseBuildingsFromOSM(buildingsRaw);
+  let buildings = parseBuildingsFromOSM(buildingsRaw);
+  buildings = removeContainedBuildings(buildings);
   fs.writeFileSync(
     path.join(PUBLIC_DIR, 'buildings.json'),
     JSON.stringify(buildings, null, 2)

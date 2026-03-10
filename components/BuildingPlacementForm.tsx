@@ -67,19 +67,19 @@ export function BuildingPlacementForm({
   const categories = [...new Set(KINGSTON_ZONE_TYPES.map((z) => z.category))];
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60">
+      <div className="glass rounded-xl shadow-2xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 glass border-b border-white/10 px-6 py-4 flex items-center justify-between rounded-t-xl">
           <div className="flex items-center gap-2">
-            <Building2 className="text-accent-blue" size={20} />
-            <h2 className="text-base font-black text-slate-900 uppercase tracking-tight">
+            <Building2 className="text-blue-400" size={20} />
+            <h2 className="text-base font-black text-zinc-100 uppercase tracking-tight">
               Building Details
             </h2>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            className="p-1.5 hover:bg-slate-100 rounded-full transition-colors text-slate-400 hover:text-slate-600"
+            className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-zinc-400 hover:text-zinc-200"
           >
             <X size={18} />
           </button>
@@ -88,7 +88,7 @@ export function BuildingPlacementForm({
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Zone at location */}
           {!zoneLoading && officialPlanZone && (
-            <div className="text-[10px] text-slate-600">
+            <div className="text-[10px] text-zinc-400">
               <span className="font-bold uppercase">Official Plan zone at this location:</span>{" "}
               {officialPlanZone}
             </div>
@@ -96,13 +96,13 @@ export function BuildingPlacementForm({
 
           {/* Zone Type */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-600 uppercase mb-2">
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-2">
               Kingston Zoning Type (building use)
             </label>
             <select
               value={zoneType}
               onChange={(e) => setZoneType(e.target.value as KingstonZoneCode)}
-              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-accent-blue focus:border-accent-blue bg-white"
+              className="w-full px-3 py-2.5 text-sm border border-white/10 rounded-lg focus:ring-2 focus:ring-blue-400/50 focus:border-blue-400/50 bg-white/5 text-zinc-200"
             >
               {categories.map((cat) => (
                 <optgroup key={cat} label={cat}>
@@ -120,18 +120,18 @@ export function BuildingPlacementForm({
 
           {/* Zone compatibility warning */}
           {zoneWarning && (
-            <div className="flex gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
-              <AlertTriangle className="shrink-0 text-amber-600" size={20} />
+            <div className="flex gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-400/20">
+              <AlertTriangle className="shrink-0 text-amber-400" size={20} />
               <div>
-                <p className="text-sm font-bold text-amber-800">Zone compatibility warning</p>
-                <p className="text-xs text-amber-700 mt-0.5">{zoneWarning}</p>
+                <p className="text-sm font-bold text-amber-300">Zone compatibility warning</p>
+                <p className="text-xs text-amber-400/80 mt-0.5">{zoneWarning}</p>
               </div>
             </div>
           )}
 
           {/* Construction duration */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-600 uppercase mb-2">
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-2">
               Construction Duration (days)
             </label>
             <input
@@ -140,20 +140,20 @@ export function BuildingPlacementForm({
               max={1095}
               value={durationDays}
               onChange={(e) => setDurationDays(parseInt(e.target.value, 10) || 1)}
-              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-accent-blue focus:border-accent-blue"
+              className="w-full px-3 py-2.5 text-sm border border-white/10 rounded-lg focus:ring-2 focus:ring-blue-400/50 focus:border-blue-400/50 bg-white/5 text-zinc-200"
             />
           </div>
 
           {/* Start Date */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-600 uppercase mb-2">
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-2">
               Construction Start Date
             </label>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-accent-blue focus:border-accent-blue"
+              className="w-full px-3 py-2.5 text-sm border border-white/10 rounded-lg focus:ring-2 focus:ring-blue-400/50 focus:border-blue-400/50 bg-white/5 text-zinc-200"
             />
           </div>
 
@@ -161,13 +161,13 @@ export function BuildingPlacementForm({
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors uppercase"
+              className="flex-1 px-4 py-2.5 text-sm font-bold text-zinc-300 border border-white/10 rounded-lg hover:bg-white/5 transition-colors uppercase"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-blue-700 rounded-lg transition-colors uppercase"
+              className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors uppercase"
             >
               Place Building
             </button>

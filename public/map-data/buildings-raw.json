@@ -2,7 +2,7 @@
   "version": 0.6,
   "generator": "Overpass API 0.7.61.8 b1080abd",
   "osm3s": {
-    "timestamp_osm_base": "2026-02-07T23:36:32Z",
+    "timestamp_osm_base": "2026-03-09T20:46:42Z",
     "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
   },
   "elements": [
@@ -142838,12 +142838,6 @@
 },
 {
   "type": "node",
-  "id": 6160679619,
-  "lat": 44.2343700,
-  "lon": -76.5049410
-},
-{
-  "type": "node",
   "id": 6160679620,
   "lat": 44.2380910,
   "lon": -76.4972840
@@ -164867,12 +164861,6 @@
   "id": 6160685588,
   "lat": 44.2321960,
   "lon": -76.5005570
-},
-{
-  "type": "node",
-  "id": 6160685589,
-  "lat": 44.2344220,
-  "lon": -76.5051050
 },
 {
   "type": "node",
@@ -204008,12 +203996,6 @@
 },
 {
   "type": "node",
-  "id": 6160700143,
-  "lat": 44.2344260,
-  "lon": -76.5050010
-},
-{
-  "type": "node",
   "id": 6160700144,
   "lat": 44.2383310,
   "lon": -76.4972910
@@ -225914,12 +225896,6 @@
 },
 {
   "type": "node",
-  "id": 6160707420,
-  "lat": 44.2344240,
-  "lon": -76.5049450
-},
-{
-  "type": "node",
   "id": 6160707421,
   "lat": 44.2383450,
   "lon": -76.4972410
@@ -247034,12 +247010,6 @@
 },
 {
   "type": "node",
-  "id": 6160715741,
-  "lat": 44.2343640,
-  "lon": -76.5051010
-},
-{
-  "type": "node",
   "id": 6160715742,
   "lat": 44.2380790,
   "lon": -76.4972710
@@ -264015,12 +263985,6 @@
 },
 {
   "type": "node",
-  "id": 6160722827,
-  "lat": 44.2344220,
-  "lon": -76.5050010
-},
-{
-  "type": "node",
   "id": 6160722828,
   "lat": 44.2383320,
   "lon": -76.4972410
@@ -269226,12 +269190,6 @@
   "id": 6160724225,
   "lat": 44.2320230,
   "lon": -76.5003570
-},
-{
-  "type": "node",
-  "id": 6160724227,
-  "lat": 44.2344260,
-  "lon": -76.5050170
 },
 {
   "type": "node",
@@ -293407,6 +293365,10 @@
   ],
   "tags": {
     "addr:city": "Kingston",
+    "addr:housenumber": "82",
+    "addr:postcode": "K7L 3H4",
+    "addr:province": "Ontario",
+    "addr:street": "Sydenham Street",
     "amenity": "place_of_worship",
     "building": "yes",
     "canvec:CODE": "2010392",
@@ -344466,24 +344428,6 @@
     6160709590,
     6160698126,
     6160695004
-  ],
-  "tags": {
-    "addr:city": "Kingston",
-    "building": "yes"
-  }
-},
-{
-  "type": "way",
-  "id": 657790086,
-  "nodes": [
-    6160700143,
-    6160722827,
-    6160707420,
-    6160679619,
-    6160715741,
-    6160685589,
-    6160724227,
-    6160700143
   ],
   "tags": {
     "addr:city": "Kingston",

@@ -160,9 +160,9 @@ export function VoiceDesign() {
       case 'designing':
         return 'bg-amber-500 text-white';
       case 'error':
-        return 'bg-red-100 text-red-500';
+        return 'bg-red-500/20 text-red-400';
       default:
-        return 'bg-gray-100 text-gray-500 hover:bg-violet-500 hover:text-white';
+        return 'bg-white/10 text-zinc-400 hover:bg-violet-500 hover:text-white';
     }
   })();
 
@@ -170,14 +170,14 @@ export function VoiceDesign() {
     <div className="fixed bottom-40 right-17 z-50 flex flex-col items-end gap-2">
       {/* Popover: Last Voice Command details */}
       {lastResult && showDetails && (
-        <div className="w-80 bg-white rounded-2xl shadow-xl border border-gray-200 p-4 space-y-3 animate-in fade-in slide-in-from-bottom-2">
+        <div className="w-80 glass rounded-2xl shadow-xl p-4 space-y-3 animate-in fade-in slide-in-from-bottom-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">
               Last Voice Command
             </span>
             <button
               onClick={() => setShowDetails(false)}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-zinc-500 hover:text-zinc-300 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -185,13 +185,13 @@ export function VoiceDesign() {
             </button>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400 mb-1">Transcript</p>
-            <p className="text-sm text-gray-800">&ldquo;{lastResult.transcript}&rdquo;</p>
+            <p className="text-xs font-medium text-zinc-500 mb-1">Transcript</p>
+            <p className="text-sm text-zinc-200">&ldquo;{lastResult.transcript}&rdquo;</p>
           </div>
           {lastResult.config && (
             <div>
-              <p className="text-xs font-medium text-gray-400 mb-1">Parsed Config</p>
-              <pre className="text-[11px] bg-gray-50 rounded-lg p-2.5 overflow-x-auto text-gray-700 leading-relaxed max-h-48 overflow-y-auto">
+              <p className="text-xs font-medium text-zinc-500 mb-1">Parsed Config</p>
+              <pre className="text-[11px] bg-white/5 rounded-lg p-2.5 overflow-x-auto text-zinc-300 leading-relaxed max-h-48 overflow-y-auto">
                 {JSON.stringify(lastResult.config, null, 2)}
               </pre>
             </div>
@@ -200,11 +200,11 @@ export function VoiceDesign() {
       )}
 
       {/* Floating Input Island */}
-      <div className="flex items-center gap-2 bg-white rounded-full shadow-lg border border-gray-200 pl-4 pr-1.5 py-1.5">
+      <div className="flex items-center gap-2 glass rounded-full shadow-lg pl-4 pr-1.5 py-1.5">
         {/* Text / Status area */}
         <span
           className={`text-sm select-none min-w-[160px] ${
-            phase === 'error' ? 'text-red-500' : 'text-gray-400'
+            phase === 'error' ? 'text-red-400' : 'text-zinc-400'
           }`}
         >
           {lastResult && phase === 'idle'
@@ -218,8 +218,8 @@ export function VoiceDesign() {
             onClick={() => setShowDetails(!showDetails)}
             className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 ${
               showDetails
-                ? 'bg-violet-100 text-violet-600'
-                : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600'
+                ? 'bg-violet-500/20 text-violet-400'
+                : 'bg-white/10 text-zinc-400 hover:bg-white/15 hover:text-zinc-300'
             }`}
             title="Show details"
           >

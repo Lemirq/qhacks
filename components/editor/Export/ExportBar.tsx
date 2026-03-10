@@ -72,11 +72,11 @@ export function ExportBar({ sceneRef }: ExportBarProps) {
   };
 
   return (
-    <div className="w-full bg-gray-800 text-white p-4 border-t border-gray-700">
+    <div className="w-full glass text-white p-4 border-t border-white/10">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <div className="text-sm">
           <span className="font-semibold">Export Options</span>
-          <span className="ml-3 text-gray-400">
+          <span className="ml-3 text-zinc-500">
             {buildings.length} building{buildings.length > 1 ? 's' : ''}
           </span>
         </div>
@@ -85,31 +85,31 @@ export function ExportBar({ sceneRef }: ExportBarProps) {
           <button
             onClick={handleExportGLB}
             disabled={exporting}
-            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-700/80 border-blue-400/60 text-blue-300 hover:bg-blue-500 hover:border-blue-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)] hover:-translate-y-0.5 active:translate-y-0 disabled:bg-gray-700 disabled:border-gray-600 disabled:text-gray-500 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none transition-all duration-200 ease-out"
+            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-white/5 border-blue-400/60 text-blue-300 hover:bg-blue-500 hover:border-blue-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(59,130,246,0.35)] hover:-translate-y-0.5 active:translate-y-0 disabled:bg-white/5 disabled:border-white/10 disabled:text-zinc-600 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none transition-all duration-200 ease-out"
           >
             {exporting ? 'Exporting...' : 'Download GLB'}
           </button>
 
           <button
             onClick={handleExportJSON}
-            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-700/80 border-emerald-400/60 text-emerald-300 hover:bg-emerald-500 hover:border-emerald-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(16,185,129,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out"
+            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-white/5 border-emerald-400/60 text-emerald-300 hover:bg-emerald-500 hover:border-emerald-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(16,185,129,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out"
           >
             Download JSON
           </button>
 
           <button
             onClick={handleCopyJSON}
-            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gray-700/80 border-violet-400/60 text-violet-300 hover:bg-violet-500 hover:border-violet-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(139,92,246,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out"
+            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-white/5 border-violet-400/60 text-violet-300 hover:bg-violet-500 hover:border-violet-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(139,92,246,0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 ease-out"
           >
             {copied ? 'Copied!' : 'Copy JSON'}
           </button>
 
-          <div className="w-px h-8 bg-gray-600" />
+          <div className="w-px h-8 bg-white/10" />
 
           <button
             onClick={handleExportToMap}
             disabled={exportingToMap}
-            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gradient-to-r from-orange-500 to-amber-500 border-orange-400 text-white hover:from-orange-600 hover:to-amber-600 hover:shadow-[0_8px_25px_-5px_rgba(249,115,22,0.5)] hover:-translate-y-0.5 active:translate-y-0 disabled:from-gray-600 disabled:to-gray-600 disabled:border-gray-500 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none transition-all duration-200 ease-out"
+            className="px-5 py-2.5 rounded-full font-medium text-sm border-2 bg-gradient-to-r from-orange-500 to-amber-500 border-orange-400 text-white hover:from-orange-600 hover:to-amber-600 hover:shadow-[0_8px_25px_-5px_rgba(249,115,22,0.5)] hover:-translate-y-0.5 active:translate-y-0 disabled:from-zinc-800 disabled:to-zinc-800 disabled:border-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none transition-all duration-200 ease-out"
           >
             {exportingToMap ? 'Exporting...' : 'Export to Map →'}
           </button>

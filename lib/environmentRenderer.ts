@@ -11,127 +11,105 @@ export async function fetchSatelliteImagery(
 ): Promise<string | null> {
   const [south, west, north, east] = bbox;
 
-  // Try Mapbox Streets (OSM-based) for perfect alignment with 3D data
+  // Calculate image dimensions that match the bbox aspect ratio
+  // so the image maps 1:1 onto the plane without distortion
+  const latRad = ((south + north) / 2) * (Math.PI / 180);
+  const lngSpan = (east - west) * Math.cos(latRad); // adjusted for latitude
+  const latSpan = north - south;
+  const aspect = lngSpan / latSpan;
+  const maxDim = 1280;
+  const width = aspect >= 1 ? maxDim : Math.round(maxDim * aspect);
+  const height = aspect >= 1 ? Math.round(maxDim / aspect) : maxDim;
+
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
   if (mapboxToken) {
-    try {
-      // Use Mapbox Static Images API with OSM-based streets style
-      // This uses the same OSM data as our buildings/roads, ensuring perfect alignment
-      const width = 1280;
-      const height = 1280;
-
-      // Try satellite first for realistic imagery
-      const satelliteUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/[${west},${south},${east},${north}]/${width}x${height}@2x?access_token=${mapboxToken}`;
-
-      console.log(
-        "🗺️  Fetching Mapbox satellite-streets (OSM + satellite hybrid)...",
-      );
-      const satelliteResponse = await fetch(satelliteUrl, { method: "HEAD" });
-      if (satelliteResponse.ok) {
-        console.log("✅ Mapbox satellite-streets imagery URL ready");
-        return satelliteUrl;
+    // Use pure satellite (no labels) so text doesn't clash with 3D geometry
+    for (const style of ["satellite-v9", "satellite-streets-v12"]) {
+      try {
+        const url = `https://api.mapbox.com/styles/v1/mapbox/${style}/static/[${west},${south},${east},${north}]/${width}x${height}@2x?access_token=${mapboxToken}`;
+        const res = await fetch(url, { method: "HEAD" });
+        if (res.ok) {
+          console.log(`✅ Mapbox ${style} imagery ready`);
+          return url;
+        }
+      } catch (error) {
+        console.warn(`Mapbox ${style} failed`, error);
       }
-    } catch (error) {
-      console.warn(
-        "Mapbox satellite-streets failed, trying streets-only...",
-        error,
-      );
-    }
-
-    try {
-      // Fallback to pure streets style (OSM-based map without satellite)
-      const width = 1280;
-      const height = 1280;
-      const streetsUrl = `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/[${west},${south},${east},${north}]/${width}x${height}@2x?access_token=${mapboxToken}`;
-
-      console.log("🗺️  Fetching Mapbox streets (pure OSM rendering)...");
-      const streetsResponse = await fetch(streetsUrl, { method: "HEAD" });
-      if (streetsResponse.ok) {
-        console.log("✅ Mapbox streets imagery URL ready");
-        return streetsUrl;
-      }
-    } catch (error) {
-      console.warn("Mapbox streets failed", error);
     }
   }
 
-  // Fallback: Use OpenStreetMap static map API
+  // Fallback: OpenStreetMap static map
   try {
     const centerLat = (south + north) / 2;
     const centerLng = (west + east) / 2;
-
-    // Calculate appropriate zoom level for the bbox
-    const latDiff = north - south;
-    const zoom = Math.floor(Math.log2(360 / latDiff)) - 1;
-
-    console.log("🗺️  Using StaticMap OSM renderer...");
-
-    // Use staticmap service with OSM tiles
-    const osmUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${centerLat},${centerLng}&zoom=${zoom}&size=2048x2048&maptype=mapnik`;
-
+    const zoom = Math.floor(Math.log2(360 / (north - south))) - 1;
+    const osmUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${centerLat},${centerLng}&zoom=${zoom}&size=${width}x${height}&maptype=mapnik`;
     console.log("✅ OSM static map URL generated");
     return osmUrl;
   } catch (error) {
     console.warn("OSM static map failed", error);
   }
 
-  console.log("⚠️  No map imagery available, using fallback color");
   return null;
 }
 
 /**
- * Creates a ground plane covering the specified bounding box
+ * Creates a grid of ground planes covering the specified bounding box.
+ * Each cell gets its own satellite texture for high resolution.
+ *
  * @param bbox - Bounding box defining the area to cover
  * @param projection - CityProjection class for coordinate conversion
- * @param satelliteTexture - Optional satellite texture to apply
- * @returns Ground mesh
+ * @param gridSize - Number of tiles per axis (e.g. 4 → 4x4 = 16 tiles)
+ * @returns Ground group with named children "ground-tile-{row}-{col}"
  */
 export function createGround(
   bbox: { minLat: number; maxLat: number; minLng: number; maxLng: number },
   projection: { projectToWorld: (coord: [number, number]) => THREE.Vector3 },
-  satelliteTexture?: THREE.Texture,
-): THREE.Mesh {
-  // Calculate bounds in world coordinates
-  const topLeft = projection.projectToWorld([bbox.minLng, bbox.maxLat]);
-  const topRight = projection.projectToWorld([bbox.maxLng, bbox.maxLat]);
-  const bottomLeft = projection.projectToWorld([bbox.minLng, bbox.minLat]);
-  const bottomRight = projection.projectToWorld([bbox.maxLng, bbox.minLat]);
+  gridSize: number = 4,
+): THREE.Group {
+  const group = new THREE.Group();
 
-  const width = Math.abs(topRight.x - topLeft.x);
-  const depth = Math.abs(bottomLeft.z - topLeft.z);
-  const centerX = (topLeft.x + bottomRight.x) / 2;
-  const centerZ = (topLeft.z + bottomRight.z) / 2;
+  const latStep = (bbox.maxLat - bbox.minLat) / gridSize;
+  const lngStep = (bbox.maxLng - bbox.minLng) / gridSize;
 
-  console.log(
-    `Ground dimensions: ${width.toFixed(1)}m x ${depth.toFixed(1)}m at (${centerX.toFixed(1)}, 0, ${centerZ.toFixed(1)})`,
-  );
+  for (let row = 0; row < gridSize; row++) {
+    for (let col = 0; col < gridSize; col++) {
+      const cellMinLat = bbox.minLat + row * latStep;
+      const cellMaxLat = bbox.minLat + (row + 1) * latStep;
+      const cellMinLng = bbox.minLng + col * lngStep;
+      const cellMaxLng = bbox.minLng + (col + 1) * lngStep;
 
-  // Create infinite ground geometry
-  const geometry = new THREE.PlaneGeometry(100000, 100000); // 100km x 100km (effectively infinite)
+      const topLeft = projection.projectToWorld([cellMinLng, cellMaxLat]);
+      const bottomRight = projection.projectToWorld([cellMaxLng, cellMinLat]);
 
-  // Rotate geometry to be horizontal (in XZ plane) BEFORE creating mesh
-  geometry.rotateX(-Math.PI / 2);
+      const width = Math.abs(bottomRight.x - topLeft.x);
+      const depth = Math.abs(bottomRight.z - topLeft.z);
+      const centerX = (topLeft.x + bottomRight.x) / 2;
+      const centerZ = (topLeft.z + bottomRight.z) / 2;
 
-  // Create material - white ground with polygon offset to prevent z-fighting with roads
-  const material = new THREE.MeshStandardMaterial({
-    map: satelliteTexture || null,
-    color: 0xffffff,
-    roughness: 0.9,
-    metalness: 0.0,
-    side: THREE.DoubleSide,
-    polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1,
-  });
+      const geometry = new THREE.PlaneGeometry(width, depth);
+      geometry.rotateX(-Math.PI / 2);
 
-  const ground = new THREE.Mesh(geometry, material);
+      const material = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.9,
+        metalness: 0.0,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      });
 
-  // Position ground at y=0, centered on the map
-  ground.position.set(centerX, 0, centerZ);
+      const plane = new THREE.Mesh(geometry, material);
+      plane.position.set(centerX, 0, centerZ);
+      plane.receiveShadow = true;
+      plane.name = `ground-tile-${row}-${col}`;
+      // Store sub-bbox so ThreeMap can fetch the right satellite image
+      plane.userData.tileBbox = [cellMinLat, cellMinLng, cellMaxLat, cellMaxLng];
+      group.add(plane);
+    }
+  }
 
-  ground.receiveShadow = true;
-
-  return ground;
+  return group;
 }
 
 /**
@@ -139,22 +117,14 @@ export function createGround(
  * @returns Sky mesh
  */
 export function createSky(): THREE.Mesh {
-  // Create hemisphere for sky dome
-  const geometry = new THREE.SphereGeometry(
-    5000,
-    32,
-    15,
-    0,
-    Math.PI * 2,
-    0,
-    Math.PI / 2,
-  );
+  // Full sphere so it covers every angle — no edge clipping when orbiting
+  const geometry = new THREE.SphereGeometry(45000, 32, 32);
 
-  // Gradient shader: blue at top fading to white at horizon
+  // Gradient shader: topColor at zenith, bottomColor at horizon and below
   const material = new THREE.ShaderMaterial({
     uniforms: {
-      topColor: { value: new THREE.Color(0x0077ff) }, // Sky blue
-      bottomColor: { value: new THREE.Color(0xffffff) }, // White horizon
+      topColor: { value: new THREE.Color(0x0077ff) },
+      bottomColor: { value: new THREE.Color(0xffffff) },
     },
     vertexShader: `
       varying vec3 vWorldPosition;
@@ -169,8 +139,10 @@ export function createSky(): THREE.Mesh {
       uniform vec3 bottomColor;
       varying vec3 vWorldPosition;
       void main() {
-        float h = normalize(vWorldPosition).z;
-        gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(h, 0.6), 0.0)), 1.0);
+        float h = normalize(vWorldPosition).y;
+        // Above horizon: gradient from bottom→top. Below horizon: solid bottomColor.
+        float t = max(pow(max(h, 0.0), 0.6), 0.0);
+        gl_FragColor = vec4(mix(bottomColor, topColor, t), 1.0);
       }
     `,
     side: THREE.BackSide,
@@ -178,9 +150,49 @@ export function createSky(): THREE.Mesh {
   });
 
   const sky = new THREE.Mesh(geometry, material);
-  sky.position.z = 0;
-
   return sky;
+}
+
+/**
+ * Creates sun and moon sprites that follow solar position
+ * @returns Object with sun and moon meshes
+ */
+export function createCelestialBodies(): { sun: THREE.Mesh; moon: THREE.Mesh } {
+  // Sun — glowing disc
+  const sunGeo = new THREE.CircleGeometry(800, 32);
+  const sunMat = new THREE.MeshBasicMaterial({
+    color: 0xffdd44,
+    side: THREE.DoubleSide,
+    transparent: true,
+    depthWrite: false,
+  });
+  const sun = new THREE.Mesh(sunGeo, sunMat);
+  sun.name = "celestial-sun";
+
+  // Glow ring around sun
+  const glowGeo = new THREE.RingGeometry(800, 1600, 32);
+  const glowMat = new THREE.MeshBasicMaterial({
+    color: 0xffdd44,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.15,
+    depthWrite: false,
+  });
+  const glow = new THREE.Mesh(glowGeo, glowMat);
+  sun.add(glow);
+
+  // Moon — smaller, white-blue disc
+  const moonGeo = new THREE.CircleGeometry(500, 32);
+  const moonMat = new THREE.MeshBasicMaterial({
+    color: 0xddeeff,
+    side: THREE.DoubleSide,
+    transparent: true,
+    depthWrite: false,
+  });
+  const moon = new THREE.Mesh(moonGeo, moonMat);
+  moon.name = "celestial-moon";
+
+  return { sun, moon };
 }
 
 /**

@@ -3,14 +3,52 @@ import { CityProjection } from "./projection";
 import { RoadEdge } from "./roadNetwork";
 
 /**
- * Render roads from RoadEdge data into a Three.js scene
+ * Road Renderer with realistic widths, mitered joins, and visual hierarchy
  */
+
+const SCALE_FACTOR = 10 / 1.4;
+
+/**
+ * Road style based on speed limit (proxy for OSM highway classification)
+ * - 60 km/h → primary/arterial
+ * - 50 km/h → secondary
+ * - 40 km/h → tertiary
+ * - 30 km/h → residential
+ */
+function getRoadStyle(speedLimit: number, lanes: number): { width: number; color: number } {
+  // Real-world lane widths (meters) vary by road class
+  let laneWidth: number;
+  let shoulder: number;
+  let color: number;
+
+  if (speedLimit >= 60) {
+    // Primary / arterial
+    laneWidth = 3.7;
+    shoulder = 1.0;
+    color = 0x2a2a2a;
+  } else if (speedLimit >= 50) {
+    // Secondary
+    laneWidth = 3.5;
+    shoulder = 0.5;
+    color = 0x333333;
+  } else if (speedLimit >= 40) {
+    // Tertiary
+    laneWidth = 3.3;
+    shoulder = 0.3;
+    color = 0x3d3d3d;
+  } else {
+    // Residential
+    laneWidth = 3.0;
+    shoulder = 0.0;
+    color = 0x484848;
+  }
+
+  const totalWidth = (lanes * laneWidth + shoulder * 2) * SCALE_FACTOR;
+  return { width: totalWidth, color };
+}
 
 /**
  * Render all roads from edge data
- * @param edges - Array of road edges to render
- * @param projection - CityProjection for coordinate conversion
- * @param scene - Three.js scene to add road meshes to
  */
 export function renderRoads(
   edges: RoadEdge[],
@@ -20,35 +58,22 @@ export function renderRoads(
   console.log(`Rendering ${edges.length} roads...`);
 
   edges.forEach((edge) => {
-    // Skip edges with insufficient geometry
-    if (edge.geometry.length < 2) {
-      return;
-    }
+    if (edge.geometry.length < 2) return;
 
-    // Project coordinates to 3D world space
     const points = edge.geometry.map((coord) =>
       projection.projectToWorld(coord),
     );
 
-    // Calculate road width based on lanes
-    // Apply the same scale factor used for buildings (10/1.4 ≈ 7.14)
-    // to maintain proper proportions in the scaled world
-    const SCALE_FACTOR = 10 / 1.4;
-    const baseWidthPerLane = 6.0; // meters per lane
-    const width = edge.lanes * baseWidthPerLane * SCALE_FACTOR;
+    const { width, color } = getRoadStyle(edge.speedLimit, edge.lanes);
+    const roadMesh = createRoadMesh(points, width, color);
 
-    // Create road mesh
-    const roadMesh = createRoadMesh(points, width);
-
-    // Above ground to avoid z-fighting with ground plane
+    // Slightly above ground to avoid z-fighting with satellite texture
     roadMesh.position.y = 0.5;
 
-    // Mark as road for collision detection
-    roadMesh.name = `road-${edge.id || 'segment'}`;
+    roadMesh.name = `road-${edge.id || "segment"}`;
     roadMesh.userData.isRoad = true;
     roadMesh.userData.roadWidth = width;
 
-    // Add to scene
     scene.add(roadMesh);
   });
 
@@ -57,20 +82,16 @@ export function renderRoads(
 
 /**
  * Create a road mesh from a series of points
- * @param points - Array of THREE.Vector3 points defining the road path
- * @param width - Width of the road in meters
- * @returns THREE.Mesh representing the road
  */
-function createRoadMesh(points: THREE.Vector3[], width: number): THREE.Mesh {
-  // For simple roads, we'll create a flat ribbon geometry
-  // This is more efficient than TubeGeometry for most roads
-
+function createRoadMesh(
+  points: THREE.Vector3[],
+  width: number,
+  color: number,
+): THREE.Mesh {
   if (points.length === 2) {
-    // Straight road - use a simple box
-    return createStraightRoad(points[0], points[1], width);
+    return createStraightRoad(points[0], points[1], width, color);
   } else {
-    // Curved road - use a ribbon geometry along the path
-    return createCurvedRoad(points, width);
+    return createCurvedRoad(points, width, color);
   }
 }
 
@@ -81,24 +102,22 @@ function createStraightRoad(
   start: THREE.Vector3,
   end: THREE.Vector3,
   width: number,
+  color: number,
 ): THREE.Mesh {
-  // Calculate length and direction
   const direction = new THREE.Vector3().subVectors(end, start);
   const length = direction.length();
   const midpoint = new THREE.Vector3()
     .addVectors(start, end)
     .multiplyScalar(0.5);
 
-  // Create geometry
   const geometry = new THREE.PlaneGeometry(width, length);
-
-  // Rotate to align with direction
   const angle = Math.atan2(direction.x, -direction.z);
   geometry.rotateZ(angle);
 
-  // Create material with polygon offset to render above ground
-  const material = new THREE.MeshBasicMaterial({
-    color: 0x333333,
+  const material = new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.95,
+    metalness: 0.0,
     side: THREE.DoubleSide,
     polygonOffset: true,
     polygonOffsetFactor: -1,
@@ -107,53 +126,66 @@ function createStraightRoad(
 
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.copy(midpoint);
-  mesh.rotateX(-Math.PI / 2); // Rotate to be horizontal
+  mesh.rotateX(-Math.PI / 2);
+  mesh.receiveShadow = true;
 
   return mesh;
 }
 
 /**
- * Create a curved road along a path of points
+ * Create a curved road along a path of points with mitered joins
  */
-function createCurvedRoad(points: THREE.Vector3[], width: number): THREE.Mesh {
-  // Create a ribbon geometry that follows the path
+function createCurvedRoad(
+  points: THREE.Vector3[],
+  width: number,
+  color: number,
+): THREE.Mesh {
   const geometry = new THREE.BufferGeometry();
+  const half = width / 2;
 
   const vertices: number[] = [];
   const indices: number[] = [];
 
-  // For each segment, create a quad
+  // Compute perpendicular (right) vectors for each segment
+  const segRights: THREE.Vector3[] = [];
   for (let i = 0; i < points.length - 1; i++) {
-    const p1 = points[i];
-    const p2 = points[i + 1];
+    const forward = new THREE.Vector3()
+      .subVectors(points[i + 1], points[i])
+      .normalize();
+    segRights.push(new THREE.Vector3(-forward.z, 0, forward.x));
+  }
 
-    // Calculate perpendicular direction for road width
-    const forward = new THREE.Vector3().subVectors(p2, p1).normalize();
-    const right = new THREE.Vector3(-forward.z, 0, forward.x).multiplyScalar(
-      width / 2,
-    );
+  // For each vertex, compute mitered perpendicular by averaging adjacent segments
+  for (let i = 0; i < points.length; i++) {
+    let right: THREE.Vector3;
 
-    // Create quad vertices (left and right side of road)
-    const startIdx = i * 2;
+    if (i === 0) {
+      right = segRights[0].clone();
+    } else if (i === points.length - 1) {
+      right = segRights[segRights.length - 1].clone();
+    } else {
+      // Average the perpendiculars of the two adjacent segments
+      right = new THREE.Vector3()
+        .addVectors(segRights[i - 1], segRights[i])
+        .normalize();
 
-    // Left side (y offset handled by roadMesh.position.y)
-    vertices.push(p1.x - right.x, 0, p1.z - right.z);
-
-    // Right side
-    vertices.push(p1.x + right.x, 0, p1.z + right.z);
-
-    // Add last segment's end points
-    if (i === points.length - 2) {
-      vertices.push(p2.x - right.x, 0, p2.z - right.z);
-      vertices.push(p2.x + right.x, 0, p2.z + right.z);
+      // Scale to maintain consistent width through the miter
+      // miterScale = 1 / cos(halfAngle) — clamped to avoid extreme spikes
+      const dot = segRights[i - 1].dot(segRights[i]);
+      const miterScale = Math.min(1 / Math.sqrt((1 + dot) / 2), 2.0);
+      right.multiplyScalar(miterScale);
     }
 
-    // Create triangles for this segment
+    const p = points[i];
+    // Left vertex
+    vertices.push(p.x - right.x * half, 0, p.z - right.z * half);
+    // Right vertex
+    vertices.push(p.x + right.x * half, 0, p.z + right.z * half);
+
+    // Create triangles for the quad between this vertex pair and the next
     if (i < points.length - 1) {
-      const idx = startIdx;
-      // Triangle 1
+      const idx = i * 2;
       indices.push(idx, idx + 2, idx + 1);
-      // Triangle 2
       indices.push(idx + 1, idx + 2, idx + 3);
     }
   }
@@ -165,24 +197,24 @@ function createCurvedRoad(points: THREE.Vector3[], width: number): THREE.Mesh {
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
 
-  // Create material with polygon offset to render above ground
-  const material = new THREE.MeshBasicMaterial({
-    color: 0x333333,
+  const material = new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.95,
+    metalness: 0.0,
     side: THREE.DoubleSide,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
   });
 
-  return new THREE.Mesh(geometry, material);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 /**
  * Alternative rendering function using TubeGeometry for main roads
  * This creates 3D roads with more visual detail but is more expensive
- * @param edges - Road edges to render
- * @param projection - Projection system
- * @param scene - Scene to add to
  */
 export function renderRoadsWithTubes(
   edges: RoadEdge[],
@@ -192,22 +224,32 @@ export function renderRoadsWithTubes(
   console.log(`Rendering ${edges.length} roads with tube geometry...`);
 
   edges.forEach((edge) => {
-    if (edge.geometry.length < 2) {
-      return;
-    }
+    if (edge.geometry.length < 2) return;
 
     const points = edge.geometry.map((coord) =>
       projection.projectToWorld(coord),
     );
 
-    const width = edge.lanes * 5.0;
+    const { width } = getRoadStyle(edge.speedLimit, edge.lanes);
 
-    // Use tube geometry for 3D appearance
-    const roadMesh = createTubeRoad(points, width);
+    const curve = new THREE.CatmullRomCurve3(points);
+    const geometry = new THREE.TubeGeometry(
+      curve,
+      Math.max(points.length * 2, 32),
+      width / 2,
+      8,
+      false,
+    );
+
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x333333,
+      roughness: 0.95,
+      metalness: 0.0,
+    });
+    const roadMesh = new THREE.Mesh(geometry, material);
     roadMesh.position.y = 0;
 
-    // Mark as road for collision detection
-    roadMesh.name = `road-tube-${edge.id || 'segment'}`;
+    roadMesh.name = `road-tube-${edge.id || "segment"}`;
     roadMesh.userData.isRoad = true;
     roadMesh.userData.roadWidth = width;
 
@@ -215,27 +257,4 @@ export function renderRoadsWithTubes(
   });
 
   console.log("✅ Roads rendered with tubes");
-}
-
-/**
- * Create a 3D tube road for better visual appearance
- */
-function createTubeRoad(points: THREE.Vector3[], width: number): THREE.Mesh {
-  // Create curve from points
-  const curve = new THREE.CatmullRomCurve3(points);
-
-  // Create tube geometry
-  const geometry = new THREE.TubeGeometry(
-    curve,
-    Math.max(points.length * 2, 32), // segments
-    width / 2, // radius (half width for diameter)
-    8, // radial segments
-    false, // closed
-  );
-
-  const material = new THREE.MeshBasicMaterial({
-    color: 0x333333,
-  });
-
-  return new THREE.Mesh(geometry, material);
 }

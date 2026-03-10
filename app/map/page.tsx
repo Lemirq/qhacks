@@ -3,11 +3,16 @@
 import { useState, useEffect, Suspense, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import ThreeMap from "@/components/ThreeMap";
+import { formatHour, getPresetHour, type TimePreset } from "@/lib/sun/timeOfDay";
 import {
   Landmark,
   SlidersHorizontal,
   Building2,
   TrafficCone,
+  Sun,
+  Moon,
+  Sunrise,
+  Sunset,
   Leaf,
   FileText,
   PlayCircle,
@@ -121,6 +126,7 @@ function MapPageContent() {
   const [flyToTarget, setFlyToTarget] = useState<{ lngLat: [number, number]; id: number } | undefined>(undefined);
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+  const [timeOfDayHour, setTimeOfDayHour] = useState(12);
 
   // Pre-fetch map data and available buildings on mount
   useEffect(() => {
@@ -493,7 +499,7 @@ function MapPageContent() {
   }, [selectedBuildingId, selectedBuilding, placedBuildings]);
 
   return (
-    <div className="relative min-h-screen w-full bg-slate-100 text-slate-800 overflow-hidden">
+    <div className="relative min-h-screen w-full bg-zinc-950 text-zinc-100 overflow-hidden">
       {/* MAP BACKGROUND (3D Simulation) */}
       <div className="absolute inset-0 z-0">
         <ThreeMap
@@ -517,21 +523,22 @@ function MapPageContent() {
           onDashboardVisibleChange={setDashboardVisible}
           panelsPortalRef={panelsPortalRef}
           flyToTarget={flyToTarget}
+          timeOfDayHour={timeOfDayHour}
         />
         {/* Map gradient overlay for better UI contrast */}
         <div className="absolute inset-0 map-gradient pointer-events-none"></div>
 
         {/* Placement Mode Indicator */}
         {isPlacementMode && (
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 glass border-accent-blue px-6 py-3 rounded-lg shadow-lg z-50 pointer-events-auto flex items-center gap-4">
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 glass border-blue-400/30 px-6 py-3 rounded-lg shadow-lg z-50 pointer-events-auto flex items-center gap-4">
             <div>
-              <p className="text-sm font-black text-accent-blue uppercase tracking-tight">
+              <p className="text-sm font-black text-blue-400 uppercase tracking-tight">
                 {customModelPath
                   ? "Place your custom building"
                   : "Click on the map to place building"}
               </p>
               {importedBuildingName && (
-                <p className="text-xs text-slate-600 mt-1">
+                <p className="text-xs text-zinc-400 mt-1">
                   Model: {importedBuildingName}
                 </p>
               )}
@@ -539,7 +546,7 @@ function MapPageContent() {
             {customModelPath && (
               <button
                 onClick={clearImportedBuilding}
-                className="p-1.5 hover:bg-red-50 rounded-full transition-colors text-slate-400 hover:text-red-600"
+                className="p-1.5 hover:bg-red-500/20 rounded-full transition-colors text-zinc-400 hover:text-red-400"
                 title="Cancel import"
               >
                 <X size={16} />
@@ -550,19 +557,19 @@ function MapPageContent() {
 
         {/* Imported Building Notification */}
         {customModelPath && !isPlacementMode && (
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 glass border-orange-400 bg-orange-50/90 px-6 py-3 rounded-lg shadow-lg z-50 pointer-events-auto flex items-center gap-4">
-            <Upload size={18} className="text-orange-600" />
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 glass border-orange-400/30 px-6 py-3 rounded-lg shadow-lg z-50 pointer-events-auto flex items-center gap-4">
+            <Upload size={18} className="text-orange-400" />
             <div>
-              <p className="text-sm font-black text-orange-700 uppercase tracking-tight">
+              <p className="text-sm font-black text-orange-400 uppercase tracking-tight">
                 Building imported from Editor
               </p>
-              <p className="text-xs text-orange-600 mt-0.5">
+              <p className="text-xs text-orange-300/70 mt-0.5">
                 Click &apos;Place&apos; to position it on the map
               </p>
             </div>
             <button
               onClick={clearImportedBuilding}
-              className="p-1.5 hover:bg-red-100 rounded-full transition-colors text-orange-400 hover:text-red-600"
+              className="p-1.5 hover:bg-red-500/20 rounded-full transition-colors text-zinc-400 hover:text-red-400"
               title="Discard import"
             >
               <X size={16} />
@@ -619,9 +626,9 @@ function MapPageContent() {
         {!leftSidebarOpen && (
           <button
             onClick={() => setLeftSidebarOpen(true)}
-            className="absolute left-6 top-6 pointer-events-auto w-10 h-10 glass rounded-lg flex items-center justify-center shadow-sm border-slate-200 hover:bg-slate-100 transition-colors"
+            className="absolute left-6 top-6 pointer-events-auto w-10 h-10 glass rounded-lg flex items-center justify-center hover:bg-white/10 transition-colors"
           >
-            <ChevronRight size={18} className="text-slate-600" />
+            <ChevronRight size={18} className="text-zinc-300" />
           </button>
         )}
         <aside
@@ -630,14 +637,14 @@ function MapPageContent() {
           {/* Municipal Branding */}
 
           {/* Geospatial Layers Panel */}
-          <div className="flex-1 glass rounded-lg p-4 flex flex-col overflow-hidden shadow-sm border-slate-200">
+          <div className="flex-1 glass rounded-lg p-4 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-3!xl lp-nav-logo">KingsView</span>
+              <span className="text-3!xl lp-nav-logo text-white">KingsView</span>
               <button
                 onClick={() => setLeftSidebarOpen(false)}
-                className="w-7 h-7 rounded flex items-center justify-center hover:bg-slate-100 transition-colors"
+                className="w-7 h-7 rounded flex items-center justify-center hover:bg-white/10 transition-colors"
               >
-                <ChevronLeft size={16} className="text-slate-400" />
+                <ChevronLeft size={16} className="text-zinc-400" />
               </button>
             </div>
             <div className="flex items-center justify-between mb-5">
@@ -649,26 +656,26 @@ function MapPageContent() {
               <div
                 className={`p-2.5 rounded-md border transition-all cursor-pointer group ${
                   showNoiseRipple
-                    ? "border-slate-200 bg-white"
-                    : "border-slate-100 hover:border-slate-200 bg-white/50"
+                    ? "border-white/15 bg-white/10"
+                    : "border-white/5 hover:border-white/15 bg-white/5"
                 }`}
                 onClick={() => setShowNoiseRipple(!showNoiseRipple)}
               >
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-7 h-7 rounded bg-slate-50 border border-slate-100 flex items-center justify-center transition-colors ${
+                    className={`w-7 h-7 rounded bg-white/5 border border-white/10 flex items-center justify-center transition-colors ${
                       showNoiseRipple
-                        ? "text-accent-blue"
-                        : "text-slate-400 group-hover:text-accent-blue"
+                        ? "text-blue-400"
+                        : "text-zinc-500 group-hover:text-blue-400"
                     }`}
                   >
                     <Volume2 size={14} />
                   </div>
                   <div className="flex-1">
-                    <p className="text-[11px] font-bold text-slate-900">
+                    <p className="text-[11px] font-bold text-zinc-200">
                       Construction Noise (DB)
                     </p>
-                    <p className="text-[9px] text-slate-500">
+                    <p className="text-[9px] text-zinc-500">
                       Ripple: {activeCount} active site
                       {activeCount !== 1 ? "s" : ""} · ~{avgDb} dB avg
                     </p>
@@ -688,26 +695,26 @@ function MapPageContent() {
               <div
                 className={`p-2.5 rounded-md border transition-all cursor-pointer group ${
                   showZoningLayer
-                    ? "border-slate-200 bg-white"
-                    : "border-slate-100 hover:border-slate-200 bg-white/50"
+                    ? "border-white/15 bg-white/10"
+                    : "border-white/5 hover:border-white/15 bg-white/5"
                 }`}
                 onClick={() => setShowZoningLayer(!showZoningLayer)}
               >
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-7 h-7 rounded bg-slate-50 border border-slate-100 flex items-center justify-center transition-colors ${
+                    className={`w-7 h-7 rounded bg-white/5 border border-white/10 flex items-center justify-center transition-colors ${
                       showZoningLayer
-                        ? "text-accent-blue"
-                        : "text-slate-400 group-hover:text-accent-blue"
+                        ? "text-blue-400"
+                        : "text-zinc-500 group-hover:text-blue-400"
                     }`}
                   >
                     <Map size={14} />
                   </div>
                   <div className="flex-1">
-                    <p className="text-[11px] font-bold text-slate-900">
+                    <p className="text-[11px] font-bold text-zinc-200">
                       City Zoning
                     </p>
-                    <p className="text-[9px] text-slate-500">
+                    <p className="text-[9px] text-zinc-500">
                       Official Plan · Land Use Designation
                     </p>
                   </div>
@@ -729,7 +736,7 @@ function MapPageContent() {
                   className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-3"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <p className="text-[9px] font-bold text-slate-600 uppercase">
+                  <p className="text-[9px] font-bold text-zinc-400 uppercase">
                     Align Zone Position
                   </p>
                   <div className="space-y-2">
@@ -779,7 +786,7 @@ function MapPageContent() {
                         onChange={(e) => setZoningFlipH(e.target.checked)}
                         className="accent-accent-blue h-3.5 w-3.5"
                       />
-                      <span className="text-[10px] font-medium text-slate-700">
+                      <span className="text-[10px] font-medium text-zinc-300">
                         Flip horizontally
                       </span>
                     </label>
@@ -788,12 +795,71 @@ function MapPageContent() {
               )} */}
             </div>
 
+            {/* Time of Day */}
+            <div className="mt-6">
+              <h3 className="ui-label mb-3">Time of Day</h3>
+              <div className="rounded-md p-3 border border-white/10 bg-white/5 space-y-3">
+                {/* Preset buttons */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {([
+                    { preset: "sunrise" as TimePreset, icon: <Sunrise size={12} />, label: "Rise" },
+                    { preset: "noon" as TimePreset, icon: <Sun size={12} />, label: "Noon" },
+                    { preset: "sunset" as TimePreset, icon: <Sunset size={12} />, label: "Set" },
+                    { preset: "night" as TimePreset, icon: <Moon size={12} />, label: "Night" },
+                  ]).map(({ preset, icon, label }) => {
+                    const presetHour = getPresetHour(preset);
+                    const isActive = Math.abs(timeOfDayHour - presetHour) < 0.5;
+                    return (
+                      <button
+                        key={preset}
+                        onClick={() => setTimeOfDayHour(presetHour)}
+                        className={`flex flex-col items-center gap-0.5 py-1.5 px-1 rounded text-[9px] font-bold transition-all ${
+                          isActive
+                            ? "bg-white/15 text-white border border-white/20"
+                            : "bg-white/5 text-zinc-400 border border-transparent hover:bg-white/10 hover:text-zinc-200"
+                        }`}
+                      >
+                        {icon}
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Time slider */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[9px] text-zinc-500">Time</span>
+                    <span className="text-[10px] font-bold text-zinc-200 font-mono">
+                      {formatHour(timeOfDayHour)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="24"
+                    step="0.25"
+                    value={timeOfDayHour}
+                    onChange={(e) => setTimeOfDayHour(parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-blue-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+                  />
+                  <div className="flex justify-between text-[8px] text-zinc-600 mt-0.5">
+                    <span>12 AM</span>
+                    <span>6 AM</span>
+                    <span>12 PM</span>
+                    <span>6 PM</span>
+                    <span>12 AM</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Population Happiness Score */}
             <div className="mt-6">
               <h3 className="ui-label mb-3">Population Sentiment</h3>
-              <div className="rounded-md p-3 border border-slate-200 bg-white">
+              <div className="rounded-md p-3 border border-white/10 bg-white/5">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold text-slate-600 uppercase">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase">
                     Happy / Sad Score
                   </span>
                   {populationHappiness >= 50 ? (
@@ -803,7 +869,7 @@ function MapPageContent() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div className="flex-1 h-2.5 bg-white/10 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all ${
                         populationHappiness >= 70
@@ -815,11 +881,11 @@ function MapPageContent() {
                       style={{ width: `${populationHappiness}%` }}
                     />
                   </div>
-                  <span className="text-[11px] font-bold text-slate-900 w-8">
+                  <span className="text-[11px] font-bold text-zinc-200 w-8">
                     {populationHappiness}/100
                   </span>
                 </div>
-                <p className="text-[9px] text-slate-500 mt-1.5">
+                <p className="text-[9px] text-zinc-500 mt-1.5">
                   Based on construction noise disturbance
                 </p>
               </div>
@@ -828,10 +894,10 @@ function MapPageContent() {
             {/* District Zoning Summary */}
 
             {/* Coordinate Finder */}
-            <div className="mt-8 pt-6 border-t border-slate-200">
+            <div className="mt-8 pt-6 border-t border-white/10">
               {!clickedCoordinate ? (
-                <div className="flex items-center gap-2 text-slate-500 text-[10px]">
-                  <MapPin size={14} className="text-slate-400" />
+                <div className="flex items-center gap-2 text-zinc-500 text-[10px]">
+                  <MapPin size={14} className="text-zinc-500" />
                   <span className="uppercase tracking-wider">
                     Click anywhere on the map to see coordinates
                   </span>
@@ -845,53 +911,53 @@ function MapPageContent() {
                     </div>
                     <button
                       onClick={() => setClickedCoordinate(null)}
-                      className="p-1 hover:bg-slate-100 rounded transition-colors text-slate-400"
+                      className="p-1 hover:bg-white/10 rounded transition-colors text-zinc-400"
                     >
                       <X size={14} />
                     </button>
                   </div>
 
                   <div className="space-y-3">
-                    <div className="bg-slate-50 rounded-md p-2.5 border border-slate-200">
-                      <p className="text-[9px] font-bold text-slate-500 uppercase mb-1.5">
+                    <div className="bg-white/5 rounded-md p-2.5 border border-white/10">
+                      <p className="text-[9px] font-bold text-zinc-500 uppercase mb-1.5">
                         Geographic
                       </p>
                       <div className="space-y-1 text-[10px]">
                         <div className="flex justify-between">
-                          <span className="text-slate-600">Latitude</span>
-                          <span className="font-bold text-slate-900">
+                          <span className="text-zinc-400">Latitude</span>
+                          <span className="font-bold text-zinc-200">
                             {clickedCoordinate.lat.toFixed(6)}°
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-slate-600">Longitude</span>
-                          <span className="font-bold text-slate-900">
+                          <span className="text-zinc-400">Longitude</span>
+                          <span className="font-bold text-zinc-200">
                             {clickedCoordinate.lng.toFixed(6)}°
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="bg-slate-50 rounded-md p-2.5 border border-slate-200">
-                      <p className="text-[9px] font-bold text-slate-500 uppercase mb-1.5">
+                    <div className="bg-white/5 rounded-md p-2.5 border border-white/10">
+                      <p className="text-[9px] font-bold text-zinc-500 uppercase mb-1.5">
                         World
                       </p>
                       <div className="space-y-1 text-[10px]">
                         <div className="flex justify-between">
-                          <span className="text-slate-600">X</span>
-                          <span className="font-bold text-slate-900">
+                          <span className="text-zinc-400">X</span>
+                          <span className="font-bold text-zinc-200">
                             {clickedCoordinate.worldX.toFixed(2)}m
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-slate-600">Y</span>
-                          <span className="font-bold text-slate-900">
+                          <span className="text-zinc-400">Y</span>
+                          <span className="font-bold text-zinc-200">
                             {clickedCoordinate.worldY.toFixed(2)}m
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-slate-600">Z</span>
-                          <span className="font-bold text-slate-900">
+                          <span className="text-zinc-400">Z</span>
+                          <span className="font-bold text-zinc-200">
                             {clickedCoordinate.worldZ.toFixed(2)}m
                           </span>
                         </div>
@@ -904,7 +970,7 @@ function MapPageContent() {
                           `${clickedCoordinate.lat.toFixed(6)}, ${clickedCoordinate.lng.toFixed(6)}`,
                         );
                       }}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-slate-200 hover:border-accent-blue hover:bg-blue-50 rounded text-[10px] font-bold text-slate-700 hover:text-accent-blue transition-colors uppercase tracking-wider"
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white/5 border border-white/10 hover:border-blue-400/40 hover:bg-blue-500/10 rounded text-[10px] font-bold text-zinc-300 hover:text-blue-400 transition-colors uppercase tracking-wider"
                     >
                       <Copy size={12} />
                       Copy Coordinates
@@ -920,27 +986,27 @@ function MapPageContent() {
         {!rightSidebarOpen && (
           <button
             onClick={() => setRightSidebarOpen(true)}
-            className="absolute right-6 top-6 pointer-events-auto w-10 h-10 glass rounded-lg flex items-center justify-center shadow-sm border-slate-200 hover:bg-slate-100 transition-colors"
+            className="absolute right-6 top-6 pointer-events-auto w-10 h-10 glass rounded-lg flex items-center justify-center hover:bg-white/10 transition-colors"
           >
-            <ChevronLeft size={18} className="text-slate-600" />
+            <ChevronLeft size={18} className="text-zinc-300" />
           </button>
         )}
         <aside
           className={`absolute right-6 top-6 w-80 pointer-events-auto sidebar-transition ${placedBuildings.length > 0 ? "bottom-32" : "bottom-6"} ${!rightSidebarOpen ? "hidden" : ""}`}
         >
-          <div className="glass rounded-lg p-5 shadow-md h-full border-slate-200 overflow-y-auto custom-scrollbar">
+          <div className="glass rounded-lg p-5 h-full overflow-y-auto custom-scrollbar">
             {/* Traffic controls */}
 
             {/* Header */}
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/10">
               <div className="flex flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  <FileText className="text-slate-400" size={20} />
-                  <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                  <FileText className="text-zinc-400" size={20} />
+                  <h2 className="text-sm font-black text-zinc-100 uppercase tracking-tight">
                     Metric Analysis
                   </h2>
                 </div>
-                <p className="text-[9px] text-slate-500 font-medium uppercase tracking-wider">
+                <p className="text-[9px] text-zinc-500 font-medium uppercase tracking-wider">
                   As of{" "}
                   {new Date(timelineDate).toLocaleDateString("en-US", {
                     day: "numeric",
@@ -957,89 +1023,89 @@ function MapPageContent() {
               </div>
               <button
                 onClick={() => setRightSidebarOpen(false)}
-                className="w-7 h-7 rounded flex items-center justify-center hover:bg-slate-100 transition-colors"
+                className="w-7 h-7 rounded flex items-center justify-center hover:bg-white/10 transition-colors"
               >
-                <ChevronRight size={16} className="text-slate-400" />
+                <ChevronRight size={16} className="text-zinc-400" />
               </button>
             </div>
 
             {/* Key Environmental Metrics - Dynamic based on buildings active at current timeline date */}
             <div className="grid grid-cols-1 gap-3 mb-6">
               <div
-                className={`rounded-md p-3 border ${buildingsActiveAtTimeline.length > 0 ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-200"}`}
+                className={`rounded-md p-3 border ${buildingsActiveAtTimeline.length > 0 ? "bg-orange-500/10 border-orange-400/20" : "bg-white/5 border-white/10"}`}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <Leaf
                     size={14}
                     className={
                       buildingsActiveAtTimeline.length > 0
-                        ? "text-orange-600"
-                        : "text-slate-400"
+                        ? "text-orange-400"
+                        : "text-zinc-500"
                     }
                   />
                   <p className="ui-label">CO2 Emissions</p>
                 </div>
                 <p
-                  className={`text-lg font-bold font-serif ${buildingsActiveAtTimeline.length > 0 ? "text-orange-700" : "text-slate-400"}`}
+                  className={`text-lg font-bold font-serif ${buildingsActiveAtTimeline.length > 0 ? "text-orange-300" : "text-zinc-500"}`}
                 >
                   {buildingMetrics.co2Emissions.toFixed(1)}{" "}
-                  <span className="text-[10px] text-slate-500 font-sans uppercase ml-1">
+                  <span className="text-[10px] text-zinc-500 font-sans uppercase ml-1">
                     Tonnes / PA
                   </span>
                 </p>
-                <p className="text-[9px] text-slate-500 mt-1">
+                <p className="text-[9px] text-zinc-500 mt-1">
                   Ramps with construction progress over timeline
                 </p>
               </div>
               <div
-                className={`rounded-md p-3 border ${buildingsActiveAtTimeline.length > 0 ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}
+                className={`rounded-md p-3 border ${buildingsActiveAtTimeline.length > 0 ? "bg-blue-500/10 border-blue-400/20" : "bg-white/5 border-white/10"}`}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <Settings
                     size={14}
                     className={
                       buildingsActiveAtTimeline.length > 0
-                        ? "text-blue-600"
-                        : "text-slate-400"
+                        ? "text-blue-400"
+                        : "text-zinc-500"
                     }
                   />
                   <p className="ui-label">Energy Consumption</p>
                 </div>
                 <p
-                  className={`text-lg font-bold font-serif ${buildingsActiveAtTimeline.length > 0 ? "text-blue-700" : "text-slate-400"}`}
+                  className={`text-lg font-bold font-serif ${buildingsActiveAtTimeline.length > 0 ? "text-blue-300" : "text-zinc-500"}`}
                 >
                   {buildingMetrics.energyConsumption.toFixed(1)}{" "}
-                  <span className="text-[10px] text-slate-500 font-sans uppercase ml-1">
+                  <span className="text-[10px] text-zinc-500 font-sans uppercase ml-1">
                     MWh / PA
                   </span>
                 </p>
-                <p className="text-[9px] text-slate-500 mt-1">
+                <p className="text-[9px] text-zinc-500 mt-1">
                   Ramps with construction progress
                 </p>
               </div>
               <div
-                className={`rounded-md p-3 border ${buildingsActiveAtTimeline.length > 0 ? "bg-cyan-50 border-cyan-200" : "bg-slate-50 border-slate-200"}`}
+                className={`rounded-md p-3 border ${buildingsActiveAtTimeline.length > 0 ? "bg-cyan-500/10 border-cyan-400/20" : "bg-white/5 border-white/10"}`}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <TrafficCone
                     size={14}
                     className={
                       buildingsActiveAtTimeline.length > 0
-                        ? "text-cyan-600"
-                        : "text-slate-400"
+                        ? "text-cyan-400"
+                        : "text-zinc-500"
                     }
                   />
                   <p className="ui-label">Water Usage</p>
                 </div>
                 <p
-                  className={`text-lg font-bold font-serif ${buildingsActiveAtTimeline.length > 0 ? "text-cyan-700" : "text-slate-400"}`}
+                  className={`text-lg font-bold font-serif ${buildingsActiveAtTimeline.length > 0 ? "text-cyan-300" : "text-zinc-500"}`}
                 >
                   {buildingMetrics.waterUsage.toFixed(0)}{" "}
-                  <span className="text-[10px] text-slate-500 font-sans uppercase ml-1">
+                  <span className="text-[10px] text-zinc-500 font-sans uppercase ml-1">
                     m³ / PA
                   </span>
                 </p>
-                <p className="text-[9px] text-slate-500 mt-1">
+                <p className="text-[9px] text-zinc-500 mt-1">
                   Ramps with construction progress
                 </p>
               </div>
@@ -1047,20 +1113,20 @@ function MapPageContent() {
 
             {/* Environmental Impact Report Button - snapshot taken at time of generate */}
             <div className="space-y-4 text-xs">
-              <div className="pt-6 mt-6 border-t border-slate-100">
+              <div className="pt-6 mt-6 border-t border-white/10">
                 <button
                   onClick={() => setShowEnvironmentalReport(true)}
                   disabled={buildingsActiveAtTimeline.length === 0}
                   className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-black uppercase tracking-tight transition-all ${
                     buildingsActiveAtTimeline.length > 0
                       ? "bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg"
-                      : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                      : "bg-white/5 text-zinc-500 cursor-not-allowed"
                   }`}
                 >
                   <ClipboardList size={18} />
                   <span>Generate Impact Report</span>
                 </button>
-                <p className="text-[9px] text-slate-500 text-center mt-2">
+                <p className="text-[9px] text-zinc-500 text-center mt-2">
                   {buildingsActiveAtTimeline.length === 0
                     ? "Move timeline to a date with active construction to generate a report"
                     : `Snapshot at current date · ${buildingsActiveAtTimeline.length} building${buildingsActiveAtTimeline.length !== 1 ? "s" : ""}`}
@@ -1068,15 +1134,15 @@ function MapPageContent() {
               </div>
 
               {/* Building Placement */}
-              <div className="pt-6 mt-6 border-t border-slate-100">
+              <div className="pt-6 mt-6 border-t border-white/10">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="ui-label">Building Placement</h3>
                 </div>
 
-                <div className="rounded-md p-3 border bg-slate-50 border-slate-200 space-y-3">
+                <div className="rounded-md p-3 border bg-white/5 border-white/10 space-y-3">
                   {/* Building Selector Dropdown */}
                   <div>
-                    <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">
+                    <p className="text-[9px] font-bold text-zinc-400 uppercase mb-2">
                       Select Building Model
                     </p>
                     <div className="relative">
@@ -1084,7 +1150,7 @@ function MapPageContent() {
                         onClick={() =>
                           setShowBuildingSelector(!showBuildingSelector)
                         }
-                        className="w-full flex items-center justify-between px-3 py-2 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-700 hover:border-slate-300 transition-colors"
+                        className="w-full flex items-center justify-between px-3 py-2 bg-white/5 border border-white/10 rounded text-[10px] font-medium text-zinc-300 hover:border-white/20 transition-colors"
                       >
                         <span className="truncate">
                           {customModelPath
@@ -1098,19 +1164,19 @@ function MapPageContent() {
                         </span>
                         <ChevronDown
                           size={14}
-                          className={`text-slate-400 transition-transform ${showBuildingSelector ? "rotate-180" : ""}`}
+                          className={`text-zinc-500 transition-transform ${showBuildingSelector ? "rotate-180" : ""}`}
                         />
                       </button>
 
                       {showBuildingSelector && (
-                        <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-48 overflow-y-auto custom-scrollbar">
+                        <div className="absolute z-10 w-full mt-1 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-md shadow-lg max-h-48 overflow-y-auto custom-scrollbar">
                           {/* Imported from Editor */}
                           {customModelPath && (
                             <button
                               onClick={() => {
                                 setShowBuildingSelector(false);
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-[10px] text-left hover:bg-orange-50 border-b border-slate-100"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-[10px] text-left hover:bg-orange-500/10 border-b border-white/10"
                             >
                               <Upload size={12} className="text-orange-500" />
                               <span className="font-medium text-orange-700">
@@ -1134,10 +1200,10 @@ function MapPageContent() {
                                 setImportedBuildingName(building.name);
                                 setShowBuildingSelector(false);
                               }}
-                              className={`w-full flex items-center gap-2 px-3 py-2 text-[10px] text-left hover:bg-blue-50 transition-colors ${
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-[10px] text-left hover:bg-blue-500/10 transition-colors ${
                                 selectedModelId === building.id &&
                                 !customModelPath
-                                  ? "bg-blue-50"
+                                  ? "bg-blue-500/10"
                                   : ""
                               }`}
                             >
@@ -1146,14 +1212,14 @@ function MapPageContent() {
                                 className={
                                   building.type === "custom"
                                     ? "text-purple-500"
-                                    : "text-slate-400"
+                                    : "text-zinc-500"
                                 }
                               />
                               <div className="flex-1 min-w-0">
-                                <span className="font-medium text-slate-700 truncate block">
+                                <span className="font-medium text-zinc-300 truncate block">
                                   {building.name}
                                 </span>
-                                <span className="text-[8px] text-slate-400 uppercase">
+                                <span className="text-[8px] text-zinc-500 uppercase">
                                   {building.type}
                                 </span>
                               </div>
@@ -1165,7 +1231,7 @@ function MapPageContent() {
 
                           {availableBuildings.length === 0 &&
                             !customModelPath && (
-                              <p className="px-3 py-4 text-[10px] text-slate-400 text-center">
+                              <p className="px-3 py-4 text-[10px] text-zinc-500 text-center">
                                 No buildings available
                               </p>
                             )}
@@ -1205,12 +1271,12 @@ function MapPageContent() {
 
                   {/* Scale Multiplier */}
                   {(customModelPath || selectedModelId) && (
-                    <div className="pt-3 border-t border-slate-200">
+                    <div className="pt-3 border-t border-white/10">
                       <div className="flex items-center justify-between mb-2">
-                        <label className="text-[9px] font-bold text-slate-600 uppercase">
+                        <label className="text-[9px] font-bold text-zinc-400 uppercase">
                           Scale Multiplier
                         </label>
-                        <span className="text-[10px] font-mono font-bold text-slate-700">
+                        <span className="text-[10px] font-mono font-bold text-zinc-200">
                           {buildingScale.x.toFixed(1)}x
                         </span>
                       </div>
@@ -1224,9 +1290,9 @@ function MapPageContent() {
                           const val = parseFloat(e.target.value);
                           setBuildingScale({ x: val, y: val, z: val });
                         }}
-                        className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+                        className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
                       />
-                      <div className="flex justify-between text-[8px] text-slate-500 mt-1">
+                      <div className="flex justify-between text-[8px] text-zinc-500 mt-1">
                         <span>1x</span>
                         <span>15x</span>
                         <span>30x</span>
@@ -1235,12 +1301,12 @@ function MapPageContent() {
                   )}
 
                   {/* Placed Buildings List */}
-                  <div className="pt-3 border-t border-slate-200">
-                    <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">
+                  <div className="pt-3 border-t border-white/10">
+                    <p className="text-[9px] font-bold text-zinc-500 uppercase mb-2">
                       Placed Buildings ({placedBuildings.length})
                     </p>
                     {placedBuildings.length === 0 ? (
-                      <p className="text-[10px] text-slate-400 text-center py-3 bg-white rounded border border-dashed border-slate-200">
+                      <p className="text-[10px] text-zinc-500 text-center py-3 bg-white/5 rounded border border-dashed border-white/10">
                         Click on map to place buildings
                       </p>
                     ) : (
@@ -1249,10 +1315,10 @@ function MapPageContent() {
                           <div
                             key={building.id}
                             onClick={() => setSelectedBuildingId(building.id)}
-                            className={`flex items-center justify-between bg-white rounded p-2 border cursor-pointer transition-all ${
+                            className={`flex items-center justify-between rounded p-2 border cursor-pointer transition-all ${
                               selectedBuildingId === building.id
-                                ? "border-accent-blue bg-blue-50"
-                                : "border-slate-200 hover:border-slate-300"
+                                ? "border-blue-400/30 bg-blue-500/10"
+                                : "border-white/10 hover:border-white/20 bg-white/5"
                             }`}
                           >
                             <div className="flex-1 min-w-0">
@@ -1260,14 +1326,14 @@ function MapPageContent() {
                                 className={`text-[10px] font-bold truncate ${
                                   selectedBuildingId === building.id
                                     ? "text-accent-blue"
-                                    : "text-slate-900"
+                                    : "text-zinc-200"
                                 }`}
                               >
                                 {building.timeline?.zoneType
                                   ? `${building.timeline.zoneType} – ${building.lat.toFixed(4)}°`
                                   : `${building.lat.toFixed(5)}°, ${building.lng.toFixed(5)}°`}
                               </p>
-                              <p className="text-[8px] text-slate-500">
+                              <p className="text-[8px] text-zinc-500">
                                 {building.timeline?.durationDays
                                   ? `${building.timeline.durationDays} days`
                                   : `X: ${building.position.x.toFixed(1)}m, Z: ${building.position.z.toFixed(1)}m`}
@@ -1278,7 +1344,7 @@ function MapPageContent() {
                                 e.stopPropagation();
                                 removeBuilding(building.id);
                               }}
-                              className="p-1 hover:bg-red-50 rounded transition-colors text-slate-400 hover:text-red-600"
+                              className="p-1 hover:bg-red-500/20 rounded transition-colors text-zinc-400 hover:text-red-400"
                             >
                               <Trash2 size={12} />
                             </button>
@@ -1292,14 +1358,14 @@ function MapPageContent() {
 
               {/* Selected Building Transform Controls */}
               {selectedBuilding && (
-                <div className="pt-6 mt-6 border-t border-slate-100">
+                <div className="pt-6 mt-6 border-t border-white/10">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="ui-label text-accent-blue">
                       Selected Building Transform
                     </h3>
                     <button
                       onClick={() => setSelectedBuildingId(null)}
-                      className="p-1 hover:bg-slate-100 rounded transition-colors text-slate-400"
+                      className="p-1 hover:bg-white/10 rounded transition-colors text-zinc-400"
                     >
                       <X size={14} />
                     </button>
@@ -1308,14 +1374,14 @@ function MapPageContent() {
                   <div className="bg-blue-50 rounded-md p-3 border border-accent-blue space-y-3">
                     {/* Position Controls */}
                     <div>
-                      <p className="text-[9px] font-bold text-slate-700 uppercase mb-2">
+                      <p className="text-[9px] font-bold text-zinc-400 uppercase mb-2">
                         Position (Arrow Keys)
                       </p>
                       <div className="space-y-2.5 text-[10px]">
                         {/* X Position */}
                         <div className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <label className="text-slate-600">X</label>
+                            <label className="text-zinc-400">X</label>
                             <input
                               type="number"
                               value={selectedBuilding.position.x.toFixed(1)}
@@ -1327,7 +1393,7 @@ function MapPageContent() {
                                   },
                                 })
                               }
-                              className="w-20 px-2 py-1 text-[10px] font-mono text-slate-900 bg-white border border-slate-200 rounded text-right"
+                              className="w-20 px-2 py-1 text-[10px] font-mono text-zinc-200 bg-white/5 border border-white/10 rounded text-right"
                               step="1"
                             />
                           </div>
@@ -1345,14 +1411,14 @@ function MapPageContent() {
                                 },
                               })
                             }
-                            className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+                            className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
                           />
                         </div>
 
                         {/* Y Position */}
                         <div className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <label className="text-slate-600">Y</label>
+                            <label className="text-zinc-400">Y</label>
                             <input
                               type="number"
                               value={selectedBuilding.position.y.toFixed(1)}
@@ -1364,7 +1430,7 @@ function MapPageContent() {
                                   },
                                 })
                               }
-                              className="w-20 px-2 py-1 text-[10px] font-mono text-slate-900 bg-white border border-slate-200 rounded text-right"
+                              className="w-20 px-2 py-1 text-[10px] font-mono text-zinc-200 bg-white/5 border border-white/10 rounded text-right"
                               step="1"
                             />
                           </div>
@@ -1382,14 +1448,14 @@ function MapPageContent() {
                                 },
                               })
                             }
-                            className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+                            className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
                           />
                         </div>
 
                         {/* Z Position */}
                         <div className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <label className="text-slate-600">Z</label>
+                            <label className="text-zinc-400">Z</label>
                             <input
                               type="number"
                               value={selectedBuilding.position.z.toFixed(1)}
@@ -1401,7 +1467,7 @@ function MapPageContent() {
                                   },
                                 })
                               }
-                              className="w-20 px-2 py-1 text-[10px] font-mono text-slate-900 bg-white border border-slate-200 rounded text-right"
+                              className="w-20 px-2 py-1 text-[10px] font-mono text-zinc-200 bg-white/5 border border-white/10 rounded text-right"
                               step="1"
                             />
                           </div>
@@ -1419,7 +1485,7 @@ function MapPageContent() {
                                 },
                               })
                             }
-                            className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+                            className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
                           />
                         </div>
                       </div>
@@ -1427,14 +1493,14 @@ function MapPageContent() {
 
                     {/* Rotation Controls */}
                     <div className="pt-2 border-t border-blue-200">
-                      <p className="text-[9px] font-bold text-slate-700 uppercase mb-2">
+                      <p className="text-[9px] font-bold text-zinc-400 uppercase mb-2">
                         Rotation (R Key)
                       </p>
                       <div className="space-y-2.5 text-[10px]">
                         {/* X Rotation */}
                         <div className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <label className="text-slate-600">X (deg)</label>
+                            <label className="text-zinc-400">X (deg)</label>
                             <input
                               type="number"
                               value={(
@@ -1452,7 +1518,7 @@ function MapPageContent() {
                                   },
                                 })
                               }
-                              className="w-20 px-2 py-1 text-[10px] font-mono text-slate-900 bg-white border border-slate-200 rounded text-right"
+                              className="w-20 px-2 py-1 text-[10px] font-mono text-zinc-200 bg-white/5 border border-white/10 rounded text-right"
                               step="5"
                             />
                           </div>
@@ -1474,14 +1540,14 @@ function MapPageContent() {
                                 },
                               })
                             }
-                            className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+                            className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
                           />
                         </div>
 
                         {/* Y Rotation */}
                         <div className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <label className="text-slate-600">Y (deg)</label>
+                            <label className="text-zinc-400">Y (deg)</label>
                             <input
                               type="number"
                               value={(
@@ -1499,7 +1565,7 @@ function MapPageContent() {
                                   },
                                 })
                               }
-                              className="w-20 px-2 py-1 text-[10px] font-mono text-slate-900 bg-white border border-slate-200 rounded text-right"
+                              className="w-20 px-2 py-1 text-[10px] font-mono text-zinc-200 bg-white/5 border border-white/10 rounded text-right"
                               step="5"
                             />
                           </div>
@@ -1521,14 +1587,14 @@ function MapPageContent() {
                                 },
                               })
                             }
-                            className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+                            className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
                           />
                         </div>
 
                         {/* Z Rotation */}
                         <div className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <label className="text-slate-600">Z (deg)</label>
+                            <label className="text-zinc-400">Z (deg)</label>
                             <input
                               type="number"
                               value={(
@@ -1546,7 +1612,7 @@ function MapPageContent() {
                                   },
                                 })
                               }
-                              className="w-20 px-2 py-1 text-[10px] font-mono text-slate-900 bg-white border border-slate-200 rounded text-right"
+                              className="w-20 px-2 py-1 text-[10px] font-mono text-zinc-200 bg-white/5 border border-white/10 rounded text-right"
                               step="5"
                             />
                           </div>
@@ -1568,7 +1634,7 @@ function MapPageContent() {
                                 },
                               })
                             }
-                            className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+                            className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
                           />
                         </div>
                       </div>
@@ -1576,14 +1642,14 @@ function MapPageContent() {
 
                     {/* Scale Controls */}
                     <div className="pt-2 border-t border-blue-200">
-                      <p className="text-[9px] font-bold text-slate-700 uppercase mb-2">
+                      <p className="text-[9px] font-bold text-zinc-400 uppercase mb-2">
                         Scale (S Key)
                       </p>
                       <div className="space-y-2.5 text-[10px]">
                         {/* X Scale */}
                         <div className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <label className="text-slate-600">X</label>
+                            <label className="text-zinc-400">X</label>
                             <input
                               type="number"
                               value={selectedBuilding.scale.x.toFixed(2)}
@@ -1595,7 +1661,7 @@ function MapPageContent() {
                                   },
                                 })
                               }
-                              className="w-20 px-2 py-1 text-[10px] font-mono text-slate-900 bg-white border border-slate-200 rounded text-right"
+                              className="w-20 px-2 py-1 text-[10px] font-mono text-zinc-200 bg-white/5 border border-white/10 rounded text-right"
                               step="0.5"
                             />
                           </div>
@@ -1613,14 +1679,14 @@ function MapPageContent() {
                                 },
                               })
                             }
-                            className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+                            className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
                           />
                         </div>
 
                         {/* Y Scale */}
                         <div className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <label className="text-slate-600">Y</label>
+                            <label className="text-zinc-400">Y</label>
                             <input
                               type="number"
                               value={selectedBuilding.scale.y.toFixed(2)}
@@ -1632,7 +1698,7 @@ function MapPageContent() {
                                   },
                                 })
                               }
-                              className="w-20 px-2 py-1 text-[10px] font-mono text-slate-900 bg-white border border-slate-200 rounded text-right"
+                              className="w-20 px-2 py-1 text-[10px] font-mono text-zinc-200 bg-white/5 border border-white/10 rounded text-right"
                               step="0.5"
                             />
                           </div>
@@ -1650,14 +1716,14 @@ function MapPageContent() {
                                 },
                               })
                             }
-                            className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+                            className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
                           />
                         </div>
 
                         {/* Z Scale */}
                         <div className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <label className="text-slate-600">Z</label>
+                            <label className="text-zinc-400">Z</label>
                             <input
                               type="number"
                               value={selectedBuilding.scale.z.toFixed(2)}
@@ -1669,7 +1735,7 @@ function MapPageContent() {
                                   },
                                 })
                               }
-                              className="w-20 px-2 py-1 text-[10px] font-mono text-slate-900 bg-white border border-slate-200 rounded text-right"
+                              className="w-20 px-2 py-1 text-[10px] font-mono text-zinc-200 bg-white/5 border border-white/10 rounded text-right"
                               step="0.5"
                             />
                           </div>
@@ -1687,14 +1753,14 @@ function MapPageContent() {
                                 },
                               })
                             }
-                            className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
+                            className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
                           />
                         </div>
                       </div>
                     </div>
 
                     {/* Keyboard Hints */}
-                    <div className="pt-2 border-t border-blue-200 text-[9px] text-slate-600">
+                    <div className="pt-2 border-t border-blue-400/20 text-[9px] text-zinc-400">
                       <p className="font-bold mb-1">Keyboard Controls:</p>
                       <div className="space-y-0.5">
                         <p>← → : Move X • ↑ ↓ : Move Z</p>
@@ -1724,15 +1790,15 @@ function MapPageContent() {
 
       {/* FIXED BOTTOM PANEL: INTEGRATED TIMELINE - only show when at least one building is placed */}
       {placedBuildings.length > 0 && (
-        <div className="absolute bottom-0 left-0 right-0 z-50 glass border-t border-slate-300 px-8 py-4 flex items-center gap-10 shadow-lg">
+        <div className="absolute bottom-0 left-0 right-0 z-50 glass border-t border-white/10 px-8 py-4 flex items-center gap-10 shadow-lg">
           {/* Simulation Controls */}
-          <div className="flex items-center gap-4 shrink-0 border-r border-slate-200 pr-10">
+          <div className="flex items-center gap-4 shrink-0 border-r border-white/10 pr-10">
             <button
               onClick={() => setIsTimelinePlaying((p) => !p)}
               className={`w-10 h-10 rounded flex items-center justify-center transition-colors shadow-sm ${
                 isTimelinePlaying
                   ? "bg-amber-500 text-white hover:bg-amber-600"
-                  : "bg-accent-blue text-white hover:bg-slate-900"
+                  : "bg-accent-blue text-white hover:bg-zinc-800"
               }`}
               title={isTimelinePlaying ? "Pause" : "Play timeline"}
             >
@@ -1743,10 +1809,10 @@ function MapPageContent() {
               )}
             </button>
             <div>
-              <p className="text-xs font-black text-slate-900 uppercase tracking-tight font-serif">
+              <p className="text-xs font-black text-zinc-100 uppercase tracking-tight font-serif">
                 Construction Timeline
               </p>
-              <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">
+              <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">
                 View building progress
               </p>
             </div>
@@ -1797,7 +1863,7 @@ function MapPageContent() {
                         const t = parseInt(e.target.value, 10);
                         setTimelineDate(new Date(t).toISOString().slice(0, 10));
                       }}
-                      className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab"
+                      className="w-full h-3 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-blue [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-300 [&::-webkit-slider-thumb]:cursor-grab"
                       style={{
                         background: `linear-gradient(to right, #003F7C 0%, #003F7C ${pct}%, #e2e8f0 ${pct}%, #e2e8f0 100%)`,
                       }}
@@ -1808,7 +1874,7 @@ function MapPageContent() {
                         return (
                           <span
                             key={t}
-                            className="absolute text-[8px] text-slate-500 font-mono whitespace-nowrap"
+                            className="absolute text-[8px] text-zinc-500 font-mono whitespace-nowrap"
                             style={{
                               left: `calc(${tickPct}% - 1px)`,
                               transform: "translateX(-50%)",
@@ -1820,7 +1886,7 @@ function MapPageContent() {
                       })}
                     </div>
                   </div>
-                  <div className="flex justify-between px-0.5 text-[8px] text-slate-400 font-bold uppercase">
+                  <div className="flex justify-between px-0.5 text-[8px] text-zinc-500 font-bold uppercase">
                     <span>Wk 1</span>
                     <span>Week {weekCount}</span>
                   </div>
@@ -1830,12 +1896,12 @@ function MapPageContent() {
           </div>
 
           {/* Timestamp & Settings */}
-          <div className="flex items-center gap-4 shrink-0 border-l border-slate-200 pl-10">
+          <div className="flex items-center gap-4 shrink-0 border-l border-white/10 pl-10">
             <div className="flex flex-col items-end">
               <span className="ui-label mb-1">Active Timestamp</span>
-              <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded border border-slate-200">
-                <Clock className="text-slate-400" size={14} />
-                <span className="text-[10px] font-black text-slate-700 uppercase">
+              <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded border border-white/10">
+                <Clock className="text-zinc-500" size={14} />
+                <span className="text-[10px] font-black text-zinc-300 uppercase">
                   {new Date(timelineDate)
                     .toLocaleDateString("en-US", {
                       day: "2-digit",
@@ -1863,11 +1929,11 @@ function MapPageContent() {
               </button>
             </div>
           </div>
-          <div className="flex gap-2 mb-4 pb-4 border-b border-slate-100">
+          <div className="flex gap-2 mb-4 pb-4 border-b border-white/10">
             <button
               type="button"
               onClick={() => setDebugOverlayVisible(!debugOverlayVisible)}
-              className="flex-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg shadow text-xs font-medium transition-colors"
+              className="flex-1 px-3 py-2 bg-white/10 hover:bg-white/15 text-white rounded-lg shadow text-xs font-medium transition-colors"
               title="Toggle debug overlay (F3)"
             >
               {debugOverlayVisible ? "Hide" : "Show"} Debug
@@ -1887,7 +1953,7 @@ function MapPageContent() {
         onClick={() =>
           setFlyToTarget({ lngLat: [-76.47965, 44.232703], id: Date.now() })
         }
-        className="fixed bottom-6 right-6 z-[60] flex items-center gap-2 px-4 py-3 bg-accent-blue text-white rounded-lg shadow-lg hover:bg-slate-900 transition-colors"
+        className="fixed bottom-6 right-6 z-[60] flex items-center gap-2 px-4 py-3 bg-accent-blue text-white rounded-lg shadow-lg hover:bg-zinc-800 transition-colors"
         title="Fly to 44.232703°, -76.479650°"
       >
         <Navigation size={18} />
@@ -1902,10 +1968,10 @@ export default function MapPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen w-full bg-slate-100 flex items-center justify-center">
+        <div className="min-h-screen w-full bg-zinc-950 flex items-center justify-center">
           <div className="text-center">
             <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-accent-blue border-r-transparent mb-4" />
-            <p className="text-slate-600">Loading map...</p>
+            <p className="text-zinc-400">Loading map...</p>
           </div>
         </div>
       }

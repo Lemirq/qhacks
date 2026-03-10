@@ -18,6 +18,8 @@ export interface SceneManager {
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   groups: SceneGroups;
+  directionalLight: THREE.DirectionalLight;
+  ambientLight: THREE.AmbientLight;
 }
 
 /**
@@ -28,7 +30,7 @@ export interface SceneManager {
 export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
   // Create scene
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf0f8ff); // Very light blue/white (alice blue)
+  scene.background = new THREE.Color(0xc8ddf0); // Managed by time-of-day system
 
   // Create organized groups
   const groups: SceneGroups = {
@@ -50,11 +52,11 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
   // Initially hide debug group
   groups.debug.visible = false;
 
-  // Setup lighting - bright white lighting for clean appearance
-  const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+  // Setup lighting
+  const ambientLight = new THREE.AmbientLight(0xc0d0e8, 0.9);
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+  const directionalLight = new THREE.DirectionalLight(0xfff8f0, 1.6);
   directionalLight.position.set(500, 800, 300);
   directionalLight.castShadow = true;
 
@@ -62,13 +64,22 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
   directionalLight.shadow.mapSize.width = 2048;
   directionalLight.shadow.mapSize.height = 2048;
   directionalLight.shadow.camera.near = 10;
-  directionalLight.shadow.camera.far = 3000;
-  directionalLight.shadow.camera.left = -1500;
-  directionalLight.shadow.camera.right = 1500;
-  directionalLight.shadow.camera.top = 1500;
-  directionalLight.shadow.camera.bottom = -1500;
+  directionalLight.shadow.camera.far = 5000;
+  directionalLight.shadow.camera.left = -2000;
+  directionalLight.shadow.camera.right = 2000;
+  directionalLight.shadow.camera.top = 2000;
+  directionalLight.shadow.camera.bottom = -2000;
+  directionalLight.shadow.bias = -0.0002;
+  directionalLight.shadow.normalBias = 0.02;
 
   scene.add(directionalLight);
+
+  // Hemisphere light for natural sky/ground color bounce
+  const hemiLight = new THREE.HemisphereLight(0x88aacc, 0x444422, 0.4);
+  scene.add(hemiLight);
+
+  // Fog object (density managed by time-of-day system, starts at 0)
+  scene.fog = new THREE.FogExp2(0xdde8f0, 0);
 
   // Setup camera
   const camera = new THREE.PerspectiveCamera(
@@ -96,6 +107,10 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+  // Tone mapping for realistic lighting
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+
   // Enable local clipping for building cross-section timeline
   renderer.localClippingEnabled = true;
 
@@ -104,6 +119,8 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
     camera,
     renderer,
     groups,
+    directionalLight,
+    ambientLight,
   };
 }
 

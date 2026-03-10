@@ -17,7 +17,8 @@ import { createSceneManager, handleResize } from "@/lib/sceneManager";
 import { fetchBuildings } from "@/lib/buildingData";
 import { renderBuildings } from "@/lib/buildingRenderer";
 import { renderRoads } from "@/lib/roadRenderer";
-import { createGround } from "@/lib/environmentRenderer";
+import { createGround, fetchSatelliteImagery, createSky, createCelestialBodies } from "@/lib/environmentRenderer";
+import { computeTimeOfDay, applyTimeOfDay } from "@/lib/sun/timeOfDay";
 import {
   renderTreesAroundBuilding,
   getDefaultTreeConfigForMap,
@@ -30,6 +31,8 @@ import {
   setupControls,
   flyToLocation,
   updateTweens,
+  attachKeyboardControls,
+  updateKeyboardMovement,
 } from "@/lib/cameraController";
 
 // Traffic simulation
@@ -129,6 +132,8 @@ interface ThreeMapProps {
   panelsPortalRef?: React.RefObject<HTMLDivElement | null>;
   /** When set, camera flies to this [lng, lat]. Change the value to trigger a new fly-to. */
   flyToTarget?: { lngLat: [number, number]; id: number };
+  /** Time of day as decimal hour (0-24). Controls sun position, lighting, sky, and ground tint. */
+  timeOfDayHour?: number;
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -439,13 +444,22 @@ export default function ThreeMap({
   onDashboardVisibleChange,
   panelsPortalRef,
   flyToTarget,
+  timeOfDayHour,
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
+  const keyboardCleanupRef = useRef<(() => void) | null>(null);
   const groupsRef = useRef<any>(null);
+  const directionalLightRef = useRef<THREE.DirectionalLight | null>(null);
+  const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
+  const skyMeshRef = useRef<THREE.Mesh | null>(null);
+  const sunMeshRef = useRef<THREE.Mesh | null>(null);
+  const moonMeshRef = useRef<THREE.Mesh | null>(null);
+  const groundGroupRef = useRef<THREE.Group | null>(null);
+  const timeOfDayHourRef = useRef<number>(12);
   const animationFrameRef = useRef<number | null>(null);
   const initialized = useRef(false);
 
@@ -459,7 +473,7 @@ export default function ThreeMap({
   const ghostModelRef = useRef<THREE.Group | null>(null);
   const buildingModelsRef = useRef<Map<string, THREE.Group>>(new Map());
   const buildingTreesRef = useRef<Map<string, THREE.Group>>(new Map()); // Trees for each placed building
-  const osmBuildingMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const osmBuildingMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
   const composerRef = useRef<EffectComposer | null>(null);
   const outlinePassRef = useRef<OutlinePass | null>(null);
   const [selectedOsmBuildingId, setSelectedOsmBuildingId] = useState<
@@ -469,6 +483,11 @@ export default function ThreeMap({
   const noiseRippleGroupRef = useRef<THREE.Group | null>(null);
   const rippleTimeRef = useRef(0);
   const zoningGroupRef = useRef<THREE.Group | null>(null);
+
+  // Sync time-of-day prop into ref for animation loop
+  useEffect(() => {
+    timeOfDayHourRef.current = timeOfDayHour ?? 12;
+  }, [timeOfDayHour]);
 
   // Fly to target location when prop changes
   useEffect(() => {
@@ -541,48 +560,90 @@ export default function ThreeMap({
       try {
         // Create scene manager
         setLoadingStatus("Creating scene...");
-        const { scene, camera, renderer, groups } = createSceneManager(
+        const { scene, camera, renderer, groups, directionalLight, ambientLight } = createSceneManager(
           canvasRef.current,
         );
         sceneRef.current = scene;
         cameraRef.current = camera;
         rendererRef.current = renderer;
         groupsRef.current = groups;
+        directionalLightRef.current = directionalLight;
+        ambientLightRef.current = ambientLight;
 
         // Setup camera controls
         const controls = setupControls(camera, renderer);
         controlsRef.current = controls;
 
+        // Attach WASD keyboard controls
+        keyboardCleanupRef.current = attachKeyboardControls();
+
         // Ensure controls are enabled
         controls.enabled = true;
-        console.log("✅ OrbitControls initialized:", {
-          enabled: controls.enabled,
-          enableRotate: controls.enableRotate,
-          enableZoom: controls.enableZoom,
-          enablePan: controls.enablePan,
-        });
+        console.log("✅ OrbitControls initialized with WASD support");
 
-        // Environment setup (sky and fog removed for clearer view)
+        // Environment setup
         setLoadingStatus("Setting up environment...");
 
-        // Define bounding box for Kingston/Queen's area
+        // Add sky dome
+        const sky = createSky();
+        groups.environment.add(sky);
+        skyMeshRef.current = sky;
+
+        // Add sun and moon
+        const { sun, moon } = createCelestialBodies();
+        groups.environment.add(sun);
+        groups.environment.add(moon);
+        sunMeshRef.current = sun;
+        moonMeshRef.current = moon;
+
+        // Data bounding box for Kingston/Queen's area (buildings, roads, traffic)
         const bbox: [number, number, number, number] = [
           44.22, -76.51, 44.24, -76.48,
         ];
 
-        // Create ground plane (plain white, no texture)
+        // Extended imagery bbox (~4x in each direction for surrounding city context)
+        const latSpan = bbox[2] - bbox[0]; // 0.02
+        const lngSpan = bbox[3] - bbox[1]; // 0.03
+        const mapBbox: [number, number, number, number] = [
+          bbox[0] - latSpan * 1.5, // south
+          bbox[1] - lngSpan * 1.5, // west
+          bbox[2] + latSpan * 1.5, // north
+          bbox[3] + lngSpan * 1.5, // east
+        ];
+
+        // Create tiled ground planes (6x6 grid for high-res satellite coverage)
         setLoadingStatus("Creating ground plane...");
-        const ground = createGround(
-          {
-            minLat: bbox[0],
-            maxLat: bbox[2],
-            minLng: bbox[1],
-            maxLng: bbox[3],
-          },
+        const groundGroup = createGround(
+          { minLat: mapBbox[0], maxLat: mapBbox[2], minLng: mapBbox[1], maxLng: mapBbox[3] },
           CityProjection,
-          undefined, // No texture - plain white ground
+          6,
         );
-        groups.environment.add(ground);
+        groups.environment.add(groundGroup);
+        groundGroupRef.current = groundGroup;
+
+        // Load a separate high-res satellite image per tile with anisotropic filtering
+        const textureLoader = new THREE.TextureLoader();
+        const maxAniso = renderer.capabilities.getMaxAnisotropy();
+        groundGroup.children.forEach((child) => {
+          if (child.name.startsWith("ground-tile-") && child.userData.tileBbox) {
+            const tileBbox = child.userData.tileBbox as [number, number, number, number];
+            fetchSatelliteImagery(tileBbox).then((imageUrl) => {
+              if (!imageUrl) return;
+              textureLoader.load(imageUrl, (texture) => {
+                // Max anisotropic filtering for sharp textures at oblique angles
+                texture.anisotropy = maxAniso;
+                texture.minFilter = THREE.LinearMipmapLinearFilter;
+                texture.magFilter = THREE.LinearFilter;
+                texture.generateMipmaps = true;
+                const mesh = child as THREE.Mesh;
+                const mat = mesh.material as THREE.MeshStandardMaterial;
+                mat.map = texture;
+                mat.needsUpdate = true;
+              });
+            });
+          }
+        });
+        console.log(`✅ Loading 36 satellite tiles (anisotropy: ${maxAniso}x)`);
 
         // Fetch and render buildings
         setLoadingStatus("Fetching buildings from OpenStreetMap...");
@@ -814,23 +875,9 @@ export default function ThreeMap({
         setLoadingStatus("Starting simulation...");
         startAnimationLoop();
 
-        // Hide loading overlay so we can see the flight animation
+        // Show the scene immediately with the default wide city view
         setIsReady(true);
         setError(null);
-
-        // Fly to specific coordinates: Latitude 44.233472°, Longitude -76.498375°
-        await flyToLocation(
-          camera,
-          controls,
-          [-76.498375, 44.233472],
-          600,
-          2000,
-        );
-
-        // Ensure controls are re-enabled after animation
-        controls.enabled = true;
-        console.log("✅ Controls re-enabled after flyTo animation");
-
         setLoadingStatus("Ready");
       } catch (err) {
         console.error("Error initializing scene:", err);
@@ -1236,8 +1283,26 @@ export default function ThreeMap({
           });
         }
 
-        // Update controls
+        // Update WASD keyboard movement + orbit controls
+        updateKeyboardMovement(cameraRef.current, controlsRef.current, deltaTime);
         controlsRef.current.update();
+
+        // Apply time-of-day lighting
+        if (directionalLightRef.current && ambientLightRef.current) {
+          const hour = timeOfDayHourRef.current;
+          const todConfig = computeTimeOfDay(hour);
+          applyTimeOfDay(
+            todConfig,
+            sceneRef.current,
+            directionalLightRef.current,
+            ambientLightRef.current,
+            skyMeshRef.current,
+            groundGroupRef.current,
+            sunMeshRef.current,
+            moonMeshRef.current,
+            cameraRef.current,
+          );
+        }
 
         // Analytics: Track render start
         const renderStartTime = performance.now();
@@ -1304,6 +1369,9 @@ export default function ThreeMap({
         controlsRef.current.dispose();
       }
 
+      if (keyboardCleanupRef.current) {
+        keyboardCleanupRef.current();
+      }
     };
   }, []);
 
@@ -1473,12 +1541,13 @@ export default function ThreeMap({
       );
 
       if (osmBuildingIntersects.length > 0 && !isPlacementMode) {
-        const clickedMesh = osmBuildingIntersects[0].object as THREE.Mesh;
-        if (
-          clickedMesh.userData.isOsmBuilding &&
-          clickedMesh.userData.buildingId
-        ) {
-          const buildingId = clickedMesh.userData.buildingId;
+        // Walk up from the hit mesh to find the building group with userData
+        let target: THREE.Object3D | null = osmBuildingIntersects[0].object;
+        while (target && !target.userData.isOsmBuilding) {
+          target = target.parent;
+        }
+        if (target?.userData.isOsmBuilding && target.userData.buildingId) {
+          const buildingId = target.userData.buildingId;
           console.log("Clicked OSM building:", buildingId);
           setSelectedOsmBuildingId(buildingId);
           if (onBuildingSelect) {
@@ -1594,13 +1663,17 @@ export default function ThreeMap({
   const deleteOsmBuilding = async (buildingId: string, skipApiCall = false) => {
     try {
       // Remove from scene
-      const mesh = osmBuildingMeshesRef.current.get(buildingId);
-      if (mesh && groupsRef.current) {
-        groupsRef.current.staticGeometry.remove(mesh);
-        mesh.geometry.dispose();
-        if (mesh.material instanceof THREE.Material) {
-          mesh.material.dispose();
-        }
+      const group = osmBuildingMeshesRef.current.get(buildingId);
+      if (group && groupsRef.current) {
+        groupsRef.current.staticGeometry.remove(group);
+        group.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.geometry.dispose();
+            if (child.material instanceof THREE.Material) {
+              child.material.dispose();
+            }
+          }
+        });
         osmBuildingMeshesRef.current.delete(buildingId);
       }
 
@@ -1663,13 +1736,17 @@ export default function ThreeMap({
 
       // Delete all colliding buildings from scene immediately
       for (const buildingId of collidingIds) {
-        const mesh = osmBuildingMeshesRef.current.get(buildingId);
-        if (mesh && groupsRef.current) {
-          groupsRef.current.staticGeometry.remove(mesh);
-          mesh.geometry.dispose();
-          if (mesh.material instanceof THREE.Material) {
-            mesh.material.dispose();
-          }
+        const group = osmBuildingMeshesRef.current.get(buildingId);
+        if (group && groupsRef.current) {
+          groupsRef.current.staticGeometry.remove(group);
+          group.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              child.geometry.dispose();
+              if (child.material instanceof THREE.Material) {
+                child.material.dispose();
+              }
+            }
+          });
           osmBuildingMeshesRef.current.delete(buildingId);
           console.log(`  🗑️ Removed from scene: ${buildingId}`);
         }

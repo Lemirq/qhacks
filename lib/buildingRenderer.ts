@@ -1,42 +1,34 @@
 /**
  * Building Renderer for 3D City Visualization
- * Renders buildings as extruded 3D meshes in Three.js
+ * Renders buildings with extruded walls and roof geometry
  */
 
 import * as THREE from "three";
-import { Building } from "./buildingData";
+import { Building, RoofShape } from "./buildingData";
 import { CityProjection } from "./projection";
 
-// Height multiplier: 1.0 = real-world proportions (height scales same as XZ)
 export const HEIGHT_MULTIPLIER = 1.0;
+const SCALE_FACTOR = 10 / 1.4;
 
 /**
  * Render buildings as 3D meshes and add them to the scene
- *
- * @param buildings - Array of buildings to render
- * @param projection - CityProjection instance for coordinate conversion
- * @param scene - Three.js scene to add meshes to
- * @returns Map of building IDs to their meshes
  */
 export function renderBuildings(
   buildings: Building[],
   projection: typeof CityProjection,
   scene: THREE.Object3D,
-): Map<string, THREE.Mesh> {
+): Map<string, THREE.Group> {
   console.log(`Rendering ${buildings.length} buildings...`);
 
   let rendered = 0;
-  const meshMap = new Map<string, THREE.Mesh>();
+  const meshMap = new Map<string, THREE.Group>();
 
   buildings.forEach((building) => {
     try {
-      // Create the building mesh
-      const mesh = createBuildingMesh(building, projection);
-
-      if (mesh) {
-        // Add to scene
-        scene.add(mesh);
-        meshMap.set(building.id, mesh);
+      const group = createBuildingGroup(building, projection);
+      if (group) {
+        scene.add(group);
+        meshMap.set(building.id, group);
         rendered++;
       }
     } catch (error) {
@@ -49,132 +41,480 @@ export function renderBuildings(
 }
 
 /**
- * Create a 3D mesh for a single building
+ * Create a complete building group (walls + roof)
  */
-function createBuildingMesh(
+function createBuildingGroup(
   building: Building,
   projection: typeof CityProjection,
-): THREE.Mesh | null {
-  // Need at least 3 points for a valid polygon
-  if (building.footprint.length < 3) {
-    return null;
-  }
+): THREE.Group | null {
+  if (building.footprint.length < 3) return null;
 
-  // Create shape from footprint polygon
-  const shape = new THREE.Shape();
-
-  // Project footprint coordinates to world space
+  // Project footprint to world space
   const projectedPoints: THREE.Vector3[] = [];
+  const shape = new THREE.Shape();
 
   building.footprint.forEach((coord, index) => {
     const worldPos = projection.projectToWorld(coord);
     projectedPoints.push(worldPos);
-
-    // First point - move to start
     if (index === 0) {
       shape.moveTo(worldPos.x, worldPos.z);
     } else {
-      // Subsequent points - draw line
       shape.lineTo(worldPos.x, worldPos.z);
     }
   });
 
-  // Close the shape by connecting back to first point
+  // Close the shape
   if (projectedPoints.length > 0) {
-    const firstPoint = projectedPoints[0];
-    shape.lineTo(firstPoint.x, firstPoint.z);
+    shape.lineTo(projectedPoints[0].x, projectedPoints[0].z);
   }
 
-  // Extrude settings
-  // Apply the same scale factor used for horizontal coordinates
-  // to maintain proper proportions (SCALE_FACTOR = 10/1.4 ≈ 7.14)
-  // Then apply HEIGHT_MULTIPLIER for visual adjustments
-  const SCALE_FACTOR = 10 / 1.4;
-  const extrudeSettings: THREE.ExtrudeGeometryOptions = {
-    depth: building.height * SCALE_FACTOR * HEIGHT_MULTIPLIER,
+  const scaledWallHeight = building.height * SCALE_FACTOR * HEIGHT_MULTIPLIER;
+
+  const group = new THREE.Group();
+
+  // --- Walls ---
+  const wallColor = getWallColor(building);
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.85, metalness: 0.05 });
+
+  const wallGeometry = new THREE.ExtrudeGeometry(shape, {
+    depth: scaledWallHeight,
     bevelEnabled: false,
-  };
-
-  // Create extruded geometry
-  const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-
-  // Rotate geometry to stand upright (extrusion happens along Z, we want Y)
-  geometry.rotateX(Math.PI / 2);
-
-  // Use uniform color for all buildings
-  const material = new THREE.MeshLambertMaterial({
-    color: 0xf5f5f5, // Very light white/gray for all buildings
-    flatShading: false,
   });
+  wallGeometry.rotateX(Math.PI / 2);
+  wallGeometry.translate(0, scaledWallHeight, 0);
 
-  // Create mesh
-  const mesh = new THREE.Mesh(geometry, material);
+  const wallMesh = new THREE.Mesh(wallGeometry, wallMaterial);
+  wallMesh.castShadow = true;
+  wallMesh.receiveShadow = true;
+  group.add(wallMesh);
 
-  // After rotateX(PI/2), extrusion goes from y=0 down to y=-depth.
-  // Translate geometry up so base sits at y=0.
-  const scaledHeight = building.height * SCALE_FACTOR * HEIGHT_MULTIPLIER;
-  geometry.translate(0, scaledHeight, 0);
+  // --- Roof ---
+  const roofShape = building.roofShape || "flat";
+  const scaledRoofHeight = (building.roofHeight || 0) * SCALE_FACTOR * HEIGHT_MULTIPLIER;
 
-  // Enable shadows
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
+  if (roofShape !== "flat" && scaledRoofHeight > 0) {
+    const roofColor = getRoofColor(building);
+    const roofMesh = createRoofMesh(
+      projectedPoints,
+      shape,
+      scaledWallHeight,
+      scaledRoofHeight,
+      roofShape,
+      roofColor,
+    );
+    if (roofMesh) {
+      roofMesh.castShadow = true;
+      roofMesh.receiveShadow = true;
+      group.add(roofMesh);
+    }
+  }
+  // Note: flat roofs don't need a separate cap — ExtrudeGeometry already creates top/bottom faces
 
-  // Set mesh name and userData for identification
-  mesh.name = building.id;
-  mesh.userData = {
+  // Set name and userData for identification
+  group.name = building.id;
+  group.userData = {
     buildingId: building.id,
     isOsmBuilding: true,
     type: building.type,
     height: building.height,
   };
 
+  return group;
+}
+
+/**
+ * Create roof mesh based on roof shape
+ */
+function createRoofMesh(
+  footprintPoints: THREE.Vector3[],
+  shape: THREE.Shape,
+  wallHeight: number,
+  roofHeight: number,
+  roofShape: RoofShape,
+  color: number,
+): THREE.Mesh | null {
+  const material = new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.05 });
+
+  switch (roofShape) {
+    case "gabled":
+      return createGabledRoof(footprintPoints, wallHeight, roofHeight, material);
+    case "hipped":
+      return createHippedRoof(footprintPoints, shape, wallHeight, roofHeight, material);
+    case "pyramidal":
+      return createPyramidalRoof(footprintPoints, wallHeight, roofHeight, material);
+    case "dome":
+      return createDomeRoof(footprintPoints, wallHeight, roofHeight, material);
+    case "skillion":
+      return createSkillionRoof(footprintPoints, shape, wallHeight, roofHeight, material);
+    default:
+      return null;
+  }
+}
+
+/**
+ * Compute the oriented bounding rectangle's long axis (ridge direction)
+ * Returns { center, direction (unit), halfWidth, halfLength }
+ */
+function computeRidgeAxis(points: THREE.Vector3[]) {
+  // Use 2D points (X, Z)
+  const pts = points.map((p) => [p.x, p.z] as [number, number]);
+
+  // Find centroid
+  let cx = 0, cz = 0;
+  for (const [x, z] of pts) { cx += x; cz += z; }
+  cx /= pts.length;
+  cz /= pts.length;
+
+  // PCA: find principal axis via covariance matrix
+  let cxx = 0, cxz = 0, czz = 0;
+  for (const [x, z] of pts) {
+    const dx = x - cx, dz = z - cz;
+    cxx += dx * dx;
+    cxz += dx * dz;
+    czz += dz * dz;
+  }
+
+  // Eigenvector for larger eigenvalue of [[cxx, cxz], [cxz, czz]]
+  const theta = 0.5 * Math.atan2(2 * cxz, cxx - czz);
+  const longAxis = [Math.cos(theta), Math.sin(theta)] as [number, number];
+  const shortAxis = [-longAxis[1], longAxis[0]] as [number, number];
+
+  // Project all points onto both axes to get extents
+  let minLong = Infinity, maxLong = -Infinity;
+  let minShort = Infinity, maxShort = -Infinity;
+  for (const [x, z] of pts) {
+    const dx = x - cx, dz = z - cz;
+    const projLong = dx * longAxis[0] + dz * longAxis[1];
+    const projShort = dx * shortAxis[0] + dz * shortAxis[1];
+    minLong = Math.min(minLong, projLong);
+    maxLong = Math.max(maxLong, projLong);
+    minShort = Math.min(minShort, projShort);
+    maxShort = Math.max(maxShort, projShort);
+  }
+
+  const halfLength = (maxLong - minLong) / 2;
+  const halfWidth = (maxShort - minShort) / 2;
+
+  return {
+    center: [cx, cz] as [number, number],
+    longAxis,
+    shortAxis,
+    halfLength,
+    halfWidth,
+  };
+}
+
+/**
+ * Gabled roof: triangular prism along the longest axis
+ */
+function createGabledRoof(
+  points: THREE.Vector3[],
+  wallHeight: number,
+  roofHeight: number,
+  material: THREE.Material,
+): THREE.Mesh {
+  const { center, longAxis, shortAxis, halfLength, halfWidth } = computeRidgeAxis(points);
+  const [cx, cz] = center;
+
+  // 6 vertices: 2 ridge points (top) + 4 eave points (bottom corners)
+  const vertices = new Float32Array([
+    // Ridge start (top)
+    cx + longAxis[0] * halfLength, wallHeight + roofHeight, cz + longAxis[1] * halfLength,
+    // Ridge end (top)
+    cx - longAxis[0] * halfLength, wallHeight + roofHeight, cz - longAxis[1] * halfLength,
+    // Bottom corners (eave level = wall height)
+    cx + longAxis[0] * halfLength + shortAxis[0] * halfWidth, wallHeight, cz + longAxis[1] * halfLength + shortAxis[1] * halfWidth,
+    cx + longAxis[0] * halfLength - shortAxis[0] * halfWidth, wallHeight, cz + longAxis[1] * halfLength - shortAxis[1] * halfWidth,
+    cx - longAxis[0] * halfLength + shortAxis[0] * halfWidth, wallHeight, cz - longAxis[1] * halfLength + shortAxis[1] * halfWidth,
+    cx - longAxis[0] * halfLength - shortAxis[0] * halfWidth, wallHeight, cz - longAxis[1] * halfLength - shortAxis[1] * halfWidth,
+  ]);
+
+  // Triangles: two slope faces + two gable ends
+  const indices = [
+    // Left slope (ridge 0-1, eave 2-4)
+    0, 2, 4, 0, 4, 1,
+    // Right slope (ridge 0-1, eave 3-5)
+    0, 1, 3, 1, 5, 3,
+    // Gable end 1 (ridge 0, eave 2-3)
+    0, 3, 2,
+    // Gable end 2 (ridge 1, eave 4-5)
+    1, 4, 5,
+  ];
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+
+  return new THREE.Mesh(geometry, material);
+}
+
+/**
+ * Hipped roof: all four sides slope inward to a shortened ridge
+ */
+function createHippedRoof(
+  points: THREE.Vector3[],
+  shape: THREE.Shape,
+  wallHeight: number,
+  roofHeight: number,
+  material: THREE.Material,
+): THREE.Mesh {
+  const { center, longAxis, shortAxis, halfLength, halfWidth } = computeRidgeAxis(points);
+  const [cx, cz] = center;
+
+  // Ridge is shorter than the building - inset by halfWidth on each end
+  const ridgeInset = Math.min(halfWidth, halfLength * 0.5);
+  const ridgeHalfLen = halfLength - ridgeInset;
+
+  const vertices = new Float32Array([
+    // Ridge start (0)
+    cx + longAxis[0] * ridgeHalfLen, wallHeight + roofHeight, cz + longAxis[1] * ridgeHalfLen,
+    // Ridge end (1)
+    cx - longAxis[0] * ridgeHalfLen, wallHeight + roofHeight, cz - longAxis[1] * ridgeHalfLen,
+    // Eave corners (2-5)
+    cx + longAxis[0] * halfLength + shortAxis[0] * halfWidth, wallHeight, cz + longAxis[1] * halfLength + shortAxis[1] * halfWidth,
+    cx + longAxis[0] * halfLength - shortAxis[0] * halfWidth, wallHeight, cz + longAxis[1] * halfLength - shortAxis[1] * halfWidth,
+    cx - longAxis[0] * halfLength + shortAxis[0] * halfWidth, wallHeight, cz - longAxis[1] * halfLength + shortAxis[1] * halfWidth,
+    cx - longAxis[0] * halfLength - shortAxis[0] * halfWidth, wallHeight, cz - longAxis[1] * halfLength - shortAxis[1] * halfWidth,
+  ]);
+
+  const indices = [
+    // Left slope
+    0, 2, 4, 0, 4, 1,
+    // Right slope
+    0, 1, 3, 1, 5, 3,
+    // Hip end 1
+    0, 3, 2,
+    // Hip end 2
+    1, 4, 5,
+  ];
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+
+  return new THREE.Mesh(geometry, material);
+}
+
+/**
+ * Pyramidal roof: all edges meet at a single apex
+ */
+function createPyramidalRoof(
+  points: THREE.Vector3[],
+  wallHeight: number,
+  roofHeight: number,
+  material: THREE.Material,
+): THREE.Mesh {
+  const { center } = computeRidgeAxis(points);
+  const [cx, cz] = center;
+
+  // Apex
+  const apex = new THREE.Vector3(cx, wallHeight + roofHeight, cz);
+
+  // Build fan triangles from each edge to the apex
+  const vertices: number[] = [];
+  const indices: number[] = [];
+
+  for (let i = 0; i < points.length; i++) {
+    const p1 = points[i];
+    const p2 = points[(i + 1) % points.length];
+    const base = vertices.length / 3;
+
+    vertices.push(apex.x, apex.y, apex.z);
+    vertices.push(p1.x, wallHeight, p1.z);
+    vertices.push(p2.x, wallHeight, p2.z);
+
+    indices.push(base, base + 1, base + 2);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+
+  return new THREE.Mesh(geometry, material);
+}
+
+/**
+ * Dome roof: hemisphere on top of the building
+ */
+function createDomeRoof(
+  points: THREE.Vector3[],
+  wallHeight: number,
+  roofHeight: number,
+  material: THREE.Material,
+): THREE.Mesh {
+  const { center, halfWidth, halfLength } = computeRidgeAxis(points);
+  const radius = Math.min(halfWidth, halfLength);
+
+  const geometry = new THREE.SphereGeometry(
+    radius,
+    16,
+    8,
+    0,
+    Math.PI * 2,
+    0,
+    Math.PI / 2,
+  );
+
+  // Scale to match roof height
+  geometry.scale(1, roofHeight / radius, 1);
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.set(center[0], wallHeight, center[1]);
+
   return mesh;
 }
 
 /**
- * Get building color based on type
+ * Skillion (lean-to) roof: single slope
  */
-function getBuildingColor(type?: string): number {
-  if (!type || type === "yes") {
-    return 0x888888; // Default gray
+function createSkillionRoof(
+  points: THREE.Vector3[],
+  shape: THREE.Shape,
+  wallHeight: number,
+  roofHeight: number,
+  material: THREE.Material,
+): THREE.Mesh {
+  const { center, shortAxis, halfWidth } = computeRidgeAxis(points);
+
+  // Create a tilted plane from the footprint shape
+  const geometry = new THREE.ShapeGeometry(shape);
+  geometry.rotateX(-Math.PI / 2);
+
+  // Tilt vertices: high side on one edge, low on the other
+  const positions = geometry.attributes.position;
+  for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i);
+    const z = positions.getZ(i);
+    // Project onto short axis to get tilt
+    const dx = x - center[0], dz = z - center[1];
+    const proj = dx * shortAxis[0] + dz * shortAxis[1];
+    const t = (proj / halfWidth) * 0.5 + 0.5; // 0..1
+    positions.setY(i, wallHeight + t * roofHeight);
+  }
+  positions.needsUpdate = true;
+  geometry.computeVertexNormals();
+
+  return new THREE.Mesh(geometry, material);
+}
+
+// ==================== Color helpers ====================
+
+/**
+ * Get wall color: explicit OSM color > material-based > type-based > default
+ */
+function getWallColor(building: Building): number {
+  // Explicit color from OSM
+  if (building.color) {
+    return new THREE.Color(building.color).getHex();
   }
 
-  // Vary colors by building type
+  // Material-based color
+  if (building.material) {
+    const matColor = materialToColor(building.material);
+    if (matColor !== null) return matColor;
+  }
+
+  // Type-based color
+  return typeToWallColor(building.type);
+}
+
+/**
+ * Get roof color: explicit OSM color > inferred from roof shape/building type
+ */
+function getRoofColor(building: Building): number {
+  if (building.roofColor) {
+    return new THREE.Color(building.roofColor).getHex();
+  }
+
+  // Infer roof color from building type
+  const shape = building.roofShape || "flat";
+  switch (shape) {
+    case "gabled":
+    case "hipped":
+      // Residential-style roofs
+      if (building.type === "church" || building.type === "cathedral") {
+        return 0x6a6a6a; // Dark slate
+      }
+      return 0x8b6b4a; // Brown shingles
+    case "dome":
+      return 0x7a7a7a; // Gray metal
+    case "skillion":
+      return 0x888888;
+    default:
+      return 0x777777;
+  }
+}
+
+function materialToColor(material: string): number | null {
+  switch (material.toLowerCase()) {
+    case "brick":
+      return 0xb35a38;
+    case "stone":
+    case "limestone":
+      return 0xd4c4a0;
+    case "sandstone":
+      return 0xd9c9a0;
+    case "concrete":
+    case "cement":
+      return 0xbcbcbc;
+    case "glass":
+      return 0x88aacc;
+    case "wood":
+    case "timber":
+      return 0xa0825a;
+    case "metal":
+    case "steel":
+      return 0x999999;
+    case "plaster":
+    case "stucco":
+      return 0xe8dcc8;
+    default:
+      return null;
+  }
+}
+
+function typeToWallColor(type?: string): number {
   switch (type) {
     case "residential":
     case "house":
+    case "detached":
+    case "semidetached_house":
+    case "terrace":
+    case "bungalow":
+      return 0xd4c4a8; // Warm beige
     case "apartments":
-      return 0xb8956a; // Tan/beige
-
+      return 0xc8b898; // Slightly darker beige
     case "commercial":
     case "retail":
     case "shop":
-      return 0x7a9bc4; // Light blue
-
+    case "office":
+      return 0xb8c4d0; // Cool light blue-gray
     case "industrial":
     case "warehouse":
-      return 0x8b7a6a; // Brown
-
+      return 0xa8a098; // Warm gray
     case "school":
     case "university":
     case "college":
-      return 0xa47d5c; // Academic brown
-
+      return 0xc4b090; // Academic tan
     case "hospital":
     case "clinic":
-      return 0xc47d7d; // Reddish
-
+      return 0xd0c0c0; // Light pinkish
     case "church":
     case "cathedral":
     case "chapel":
-      return 0x9a8a7a; // Stone gray
-
+      return 0xc8c0b0; // Stone
     case "civic":
     case "public":
     case "government":
-      return 0x7a8a9a; // Blue gray
-
+      return 0xb0b8c4; // Institutional blue-gray
+    case "garage":
+    case "garages":
+    case "shed":
+      return 0xaaa8a0;
     default:
-      return 0x888888; // Default gray
+      return 0xc8c4bc; // Neutral warm gray
   }
 }
