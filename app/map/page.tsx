@@ -19,7 +19,7 @@ import {
   Clock,
   Settings,
   MapPin,
-  Copy,
+
   X,
   Plus,
   Trash2,
@@ -80,13 +80,7 @@ interface PlacedBuilding {
 
 function MapPageContent() {
   const searchParams = useSearchParams();
-  const [clickedCoordinate, setClickedCoordinate] = useState<{
-    lat: number;
-    lng: number;
-    worldX: number;
-    worldY: number;
-    worldZ: number;
-  } | null>(null);
+  const [isStreetViewSelectionMode, setIsStreetViewSelectionMode] = useState(false);
 
   const [pendingPlacement, setPendingPlacement] = useState<{
     lat: number;
@@ -131,6 +125,7 @@ function MapPageContent() {
   const [showNoiseRipple, setShowNoiseRipple] = useState(true);
   const [showZoningLayer, setShowZoningLayer] = useState(false);
   const [showWindLayer, setShowWindLayer] = useState(false);
+  const [showImpactColors, setShowImpactColors] = useState(false);
   // Correct config for Kingston zoning layer (Official Plan)
   const [zoningOffset, setZoningOffset] = useState({ x: 0, z: 0 });
   const [zoningRotationY, setZoningRotationY] = useState(180);
@@ -188,7 +183,7 @@ function MapPageContent() {
         const buildings: AvailableBuilding[] = [
           {
             id: "default-sleep",
-            name: "Let Me Sleep Building",
+            name: "Modern Office Tower",
             path: "/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf",
             type: "default",
           },
@@ -215,7 +210,7 @@ function MapPageContent() {
         setAvailableBuildings([
           {
             id: "default-sleep",
-            name: "Let Me Sleep Building",
+            name: "Modern Office Tower",
             path: "/let_me_sleeeeeeep/let_me_sleeeeeeep.gltf",
             type: "default",
           },
@@ -287,8 +282,9 @@ function MapPageContent() {
     if (coordinate) {
       if (isPlacementMode) {
         setPendingPlacement(coordinate);
-      } else {
-        setClickedCoordinate(coordinate);
+      } else if (isStreetViewSelectionMode) {
+        setStreetViewTarget({ worldX: coordinate.worldX, worldZ: coordinate.worldZ, id: Date.now() });
+        setIsStreetViewSelectionMode(false);
       }
     }
   };
@@ -372,7 +368,7 @@ function MapPageContent() {
 
   // Stakeholder impact: re-analyze whenever placed buildings or radius changes
   useEffect(() => {
-    if (!showStakeholderPanel || placedBuildings.length === 0 || osmBuildingsDataRef.current.length === 0) {
+    if ((!showStakeholderPanel && !showImpactColors) || placedBuildings.length === 0 || osmBuildingsDataRef.current.length === 0) {
       setStakeholderAnalysis(null);
       return;
     }
@@ -387,7 +383,7 @@ function MapPageContent() {
     );
     result.placedBuildingId = latest.id;
     setStakeholderAnalysis(result);
-  }, [showStakeholderPanel, placedBuildings, stakeholderRadius]);
+  }, [showStakeholderPanel, showImpactColors, placedBuildings, stakeholderRadius]);
 
   // Traffic impact analysis: re-analyze whenever placed buildings change
   useEffect(() => {
@@ -665,36 +661,22 @@ function MapPageContent() {
           showProposedBuilding={showProposedBuilding}
           shadowAnalysisRef={shadowAnalysisRef}
           onOsmBuildingsLoaded={(buildings) => { osmBuildingsDataRef.current = buildings; }}
-          stakeholderImpactAnalysis={showStakeholderPanel ? stakeholderAnalysis : null}
+          stakeholderImpactAnalysis={(showStakeholderPanel || showImpactColors) ? stakeholderAnalysis : null}
           showTrafficHeatmap={showTrafficImpact}
           trafficImpactResult={showTrafficImpact ? trafficImpactResult : null}
           onRoadNetworkLoaded={(rn) => { roadNetworkRef.current = rn; }}
+          isStreetViewSelectionMode={isStreetViewSelectionMode}
         />
         {/* Map gradient overlay for better UI contrast */}
         <div className="absolute inset-0 map-gradient pointer-events-none"></div>
 
-        {/* Street View HUD */}
+        {/* Street View HUD — info only, exit is in sidebar */}
         {isStreetView && (
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex flex-col items-center gap-3">
-            <div className="glass rounded-lg px-5 py-3 flex items-center gap-4 border border-indigo-400/30">
-              <div className="flex items-center gap-2">
-                <Eye size={16} className="text-indigo-400" />
-                <span className="text-xs font-bold text-indigo-300 uppercase tracking-tight">
-                  Street View
-                </span>
-              </div>
-              <span className="text-[9px] text-zinc-400">
-                WASD to walk · Mouse to look
-              </span>
-              <button
-                onClick={() => {
-                  setExitStreetViewTrigger((n) => n + 1);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-tight bg-zinc-700 hover:bg-zinc-600 text-white transition-colors"
-              >
-                <ArrowUp size={12} />
-                Exit
-              </button>
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+            <div className="glass rounded-lg px-4 py-2 flex items-center gap-3 border border-indigo-400/20">
+              <Eye size={13} className="text-indigo-400" />
+              <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-tight">Street View</span>
+              <span className="text-[9px] text-zinc-500">WASD to walk · Mouse to look</span>
             </div>
           </div>
         )}
@@ -704,9 +686,7 @@ function MapPageContent() {
           <div className="absolute top-6 left-1/2 -translate-x-1/2 glass border-blue-400/30 px-6 py-3 rounded-lg shadow-lg z-50 pointer-events-auto flex items-center gap-4">
             <div>
               <p className="text-sm font-black text-blue-400 uppercase tracking-tight">
-                {customModelPath
-                  ? "Place your custom building"
-                  : "Click on the map to place building"}
+                Move mouse over map · Click to place
               </p>
               {importedBuildingName && (
                 <p className="text-xs text-zinc-400 mt-1">
@@ -723,6 +703,24 @@ function MapPageContent() {
                 <X size={16} />
               </button>
             )}
+          </div>
+        )}
+
+        {/* Street View Selection Mode Banner */}
+        {isStreetViewSelectionMode && (
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 glass border-indigo-400/30 px-6 py-3 rounded-lg shadow-lg z-50 pointer-events-auto flex items-center gap-4">
+            <Eye size={18} className="text-indigo-400" />
+            <div>
+              <p className="text-sm font-black text-indigo-400 uppercase tracking-tight">
+                Move mouse over map · Click to enter street view
+              </p>
+            </div>
+            <button
+              onClick={() => setIsStreetViewSelectionMode(false)}
+              className="p-1.5 hover:bg-red-500/20 rounded-full transition-colors text-zinc-400 hover:text-red-400"
+            >
+              <X size={16} />
+            </button>
           </div>
         )}
 
@@ -1022,6 +1020,44 @@ function MapPageContent() {
                   </div>
                 </div>
               </div>
+
+              <div
+                className={`p-2.5 rounded-md border transition-all cursor-pointer group ${
+                  showImpactColors
+                    ? "border-white/15 bg-white/10"
+                    : "border-white/5 hover:border-white/15 bg-white/5"
+                }`}
+                onClick={() => setShowImpactColors(!showImpactColors)}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-7 h-7 rounded bg-white/5 border border-white/10 flex items-center justify-center transition-colors ${
+                      showImpactColors
+                        ? "text-green-400"
+                        : "text-zinc-500 group-hover:text-green-400"
+                    }`}
+                  >
+                    <Building2 size={14} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[11px] font-bold text-zinc-200">
+                      Building Impact
+                    </p>
+                    <p className="text-[9px] text-zinc-500">
+                      Green · Yellow · Red — impact severity
+                    </p>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={showImpactColors}
+                      onChange={(e) => setShowImpactColors(e.target.checked)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="accent-accent-blue h-3.5 w-3.5"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Time of Day */}
@@ -1138,105 +1174,36 @@ function MapPageContent() {
               </div>
             </div>
 
-            {/* District Zoning Summary */}
-
-            {/* Coordinate Finder */}
+            {/* Street View Selector */}
             <div className="mt-8 pt-6 border-t border-white/10">
-              {!clickedCoordinate ? (
-                <div className="flex items-center gap-2 text-zinc-500 text-[10px]">
-                  <MapPin size={14} className="text-zinc-500" />
-                  <span className="uppercase tracking-wider">
-                    Click anywhere on the map to see coordinates
-                  </span>
-                </div>
+              <h3 className="ui-label mb-3">Street View</h3>
+              {isStreetView ? (
+                <button
+                  onClick={() => setExitStreetViewTrigger((n) => n + 1)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[11px] font-bold uppercase tracking-tight transition-all bg-white text-zinc-900 hover:bg-zinc-100"
+                >
+                  <ArrowUp size={13} />
+                  Exit Street View
+                </button>
               ) : (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <MapPin size={14} className="text-accent-blue" />
-                      <h3 className="ui-label">Clicked Coordinate</h3>
-                    </div>
-                    <button
-                      onClick={() => setClickedCoordinate(null)}
-                      className="p-1 hover:bg-white/10 rounded transition-colors text-zinc-400"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="bg-white/5 rounded-md p-2.5 border border-white/10">
-                      <p className="text-[9px] font-bold text-zinc-500 uppercase mb-1.5">
-                        Geographic
-                      </p>
-                      <div className="space-y-1 text-[10px]">
-                        <div className="flex justify-between">
-                          <span className="text-zinc-400">Latitude</span>
-                          <span className="font-bold text-zinc-200">
-                            {clickedCoordinate.lat.toFixed(6)}°
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-zinc-400">Longitude</span>
-                          <span className="font-bold text-zinc-200">
-                            {clickedCoordinate.lng.toFixed(6)}°
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-white/5 rounded-md p-2.5 border border-white/10">
-                      <p className="text-[9px] font-bold text-zinc-500 uppercase mb-1.5">
-                        World
-                      </p>
-                      <div className="space-y-1 text-[10px]">
-                        <div className="flex justify-between">
-                          <span className="text-zinc-400">X</span>
-                          <span className="font-bold text-zinc-200">
-                            {clickedCoordinate.worldX.toFixed(2)}m
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-zinc-400">Y</span>
-                          <span className="font-bold text-zinc-200">
-                            {clickedCoordinate.worldY.toFixed(2)}m
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-zinc-400">Z</span>
-                          <span className="font-bold text-zinc-200">
-                            {clickedCoordinate.worldZ.toFixed(2)}m
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(
-                          `${clickedCoordinate.lat.toFixed(6)}, ${clickedCoordinate.lng.toFixed(6)}`,
-                        );
-                      }}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white/5 border border-white/10 hover:border-blue-400/40 hover:bg-blue-500/10 rounded text-[10px] font-bold text-zinc-300 hover:text-blue-400 transition-colors uppercase tracking-wider"
-                    >
-                      <Copy size={12} />
-                      Copy Coordinates
-                    </button>
-                    <button
-                      onClick={() => {
-                        setStreetViewTarget({
-                          worldX: clickedCoordinate.worldX,
-                          worldZ: clickedCoordinate.worldZ,
-                          id: Date.now(),
-                        });
-                      }}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600/20 border border-indigo-400/30 hover:border-indigo-400/50 hover:bg-indigo-600/30 rounded text-[10px] font-bold text-indigo-300 hover:text-indigo-200 transition-colors uppercase tracking-wider"
-                    >
-                      <Eye size={12} />
-                      View from Street
-                    </button>
-                  </div>
-                </div>
+                <>
+                  <button
+                    onClick={() => setIsStreetViewSelectionMode(!isStreetViewSelectionMode)}
+                    className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[11px] font-bold uppercase tracking-tight transition-all ${
+                      isStreetViewSelectionMode
+                        ? "bg-indigo-600 text-white"
+                        : "bg-indigo-600/20 border border-indigo-400/30 hover:border-indigo-400/50 hover:bg-indigo-600/30 text-indigo-300"
+                    }`}
+                  >
+                    <Eye size={13} />
+                    {isStreetViewSelectionMode ? "Cancel Selection" : "Pick Street View Point"}
+                  </button>
+                  {isStreetViewSelectionMode && (
+                    <p className="text-[9px] text-indigo-300/70 text-center mt-2">
+                      Move mouse over the map · Click to enter street view
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -1501,6 +1468,7 @@ function MapPageContent() {
                                 setCustomModelPath(building.path);
                                 setImportedBuildingName(building.name);
                                 setShowBuildingSelector(false);
+                                setIsPlacementMode(true);
                               }}
                               className={`w-full flex items-center gap-2 px-3 py-2 text-[10px] text-left hover:bg-blue-500/10 transition-colors ${
                                 selectedModelId === building.id &&

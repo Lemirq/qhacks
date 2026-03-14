@@ -223,6 +223,9 @@ export function updateTweens(time?: number): void {
 /** Pedestrian eye height in world units (≈1.7m real-world × scale factor) */
 const STREET_LEVEL_HEIGHT = 1.7 * (10 / 1.4);
 
+/** Minimum camera Y in street view — prevents clipping through the ground */
+const STREET_MIN_Y = 1.5;
+
 /** Saved bird-eye camera state so we can return */
 interface SavedCameraState {
   position: THREE.Vector3;
@@ -237,6 +240,7 @@ interface SavedCameraState {
 }
 
 let savedCameraState: SavedCameraState | null = null;
+let groundClampListener: (() => void) | null = null;
 
 /**
  * Animate camera from current bird-eye position down to street level at a world position.
@@ -309,11 +313,23 @@ export function flyToStreetLevel(
         controls.enableZoom = false;
         controls.zoomToCursor = false;
         controls.minDistance = 0.1;
-        controls.maxDistance = 30;
-        // Allow looking up and slightly below horizon
-        controls.minPolarAngle = 0.1;
-        controls.maxPolarAngle = Math.PI * 0.85;
+        controls.maxDistance = 20;
+        // Allow looking up freely, but cap downward angle so the camera
+        // can't orbit below ground level (π*0.6 ≈ 108° = ~18° below horizon)
+        controls.minPolarAngle = 0.05;
+        controls.maxPolarAngle = Math.PI * 0.6;
         controls.update();
+
+        // Hard clamp: if OrbitControls still nudges the camera below ground,
+        // snap it back up on every change event
+        groundClampListener = () => {
+          if ((camera as THREE.PerspectiveCamera).position.y < STREET_MIN_Y) {
+            (camera as THREE.PerspectiveCamera).position.y = STREET_MIN_Y;
+            controls.target.y = Math.max(controls.target.y, STREET_MIN_Y);
+          }
+        };
+        controls.addEventListener('change', groundClampListener);
+
         resolve();
       });
 
@@ -346,47 +362,57 @@ export function exitStreetLevel(
 
   savedCameraState = null;
 
+  // Remove ground clamp before animating back up
+  if (groundClampListener) {
+    controls.removeEventListener('change', groundClampListener);
+    groundClampListener = null;
+  }
+
   return new Promise((resolve) => {
-    const startPosition = {
+    // Phase 1: shoot straight up from street level to a high altitude
+    //          directly above the current position (~600 units up)
+    const phase1Start = {
       x: camera.position.x,
       y: camera.position.y,
       z: camera.position.z,
     };
-
-    const endPosition = {
-      x: state.position.x,
-      y: state.position.y,
-      z: state.position.z,
+    const phase1End = {
+      x: camera.position.x,
+      y: Math.max(state.position.y, 600),
+      z: camera.position.z,
     };
-
-    const startTarget = {
+    const targetPhase1Start = {
       x: controls.target.x,
       y: controls.target.y,
       z: controls.target.z,
     };
-
-    const endTarget = {
-      x: state.target.x,
-      y: state.target.y,
-      z: state.target.z,
+    const targetPhase1End = {
+      x: controls.target.x,
+      y: 0,
+      z: controls.target.z,
     };
 
-    const positionTween = new TWEEN.Tween(startPosition)
-      .to(endPosition, duration)
+    // Phase 2: glide from high-up to the saved bird-eye position
+    const phase2Start = { x: phase1End.x, y: phase1End.y, z: phase1End.z };
+    const phase2End = { x: state.position.x, y: state.position.y, z: state.position.z };
+    const targetPhase2Start = { x: targetPhase1End.x, y: 0, z: targetPhase1End.z };
+    const targetPhase2End = { x: state.target.x, y: state.target.y, z: state.target.z };
+
+    const phase2Pos = new TWEEN.Tween(phase2Start)
+      .to(phase2End, duration * 0.7)
       .easing(TWEEN.Easing.Cubic.InOut)
       .onUpdate(() => {
-        camera.position.set(startPosition.x, startPosition.y, startPosition.z);
+        camera.position.set(phase2Start.x, phase2Start.y, phase2Start.z);
       });
 
-    const targetTween = new TWEEN.Tween(startTarget)
-      .to(endTarget, duration)
+    const phase2Target = new TWEEN.Tween(targetPhase2Start)
+      .to(targetPhase2End, duration * 0.7)
       .easing(TWEEN.Easing.Cubic.InOut)
       .onUpdate(() => {
-        controls.target.set(startTarget.x, startTarget.y, startTarget.z);
+        controls.target.set(targetPhase2Start.x, targetPhase2Start.y, targetPhase2Start.z);
         controls.update();
       })
       .onComplete(() => {
-        // Restore saved controls configuration
         controls.enablePan = state.enablePan;
         controls.enableZoom = state.enableZoom;
         controls.zoomToCursor = state.zoomToCursor;
@@ -398,8 +424,27 @@ export function exitStreetLevel(
         resolve();
       });
 
-    positionTween.start();
-    targetTween.start();
+    const phase1Pos = new TWEEN.Tween(phase1Start)
+      .to(phase1End, duration * 0.5)
+      .easing(TWEEN.Easing.Cubic.In)
+      .onUpdate(() => {
+        camera.position.set(phase1Start.x, phase1Start.y, phase1Start.z);
+      })
+      .onComplete(() => {
+        phase2Pos.start();
+        phase2Target.start();
+      });
+
+    const phase1Target = new TWEEN.Tween(targetPhase1Start)
+      .to(targetPhase1End, duration * 0.5)
+      .easing(TWEEN.Easing.Cubic.In)
+      .onUpdate(() => {
+        controls.target.set(targetPhase1Start.x, targetPhase1Start.y, targetPhase1Start.z);
+        controls.update();
+      });
+
+    phase1Pos.start();
+    phase1Target.start();
   });
 }
 

@@ -169,6 +169,8 @@ interface ThreeMapProps {
   trafficImpactResult?: import("@/lib/trafficImpact").TrafficImpactResult | null;
   /** Called once after road network is loaded, passing the RoadNetwork instance */
   onRoadNetworkLoaded?: (roadNetwork: RoadNetwork) => void;
+  /** When true, mouse movement shows a street-view pin preview; click triggers street view */
+  isStreetViewSelectionMode?: boolean;
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -492,6 +494,7 @@ export default function ThreeMap({
   showTrafficHeatmap = false,
   trafficImpactResult,
   onRoadNetworkLoaded,
+  isStreetViewSelectionMode = false,
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -2594,6 +2597,79 @@ export default function ThreeMap({
       return () => canvas.removeEventListener("mousemove", handleMouseMove);
     }
   }, [isPlacementMode]);
+
+  // Street view selection mode: show a pin preview that follows the mouse
+  const streetViewPinRef = useRef<THREE.Group | null>(null);
+  useEffect(() => {
+    if (!groupsRef.current) return;
+
+    if (!isStreetViewSelectionMode) {
+      // Remove pin when leaving selection mode
+      if (streetViewPinRef.current) {
+        groupsRef.current.dynamicObjects.remove(streetViewPinRef.current);
+        streetViewPinRef.current = null;
+      }
+      return;
+    }
+
+    // Build a simple pin: vertical pole + eye-shaped disc at street level
+    const pin = new THREE.Group();
+    const poleGeo = new THREE.CylinderGeometry(0.5, 0.5, 20, 8);
+    const poleMat = new THREE.MeshBasicMaterial({ color: 0x6366f1 });
+    const pole = new THREE.Mesh(poleGeo, poleMat);
+    pole.position.y = 10;
+    pin.add(pole);
+
+    const ringGeo = new THREE.TorusGeometry(6, 1.2, 8, 24);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, transparent: true, opacity: 0.85 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.5;
+    pin.add(ring);
+
+    const discGeo = new THREE.CircleGeometry(6, 24);
+    const discMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+    const disc = new THREE.Mesh(discGeo, discMat);
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.y = 0.4;
+    pin.add(disc);
+
+    pin.visible = false;
+    streetViewPinRef.current = pin;
+    groupsRef.current.dynamicObjects.add(pin);
+
+    function handleMouseMove(event: MouseEvent) {
+      if (!canvasRef.current || !cameraRef.current || !groupsRef.current || !streetViewPinRef.current) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      raycasterRef.current.setFromCamera(mouse, cameraRef.current);
+      const targets = [
+        ...groupsRef.current.environment.children,
+        ...groupsRef.current.staticGeometry.children,
+      ];
+      const hits = raycasterRef.current.intersectObjects(targets, true);
+      if (hits.length > 0) {
+        const p = hits[0].point;
+        streetViewPinRef.current.position.set(p.x, p.y, p.z);
+        streetViewPinRef.current.visible = true;
+      } else {
+        streetViewPinRef.current.visible = false;
+      }
+    }
+
+    const canvas = canvasRef.current;
+    canvas?.addEventListener("mousemove", handleMouseMove);
+    return () => {
+      canvas?.removeEventListener("mousemove", handleMouseMove);
+      if (streetViewPinRef.current && groupsRef.current) {
+        groupsRef.current.dynamicObjects.remove(streetViewPinRef.current);
+        streetViewPinRef.current = null;
+      }
+    };
+  }, [isStreetViewSelectionMode]);
 
   return (
     <div className={`relative ${className}`}>

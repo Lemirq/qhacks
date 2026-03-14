@@ -429,92 +429,16 @@ function getRoofColor(building: Building): number {
     return new THREE.Color(building.roofColor).getHex();
   }
 
-  // Infer roof color from building type
-  const shape = building.roofShape || "flat";
-  switch (shape) {
-    case "gabled":
-    case "hipped":
-      // Residential-style roofs
-      if (building.type === "church" || building.type === "cathedral") {
-        return 0x6a6a6a; // Dark slate
-      }
-      return 0x8b6b4a; // Brown shingles
-    case "dome":
-      return 0x7a7a7a; // Gray metal
-    case "skillion":
-      return 0x888888;
-    default:
-      return 0x777777;
-  }
+  return 0xdddddd; // Uniform light gray roof
 }
 
-function materialToColor(material: string): number | null {
-  switch (material.toLowerCase()) {
-    case "brick":
-      return 0xb35a38;
-    case "stone":
-    case "limestone":
-      return 0xd4c4a0;
-    case "sandstone":
-      return 0xd9c9a0;
-    case "concrete":
-    case "cement":
-      return 0xbcbcbc;
-    case "glass":
-      return 0x88aacc;
-    case "wood":
-    case "timber":
-      return 0xa0825a;
-    case "metal":
-    case "steel":
-      return 0x999999;
-    case "plaster":
-    case "stucco":
-      return 0xe8dcc8;
-    default:
-      return null;
-  }
+function materialToColor(_material: string): number | null {
+  return null; // All buildings use white default
 }
 
 function typeToWallColor(type?: string): number {
   switch (type) {
-    case "residential":
-    case "house":
-    case "detached":
-    case "semidetached_house":
-    case "terrace":
-    case "bungalow":
-      return 0xd4c4a8; // Warm beige
-    case "apartments":
-      return 0xc8b898; // Slightly darker beige
-    case "commercial":
-    case "retail":
-    case "shop":
-    case "office":
-      return 0xb8c4d0; // Cool light blue-gray
-    case "industrial":
-    case "warehouse":
-      return 0xa8a098; // Warm gray
-    case "school":
-    case "university":
-    case "college":
-      return 0xc4b090; // Academic tan
-    case "hospital":
-    case "clinic":
-      return 0xd0c0c0; // Light pinkish
-    case "church":
-    case "cathedral":
-    case "chapel":
-      return 0xc8c0b0; // Stone
-    case "civic":
-    case "public":
-    case "government":
-      return 0xb0b8c4; // Institutional blue-gray
-    case "garage":
-    case "garages":
-    case "shed":
-      return 0xaaa8a0;
     default:
-      return 0xc8c4bc; // Neutral warm gray
+      return 0xffffff; // White
   }
 }
