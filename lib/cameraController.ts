@@ -467,7 +467,7 @@ export function updateStreetWalkMovement(
   const { w, a, s, d } = keyState;
   if (!w && !a && !s && !d) return;
 
-  const walkSpeed = 30 * deltaTime; // Slower walk speed for street level
+  const walkSpeed = 120 * deltaTime;
 
   // Forward direction = camera look direction projected onto XZ plane
   const forward = new THREE.Vector3();
