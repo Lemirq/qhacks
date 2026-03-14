@@ -319,14 +319,9 @@ export function applyImpactColors(
 
     group.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {
-        const mat = child.material as THREE.MeshStandardMaterial;
-        originals.push(mat.clone());
-
-        // Apply impact color with emissive glow for visibility
-        mat.color.setHex(color);
-        mat.emissive.setHex(color);
-        mat.emissiveIntensity = 0.3;
-        mat.needsUpdate = true;
+        originals.push(child.material as THREE.Material);
+        // MeshBasicMaterial ignores all scene lighting → flat, constant color
+        child.material = new THREE.MeshBasicMaterial({ color });
       }
     });
 
@@ -343,13 +338,9 @@ export function applyImpactColors(
 
       let idx = 0;
       group.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.material && idx < originals.length) {
-          const original = originals[idx] as THREE.MeshStandardMaterial;
-          const mat = child.material as THREE.MeshStandardMaterial;
-          mat.color.copy(original.color);
-          mat.emissive.copy(original.emissive);
-          mat.emissiveIntensity = original.emissiveIntensity;
-          mat.needsUpdate = true;
+        if (child instanceof THREE.Mesh && idx < originals.length) {
+          child.material.dispose();
+          child.material = originals[idx];
           idx++;
         }
       });

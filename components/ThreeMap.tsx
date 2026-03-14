@@ -2510,12 +2510,18 @@ export default function ThreeMap({
 
     removeWind();
 
-    const viz = createWindVisualization(buildingsDataRef.current, CityProjection);
-    windVizRef.current = viz;
-    groupsRef.current.dynamicObjects.add(viz.group);
-    console.log("✅ Wind visualization layer enabled");
+    let cancelled = false;
+    // createWindVisualization is async — yields to browser between row batches
+    // so clicking wind no longer freezes the app
+    createWindVisualization(buildingsDataRef.current, CityProjection).then((viz) => {
+      if (cancelled) { viz.dispose(); return; }
+      windVizRef.current = viz;
+      groupsRef.current?.dynamicObjects.add(viz.group);
+      console.log("✅ Wind visualization layer enabled");
+    });
 
     return () => {
+      cancelled = true;
       removeWind();
     };
   }, [showWindLayer, isReady]);

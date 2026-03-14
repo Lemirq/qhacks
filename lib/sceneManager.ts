@@ -53,10 +53,10 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
   groups.debug.visible = false;
 
   // Setup lighting
-  const ambientLight = new THREE.AmbientLight(0xc0d0e8, 0.9);
+  const ambientLight = new THREE.AmbientLight(0xc0d0e8, 1);
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xfff8f0, 1.6);
+  const directionalLight = new THREE.DirectionalLight(0xfff8f0, 1.8);
   directionalLight.position.set(500, 800, 300);
   directionalLight.castShadow = true;
 
@@ -75,7 +75,7 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
   scene.add(directionalLight);
 
   // Hemisphere light for natural sky/ground color bounce
-  const hemiLight = new THREE.HemisphereLight(0x88aacc, 0x444422, 0.4);
+  const hemiLight = new THREE.HemisphereLight(0x88aacc, 0x444422, 0.7);
   scene.add(hemiLight);
 
   // Fog object (density managed by time-of-day system, starts at 0)
@@ -109,7 +109,7 @@ export function createSceneManager(canvas: HTMLCanvasElement): SceneManager {
 
   // Tone mapping for realistic lighting
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 3;
 
   // Enable local clipping for building cross-section timeline
   renderer.localClippingEnabled = true;
