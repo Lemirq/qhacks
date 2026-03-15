@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import * as THREE from 'three';
 import { Building } from './Building';
 import { SelectionIndicator } from './SelectionIndicator';
+import { BuildingTransformGizmo } from './BuildingTransformGizmo';
 import { BuildingTrees } from './Trees';
 import type { BuildingInstance } from '@/lib/editor/types/buildingSpec';
 import { DEFAULT_TREE_CONFIG } from '@/lib/editor/types/buildingSpec';
@@ -10,9 +11,11 @@ interface BuildingWrapperProps {
   building: BuildingInstance;
   isSelected: boolean;
   onSelect: () => void;
+  onGizmoDragStart: () => void;
+  onGizmoDragEnd: () => void;
 }
 
-export function BuildingWrapper({ building, isSelected, onSelect }: BuildingWrapperProps) {
+export function BuildingWrapper({ building, isSelected, onSelect, onGizmoDragStart, onGizmoDragEnd }: BuildingWrapperProps) {
   const groupRef = useRef<THREE.Group>(null);
   const { placementMode, addBuilding, mergeMode, toggleBuildingSelection, selectedBuildingIds } = useBuildings();
   // Check if this building is selected in merge mode
@@ -60,6 +63,13 @@ export function BuildingWrapper({ building, isSelected, onSelect }: BuildingWrap
           buildingWidth={building.spec.width}
           buildingDepth={building.spec.depth}
           config={treeConfig}
+        />
+      )}
+      {isSelected && !placementMode && !mergeMode && (
+        <BuildingTransformGizmo
+          building={building}
+          onDragStart={onGizmoDragStart}
+          onDragEnd={onGizmoDragEnd}
         />
       )}
     </>

@@ -5,7 +5,6 @@ import { DimensionsForm } from './DimensionsForm';
 import { TextureSelector } from './TextureSelector';
 import { WindowForm } from './WindowForm';
 import { TreeForm } from './TreeForm';
-import { BlueprintUploader } from './BlueprintUploader';
 import { BuildingList } from './BuildingList';
 import { DEFAULT_BUILDING_SPEC } from '@/lib/editor/types/buildingSpec';
 
@@ -37,7 +36,7 @@ export function InputPanel() {
   };
 
   return (
-    <div className="w-full h-full bg-zinc-900/50 backdrop-blur-xl border-r border-white/10 flex flex-col">
+    <div className="w-full h-full flex flex-col border-r border-white/[0.08]" style={{ borderRadius: 0, background: 'rgba(18, 18, 22, 0.55)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
       {/* Fixed Header Section */}
       <div className="p-6 pb-4 border-b border-white/10">
         <div className="flex items-center justify-between mb-4">
@@ -51,7 +50,7 @@ export function InputPanel() {
 
       </div>
 
-      {/* Building Settings Section - 50% of panel */}
+      {/* Building Settings Section */}
       {selectedBuilding ? (
         <div className="flex-1 flex flex-col min-h-0 basis-1/2">
           {/* Settings Header with Reset */}
@@ -61,7 +60,7 @@ export function InputPanel() {
             </h3>
             <button
               onClick={handleReset}
-              className="px-4 py-2 rounded-full font-medium text-xs border-2 bg-amber-500/20 border-amber-400/30 text-amber-400 hover:bg-amber-500/30 hover:border-amber-400/50 transition-colors duration-200"
+              className="px-4 py-2 rounded-full font-medium text-xs border bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10 hover:border-white/20 hover:text-zinc-200 transition-colors duration-200"
             >
               Reset
             </button>
@@ -76,8 +75,8 @@ export function InputPanel() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                     activeTab === tab.id
-                      ? 'bg-white/10 text-amber-400 shadow-[0_2px_10px_-2px_rgba(245,158,11,0.2)]'
-                      : 'text-zinc-500 hover:text-amber-400 hover:bg-white/5'
+                      ? 'bg-white/10 text-white shadow-[0_2px_10px_-2px_rgba(255,255,255,0.1)]'
+                      : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
                   }`}
                 >
                   <span>{tab.icon}</span>
@@ -127,12 +126,6 @@ export function InputPanel() {
         </div>
       )}
 
-      {/* Blueprint Tracer - Fixed at Bottom */}
-      <div className="p-6 pt-4 border-t border-white/10">
-        <div className="bg-amber-500/10 p-4 rounded-xl border border-amber-400/20">
-          <BlueprintUploader />
-        </div>
-      </div>
     </div>
   );
 }

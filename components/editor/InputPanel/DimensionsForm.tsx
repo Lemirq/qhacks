@@ -9,10 +9,8 @@ interface DimensionsFormProps {
 
 export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormProps) {
   const { buildings } = useBuildings();
-  // Get current building
   const currentBuilding = buildings.find(b => b.id === buildingId);
 
-  // Check if a dimension change would cause collision
   const getMaxDimension = useCallback((dimension: 'width' | 'depth'): number => {
     if (!currentBuilding) return 50;
 
@@ -21,7 +19,7 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
     const currentZ = currentBuilding.position.z;
     const currentHeight = spec.floorHeight * spec.numberOfFloors;
 
-    let maxAllowed = 50; // Default max
+    let maxAllowed = 50;
 
     for (const other of buildings) {
       if (other.id === buildingId) continue;
@@ -33,36 +31,31 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
       const otherDepth = other.spec.depth;
       const otherHeight = other.spec.floorHeight * other.spec.numberOfFloors;
 
-      // Check if buildings overlap vertically
       const verticalOverlap = !(currentY + currentHeight <= otherY || otherY + otherHeight <= currentY);
       if (!verticalOverlap) continue;
 
       if (dimension === 'width') {
-        // Check Z overlap first
         const currentDepth = spec.depth;
         const zOverlap = !(currentZ + currentDepth / 2 <= otherZ - otherDepth / 2 ||
                           currentZ - currentDepth / 2 >= otherZ + otherDepth / 2);
 
         if (zOverlap) {
-          // Calculate max width before collision
           const distX = Math.abs(currentX - otherX);
           const maxWidth = (distX - otherWidth / 2) * 2;
           if (maxWidth > 0 && maxWidth < maxAllowed) {
-            maxAllowed = Math.max(5, maxWidth - 0.5); // Keep minimum of 5, subtract small buffer
+            maxAllowed = Math.max(5, maxWidth - 0.5);
           }
         }
       } else {
-        // Check X overlap first
         const currentWidth = spec.width;
         const xOverlap = !(currentX + currentWidth / 2 <= otherX - otherWidth / 2 ||
                           currentX - currentWidth / 2 >= otherX + otherWidth / 2);
 
         if (xOverlap) {
-          // Calculate max depth before collision
           const distZ = Math.abs(currentZ - otherZ);
           const maxDepth = (distZ - otherDepth / 2) * 2;
           if (maxDepth > 0 && maxDepth < maxAllowed) {
-            maxAllowed = Math.max(5, maxDepth - 0.5); // Keep minimum of 5, subtract small buffer
+            maxAllowed = Math.max(5, maxDepth - 0.5);
           }
         }
       }
@@ -71,7 +64,6 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
     return maxAllowed;
   }, [buildings, buildingId, currentBuilding, spec.depth, spec.width, spec.floorHeight, spec.numberOfFloors]);
 
-  // Check if there's a building stacked on top and calculate max height
   const getMaxHeight = useCallback((): { maxHeight: number; hasBuildingAbove: boolean } => {
     if (!currentBuilding) return { maxHeight: Infinity, hasBuildingAbove: false };
 
@@ -92,10 +84,8 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
       const otherWidth = other.spec.width;
       const otherDepth = other.spec.depth;
 
-      // Check if the other building is above this one (starts at or above current building's top)
       if (otherY <= currentY) continue;
 
-      // Check if they overlap in XZ plane
       const xOverlap = !(currentX + currentWidth / 2 <= otherX - otherWidth / 2 ||
                         currentX - currentWidth / 2 >= otherX + otherWidth / 2);
       const zOverlap = !(currentZ + currentDepth / 2 <= otherZ - otherDepth / 2 ||
@@ -114,138 +104,75 @@ export function DimensionsForm({ spec, onUpdate, buildingId }: DimensionsFormPro
   const maxDepth = getMaxDimension('depth');
   const { maxHeight, hasBuildingAbove } = getMaxHeight();
 
-  // Calculate max floors based on current floor height
   const maxFloors = hasBuildingAbove ? Math.max(1, Math.floor(maxHeight / spec.floorHeight)) : 20;
-  // Calculate max floor height based on current number of floors
   const maxFloorHeight = hasBuildingAbove ? Math.max(2.5, maxHeight / spec.numberOfFloors) : 6;
+
+  const sliderClass = "flex-4 h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-blue-400 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing";
+  const inputClass = "flex-1 px-3 py-2 border border-white/10 bg-white/5 rounded-lg text-sm text-center text-zinc-200 focus:border-blue-400 focus:outline-none transition-colors duration-200";
 
   return (
     <div className="space-y-6">
-      <h3 className="text-xl font-bold text-gray-800 mb-2">Dimensions</h3>
+      <h3 className="text-xl font-bold text-zinc-100 mb-2">Dimensions</h3>
 
       <div className="space-y-2">
-        <label className="block text-sm font-semibold text-gray-700">
-          Width (meters): <span className="text-amber-600">{spec.width}</span>
-          {maxWidth < 50 && <span className="text-orange-500 text-xs ml-2">(max: {maxWidth.toFixed(1)}m)</span>}
+        <label className="block text-sm font-semibold text-zinc-400">
+          Width (meters): <span className="text-blue-400">{spec.width}</span>
+          {maxWidth < 50 && <span className="text-zinc-500 text-xs ml-2">(max: {maxWidth.toFixed(1)}m)</span>}
         </label>
         <div className="flex items-center gap-3">
-          <input
-            type="range"
-            min="5"
-            max={maxWidth}
-            step="0.5"
-            value={Math.min(spec.width, maxWidth)}
-            onChange={(e) => onUpdate({ width: parseFloat(e.target.value) })}
-            className="flex-4 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
-          />
-          <input
-            type="number"
-            min="5"
-            max={maxWidth}
-            step="0.5"
-            value={spec.width}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value);
-              onUpdate({ width: Math.min(val, maxWidth) });
-            }}
-            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg text-sm text-center focus:border-amber-400 focus:outline-none transition-colors duration-200"
-          />
+          <input type="range" min="5" max={maxWidth} step="0.5" value={Math.min(spec.width, maxWidth)}
+            onChange={(e) => onUpdate({ width: parseFloat(e.target.value) })} className={sliderClass} />
+          <input type="number" min="5" max={maxWidth} step="0.5" value={spec.width}
+            onChange={(e) => { const val = parseFloat(e.target.value); onUpdate({ width: Math.min(val, maxWidth) }); }}
+            className={inputClass} />
         </div>
       </div>
 
       <div className="space-y-2">
-        <label className="block text-sm font-semibold text-gray-700">
-          Depth (meters): <span className="text-amber-600">{spec.depth}</span>
-          {maxDepth < 50 && <span className="text-orange-500 text-xs ml-2">(max: {maxDepth.toFixed(1)}m)</span>}
+        <label className="block text-sm font-semibold text-zinc-400">
+          Depth (meters): <span className="text-blue-400">{spec.depth}</span>
+          {maxDepth < 50 && <span className="text-zinc-500 text-xs ml-2">(max: {maxDepth.toFixed(1)}m)</span>}
         </label>
         <div className="flex items-center gap-3">
-          <input
-            type="range"
-            min="5"
-            max={maxDepth}
-            step="0.5"
-            value={Math.min(spec.depth, maxDepth)}
-            onChange={(e) => onUpdate({ depth: parseFloat(e.target.value) })}
-            className="flex-4 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
-          />
-          <input
-            type="number"
-            min="5"
-            max={maxDepth}
-            step="0.5"
-            value={spec.depth}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value);
-              onUpdate({ depth: Math.min(val, maxDepth) });
-            }}
-            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg text-sm text-center focus:border-amber-400 focus:outline-none transition-colors duration-200"
-          />
+          <input type="range" min="5" max={maxDepth} step="0.5" value={Math.min(spec.depth, maxDepth)}
+            onChange={(e) => onUpdate({ depth: parseFloat(e.target.value) })} className={sliderClass} />
+          <input type="number" min="5" max={maxDepth} step="0.5" value={spec.depth}
+            onChange={(e) => { const val = parseFloat(e.target.value); onUpdate({ depth: Math.min(val, maxDepth) }); }}
+            className={inputClass} />
         </div>
       </div>
 
       <div className="space-y-2">
-        <label className="block text-sm font-semibold text-gray-700">
-          Number of Floors: <span className="text-amber-600">{spec.numberOfFloors}</span>
-          {hasBuildingAbove && maxFloors < 20 && <span className="text-orange-500 text-xs ml-2">(max: {maxFloors})</span>}
+        <label className="block text-sm font-semibold text-zinc-400">
+          Number of Floors: <span className="text-blue-400">{spec.numberOfFloors}</span>
+          {hasBuildingAbove && maxFloors < 20 && <span className="text-zinc-500 text-xs ml-2">(max: {maxFloors})</span>}
         </label>
         <div className="flex items-center gap-3">
-          <input
-            type="range"
-            min="1"
-            max={maxFloors}
-            step="1"
-            value={Math.min(spec.numberOfFloors, maxFloors)}
-            onChange={(e) => onUpdate({ numberOfFloors: parseInt(e.target.value) })}
-            className="flex-4 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
-          />
-          <input
-            type="number"
-            min="1"
-            max={maxFloors}
-            step="1"
-            value={spec.numberOfFloors}
-            onChange={(e) => {
-              const val = parseInt(e.target.value);
-              onUpdate({ numberOfFloors: Math.min(val, maxFloors) });
-            }}
-            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg text-sm text-center focus:border-amber-400 focus:outline-none transition-colors duration-200"
-          />
+          <input type="range" min="1" max={maxFloors} step="1" value={Math.min(spec.numberOfFloors, maxFloors)}
+            onChange={(e) => onUpdate({ numberOfFloors: parseInt(e.target.value) })} className={sliderClass} />
+          <input type="number" min="1" max={maxFloors} step="1" value={spec.numberOfFloors}
+            onChange={(e) => { const val = parseInt(e.target.value); onUpdate({ numberOfFloors: Math.min(val, maxFloors) }); }}
+            className={inputClass} />
         </div>
       </div>
 
       <div className="space-y-2">
-        <label className="block text-sm font-semibold text-gray-700">
-          Floor Height (meters): <span className="text-amber-600">{spec.floorHeight}</span>
-          {hasBuildingAbove && maxFloorHeight < 6 && <span className="text-orange-500 text-xs ml-2">(max: {maxFloorHeight.toFixed(1)}m)</span>}
+        <label className="block text-sm font-semibold text-zinc-400">
+          Floor Height (meters): <span className="text-blue-400">{spec.floorHeight}</span>
+          {hasBuildingAbove && maxFloorHeight < 6 && <span className="text-zinc-500 text-xs ml-2">(max: {maxFloorHeight.toFixed(1)}m)</span>}
         </label>
         <div className="flex items-center gap-3">
-          <input
-            type="range"
-            min="2.5"
-            max={maxFloorHeight}
-            step="0.1"
-            value={Math.min(spec.floorHeight, maxFloorHeight)}
-            onChange={(e) => onUpdate({ floorHeight: parseFloat(e.target.value) })}
-            className="flex-4 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-amber-300 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing"
-          />
-          <input
-            type="number"
-            min="2.5"
-            max={maxFloorHeight}
-            step="0.1"
-            value={spec.floorHeight}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value);
-              onUpdate({ floorHeight: Math.min(val, maxFloorHeight) });
-            }}
-            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg text-sm text-center focus:border-amber-400 focus:outline-none transition-colors duration-200"
-          />
+          <input type="range" min="2.5" max={maxFloorHeight} step="0.1" value={Math.min(spec.floorHeight, maxFloorHeight)}
+            onChange={(e) => onUpdate({ floorHeight: parseFloat(e.target.value) })} className={sliderClass} />
+          <input type="number" min="2.5" max={maxFloorHeight} step="0.1" value={spec.floorHeight}
+            onChange={(e) => { const val = parseFloat(e.target.value); onUpdate({ floorHeight: Math.min(val, maxFloorHeight) }); }}
+            className={inputClass} />
         </div>
       </div>
 
-      <div className="pt-4 mt-6 border-t-2 border-gray-200">
-        <p className="text-base text-gray-700 bg-amber-50 px-4 py-3 rounded-lg border border-amber-200">
-          Total Height: <span className="font-bold text-amber-700">{(spec.numberOfFloors * spec.floorHeight).toFixed(1)}m</span>
+      <div className="pt-4 mt-6 border-t border-white/10">
+        <p className="text-sm text-zinc-400 bg-white/5 px-4 py-3 rounded-lg border border-white/10">
+          Total Height: <span className="font-bold text-zinc-200">{(spec.numberOfFloors * spec.floorHeight).toFixed(1)}m</span>
         </p>
       </div>
     </div>

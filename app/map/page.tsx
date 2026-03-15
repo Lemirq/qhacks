@@ -1531,8 +1531,8 @@ function MapPageContent() {
                     }
                     className={`w-full flex items-center justify-center gap-1.5 px-2.5 py-2 rounded text-[10px] font-black uppercase tracking-wider transition-colors ${
                       isPlacementMode
-                        ? "bg-accent-blue text-white"
-                        : "bg-white border border-accent-blue text-accent-blue hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        ? "bg-indigo-600 text-white"
+                        : "bg-indigo-600/20 border border-indigo-400/30 hover:border-indigo-400/50 hover:bg-indigo-600/30 text-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed"
                     }`}
                   >
                     <Plus size={12} />
@@ -2155,7 +2155,7 @@ function MapPageContent() {
                         background: `linear-gradient(to right, #003F7C 0%, #003F7C ${pct}%, #e2e8f0 ${pct}%, #e2e8f0 100%)`,
                       }}
                     />
-                    <div className="absolute top-4 left-0 right-0 h-4 pointer-events-none">
+                    <div className="absolute top-6 left-0 right-0 h-4 pointer-events-none">
                       {ticks.map(({ t, label }) => {
                         const tickPct = ((t - minT) / rangeMs) * 100;
                         return (
@@ -2215,23 +2215,6 @@ function MapPageContent() {
                 Today
               </button>
             </div>
-          </div>
-          <div className="flex gap-2 mb-4 pb-4 border-b border-white/10">
-            <button
-              type="button"
-              onClick={() => setDebugOverlayVisible(!debugOverlayVisible)}
-              className="flex-1 px-3 py-2 bg-white/10 hover:bg-white/15 text-white rounded-lg shadow text-xs font-medium transition-colors"
-              title="Toggle debug overlay (F3)"
-            >
-              {debugOverlayVisible ? "Hide" : "Show"} Debug
-            </button>
-            <button
-              type="button"
-              onClick={() => setDashboardVisible(!dashboardVisible)}
-              className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow text-xs font-medium transition-colors"
-            >
-              Analytics
-            </button>
           </div>
         </div>
       )}

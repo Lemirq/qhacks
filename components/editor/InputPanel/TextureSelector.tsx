@@ -30,13 +30,17 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
     }
   };
 
+  const btnBase = "w-full px-5 py-2.5 rounded-full text-sm font-medium border text-left transition-all duration-200 ease-out";
+  const btnActive = "bg-white/15 border-white/20 text-white";
+  const btnInactive = "bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10 hover:border-white/20 hover:text-zinc-200 hover:-translate-y-0.5 active:translate-y-0";
+
   return (
     <div className="space-y-6">
-      <h3 className="text-xl font-bold text-gray-800 mb-2">Textures</h3>
+      <h3 className="text-xl font-bold text-zinc-100 mb-2">Textures</h3>
 
       {/* Wall Texture */}
       <div className="space-y-3">
-        <label className="block text-sm font-semibold text-gray-700 mb-3">
+        <label className="block text-sm font-semibold text-zinc-400 mb-3">
           Wall Texture
         </label>
         <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
@@ -44,10 +48,8 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
             <button
               key={texture.name}
               onClick={() => onUpdate({ wallTexture: texture.name, customWallTexture: undefined })}
-              className={`w-full px-5 py-2.5 rounded-full text-sm font-medium border-2 text-left transition-all duration-200 ease-out ${
-                spec.wallTexture === texture.name && !spec.customWallTexture
-                  ? 'bg-amber-500 border-amber-400 text-white shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)]'
-                  : 'bg-gray-100 border-amber-400/60 text-amber-700 hover:bg-amber-500 hover:border-amber-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)] hover:-translate-y-0.5 active:translate-y-0'
+              className={`${btnBase} ${
+                spec.wallTexture === texture.name && !spec.customWallTexture ? btnActive : btnInactive
               }`}
             >
               {texture.displayName}
@@ -57,23 +59,22 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
 
         <div className="mt-3">
           <label className="block">
-            <span className="text-xs font-semibold text-gray-600 mb-2 block">Upload Custom Texture</span>
+            <span className="text-xs font-semibold text-zinc-500 mb-2 block">Upload Custom Texture</span>
             <input
               type="file"
               accept="image/*"
               onChange={handleWallTextureUpload}
-              className="block w-full text-sm text-gray-600
+              className="block w-full text-sm text-zinc-500
                 file:mr-4 file:py-2.5 file:px-5
-                file:rounded-full file:border-2
+                file:rounded-full file:border file:border-white/10
                 file:text-sm file:font-medium
-                file:bg-gray-100 file:border-amber-400/60 file:text-amber-700
-                hover:file:bg-amber-500 hover:file:border-amber-400 hover:file:text-white
-                file:cursor-pointer file:transition-all file:duration-200
-                file:shadow-md hover:file:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)] hover:file:-translate-y-0.5"
+                file:bg-white/5 file:text-zinc-300
+                hover:file:bg-white/10 hover:file:border-white/20 hover:file:text-white
+                file:cursor-pointer file:transition-all file:duration-200"
             />
           </label>
           {spec.customWallTexture && (
-            <p className="mt-2 text-xs font-semibold text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+            <p className="mt-2 text-xs font-semibold text-green-400 bg-green-500/10 px-3 py-2 rounded-lg border border-green-400/20">
               ✓ Custom texture loaded
             </p>
           )}
@@ -82,7 +83,7 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
 
       {/* Window Texture */}
       <div className="space-y-3">
-        <label className="block text-sm font-semibold text-gray-700 mb-3">
+        <label className="block text-sm font-semibold text-zinc-400 mb-3">
           Window Texture
         </label>
         <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
@@ -90,10 +91,8 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
             <button
               key={texture.name}
               onClick={() => onUpdate({ windowTexture: texture.name, customWindowTexture: undefined })}
-              className={`w-full px-5 py-2.5 rounded-full text-sm font-medium border-2 text-left transition-all duration-200 ease-out ${
-                spec.windowTexture === texture.name && !spec.customWindowTexture
-                  ? 'bg-amber-500 border-amber-400 text-white shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)]'
-                  : 'bg-gray-100 border-amber-400/60 text-amber-700 hover:bg-amber-500 hover:border-amber-400 hover:text-white hover:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)] hover:-translate-y-0.5 active:translate-y-0'
+              className={`${btnBase} ${
+                spec.windowTexture === texture.name && !spec.customWindowTexture ? btnActive : btnInactive
               }`}
             >
               {texture.displayName}
@@ -103,23 +102,22 @@ export function TextureSelector({ spec, onUpdate }: TextureSelectorProps) {
 
         <div className="mt-3">
           <label className="block">
-            <span className="text-xs font-semibold text-gray-600 mb-2 block">Upload Custom Texture</span>
+            <span className="text-xs font-semibold text-zinc-500 mb-2 block">Upload Custom Texture</span>
             <input
               type="file"
               accept="image/*"
               onChange={handleWindowTextureUpload}
-              className="block w-full text-sm text-gray-600
+              className="block w-full text-sm text-zinc-500
                 file:mr-4 file:py-2.5 file:px-5
-                file:rounded-full file:border-2
+                file:rounded-full file:border file:border-white/10
                 file:text-sm file:font-medium
-                file:bg-gray-100 file:border-amber-400/60 file:text-amber-700
-                hover:file:bg-amber-500 hover:file:border-amber-400 hover:file:text-white
-                file:cursor-pointer file:transition-all file:duration-200
-                file:shadow-md hover:file:shadow-[0_8px_25px_-5px_rgba(245,158,11,0.5)] hover:file:-translate-y-0.5"
+                file:bg-white/5 file:text-zinc-300
+                hover:file:bg-white/10 hover:file:border-white/20 hover:file:text-white
+                file:cursor-pointer file:transition-all file:duration-200"
             />
           </label>
           {spec.customWindowTexture && (
-            <p className="mt-2 text-xs font-semibold text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+            <p className="mt-2 text-xs font-semibold text-green-400 bg-green-500/10 px-3 py-2 rounded-lg border border-green-400/20">
               ✓ Custom texture loaded
             </p>
           )}

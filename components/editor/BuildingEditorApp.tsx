@@ -14,7 +14,7 @@ export default function BuildingEditorApp() {
 
   return (
     <BuildingsProvider>
-      <div className="flex flex-col h-screen w-screen overflow-hidden bg-zinc-950">
+      <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#222222]">
         {/* Header */}
         <header className="glass z-10 px-4 py-3 flex items-center justify-between border-b border-white/10">
           <div>

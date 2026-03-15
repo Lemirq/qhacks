@@ -4,7 +4,6 @@ import { BuildingSpecification } from '@/lib/editor/types/buildingSpec';
 import {
   createBuildingBody,
   createWindows,
-  createDoor,
 } from '@/lib/editor/utils/geometryBuilders';
 import { getTexturePath, loadTexture, loadTextureFromDataURL } from '@/lib/editor/utils/textureLoader';
 
@@ -49,10 +48,6 @@ export function Building({ spec }: BuildingProps) {
     // Create windows
     const windows = createWindows(spec);
     group.add(windows);
-
-    // Create door
-    const door = createDoor(spec);
-    group.add(door);
 
     return group;
   }, [spec]);

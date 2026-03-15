@@ -54,15 +54,6 @@ export interface BuildingSpecification {
   // Wall color override (hex string, e.g. "#cc3333")
   wallColor?: string;
 
-  // Door
-  doorWidth: number;        // meters
-  doorHeight: number;       // meters
-  doorPosition: number;     // 0-1, position around building perimeter
-
-  // Blueprint (optional)
-  footprint?: Array<[number, number]>;  // polygon vertices [x, z]
-  blueprintImage?: string;  // data URL
-
   // Trees/Landscaping
   treeConfig?: TreeConfig;
 }
@@ -108,9 +99,6 @@ export const DEFAULT_BUILDING_SPEC: BuildingSpecification = {
   windowRows: 4,
   windowWidth: 1.2,
   windowHeight: 1.8,
-  doorWidth: 1.5,
-  doorHeight: 2.4,
-  doorPosition: 0.5,
   treeConfig: DEFAULT_TREE_CONFIG,
 };
 

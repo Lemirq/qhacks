@@ -5,30 +5,7 @@ import { getTexturePath, loadTexture, loadTextureFromDataURL } from '@/lib/edito
 export function createBuildingBody(spec: BuildingSpecification): THREE.Mesh {
   const totalHeight = spec.floorHeight * spec.numberOfFloors;
 
-  let geometry: THREE.BufferGeometry;
-
-  if (spec.footprint && spec.footprint.length > 2) {
-    // Use extruded geometry from polygon footprint
-    const shape = new THREE.Shape();
-    spec.footprint.forEach((point, index) => {
-      if (index === 0) {
-        shape.moveTo(point[0], point[1]);
-      } else {
-        shape.lineTo(point[0], point[1]);
-      }
-    });
-
-    geometry = new THREE.ExtrudeGeometry(shape, {
-      depth: totalHeight,
-      bevelEnabled: false,
-    });
-
-    // Rotate so extrusion goes upward along Y axis
-    geometry.rotateX(Math.PI / 2);
-  } else {
-    // Simple box geometry
-    geometry = new THREE.BoxGeometry(spec.width, totalHeight, spec.depth);
-  }
+  const geometry = new THREE.BoxGeometry(spec.width, totalHeight, spec.depth);
 
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff,  // White base so texture shows correctly
@@ -346,68 +323,6 @@ export function createWindows(spec: BuildingSpecification): THREE.Group {
       }
     }
   }
-
-  return group;
-}
-
-export function createDoor(spec: BuildingSpecification): THREE.Group {
-  const group = new THREE.Group();
-
-  const doorWidth = spec.doorWidth || 1.5;
-  const doorHeight = spec.doorHeight || 2.4;
-  const doorDepth = 0.05;
-  const doorPosition = spec.doorPosition ?? 0.5;  // 0-1 around perimeter
-
-  const doorMaterial = new THREE.MeshStandardMaterial({
-    color: 0x8B4513,  // Brown door
-  });
-
-  const frameMaterial = new THREE.MeshStandardMaterial({
-    color: 0x654321,  // Darker brown frame
-  });
-
-  // Door panel
-  const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, doorDepth);
-  const door = new THREE.Mesh(doorGeometry, doorMaterial);
-
-  // Frame
-  const frameGeometry = new THREE.BoxGeometry(doorWidth + 0.1, doorHeight + 0.05, doorDepth + 0.02);
-  const frame = new THREE.Mesh(frameGeometry, frameMaterial);
-
-  group.add(frame);
-  group.add(door);
-
-  // Calculate position around building perimeter
-  // Perimeter: front (0-0.25), right (0.25-0.5), back (0.5-0.75), left (0.75-1)
-  const perimeter = 2 * (spec.width + spec.depth);
-  const perimeterPos = doorPosition * perimeter;
-
-  let x = 0, z = 0, rotation = 0;
-
-  if (perimeterPos < spec.width) {
-    // Front face
-    x = -spec.width / 2 + perimeterPos;
-    z = spec.depth / 2 + doorDepth / 2;
-    rotation = 0;
-  } else if (perimeterPos < spec.width + spec.depth) {
-    // Right face
-    x = spec.width / 2 + doorDepth / 2;
-    z = spec.depth / 2 - (perimeterPos - spec.width);
-    rotation = Math.PI / 2;
-  } else if (perimeterPos < 2 * spec.width + spec.depth) {
-    // Back face
-    x = spec.width / 2 - (perimeterPos - spec.width - spec.depth);
-    z = -spec.depth / 2 - doorDepth / 2;
-    rotation = Math.PI;
-  } else {
-    // Left face
-    x = -spec.width / 2 - doorDepth / 2;
-    z = -spec.depth / 2 + (perimeterPos - 2 * spec.width - spec.depth);
-    rotation = -Math.PI / 2;
-  }
-
-  group.position.set(x, doorHeight / 2, z);
-  group.rotation.y = rotation;
 
   return group;
 }

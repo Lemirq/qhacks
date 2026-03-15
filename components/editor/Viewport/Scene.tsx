@@ -19,6 +19,7 @@ function SceneContent({ sceneRef }: SceneContentProps) {
   const gridPlaneRef = useRef<THREE.Mesh>(null);
   const [ghostPosition, setGhostPosition] = useState<{ x: number; y: number; z: number } | null>(null);
   const [isSnapped, setIsSnapped] = useState(false);
+  const [orbitEnabled, setOrbitEnabled] = useState(true);
 
   // Sync scene ref
   useEffect(() => {
@@ -197,10 +198,10 @@ function SceneContent({ sceneRef }: SceneContentProps) {
           args={[100, 100]}
           cellSize={1}
           cellThickness={0.5}
-          cellColor="#a0a0a0"
+          cellColor="#2a3a4a"
           sectionSize={5}
           sectionThickness={1}
-          sectionColor="#707070"
+          sectionColor="#3a5068"
           fadeDistance={100}
           fadeStrength={1}
           infiniteGrid
@@ -212,7 +213,7 @@ function SceneContent({ sceneRef }: SceneContentProps) {
         <group position={[ghostPosition.x, ghostPosition.y + (DEFAULT_BUILDING_SPEC.floorHeight * DEFAULT_BUILDING_SPEC.numberOfFloors) / 2, ghostPosition.z]}>
           <mesh>
             <boxGeometry args={[DEFAULT_BUILDING_SPEC.width, DEFAULT_BUILDING_SPEC.floorHeight * DEFAULT_BUILDING_SPEC.numberOfFloors, DEFAULT_BUILDING_SPEC.depth]} />
-            <meshStandardMaterial color={isSnapped ? "#22c55e" : "#f59e0b"} transparent opacity={0.5} />
+            <meshStandardMaterial color={isSnapped ? "#22c55e" : "#60a5fa"} transparent opacity={0.5} />
           </mesh>
         </group>
       )}
@@ -224,11 +225,14 @@ function SceneContent({ sceneRef }: SceneContentProps) {
           building={building}
           isSelected={building.id === selectedBuildingId}
           onSelect={() => selectBuilding(building.id)}
+          onGizmoDragStart={() => setOrbitEnabled(false)}
+          onGizmoDragEnd={() => setOrbitEnabled(true)}
         />
       ))}
 
       {/* Controls */}
       <OrbitControls
+        enabled={orbitEnabled}
         enableDamping
         dampingFactor={0.05}
         minDistance={10}
@@ -244,16 +248,16 @@ interface SceneProps {
 
 export function Scene({ sceneRef }: SceneProps) {
   return (
-    <div className="w-full h-full bg-sky-100">
+    <div className="w-full h-full bg-[#222222]">
       <Canvas
         camera={{ position: [30, 30, 30], fov: 50 }}
         gl={{
           preserveDrawingBuffer: true,
           alpha: false,
-          toneMapping: THREE.NoToneMapping,  // Prevent darkening of textures
+          toneMapping: THREE.NoToneMapping,
         }}
-        scene={{ background: new THREE.Color('#ffffff') }}
-        style={{ background: '#ffffff' }}
+        scene={{ background: new THREE.Color('#222222') }}
+        style={{ background: '#222222' }}
       >
         <SceneContent sceneRef={sceneRef} />
       </Canvas>
