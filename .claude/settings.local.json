@@ -26,7 +26,9 @@
       "Bash(git -C \"c:\\\\Users\\\\phine\\\\OneDrive\\\\Laptop\\\\HACKATHON\\\\qhacks\\\\qhacks\" log --oneline)",
       "Bash(git -C \"c:\\\\Users\\\\phine\\\\OneDrive\\\\Laptop\\\\HACKATHON\\\\qhacks\\\\qhacks\" config user.name:*)",
       "Bash(git -C \"c:\\\\Users\\\\phine\\\\OneDrive\\\\Laptop\\\\HACKATHON\\\\qhacks\\\\qhacks\" config user.email)",
-      "Bash(git -C \"c:\\\\Users\\\\phine\\\\OneDrive\\\\Laptop\\\\HACKATHON\\\\qhacks\\\\qhacks\" config --get remote.origin.url)"
+      "Bash(git -C \"c:\\\\Users\\\\phine\\\\OneDrive\\\\Laptop\\\\HACKATHON\\\\qhacks\\\\qhacks\" config --get remote.origin.url)",
+      "Bash(find . -maxdepth 2 -type f -name README* -o -name package.json -o -name tsconfig.json)",
+      "Bash(pdftotext \"/Users/notjackl3/Programming/qhacks/_2026 MIC - Participant''''s Information Package.pdf\" -)"
     ],
     "additionalDirectories": [
       "c:\\Users\\phine\\OneDrive\\Laptop\\HACKATHON\\qhacks\\qhacks\\public\\sounds",
