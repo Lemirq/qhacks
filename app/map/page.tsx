@@ -823,43 +823,7 @@ function MapPageContent() {
             />
           </div>
         )}
-        {showEnvironmentalReport && (
-          <div className="absolute inset-0 z-30 pointer-events-auto">
-            <EnvironmentalReportModal
-              visible={showEnvironmentalReport}
-              onClose={() => setShowEnvironmentalReport(false)}
-              buildings={buildingsActiveAtTimeline}
-              snapshot={{
-                timelineDate,
-                co2Emissions: buildingMetrics.co2Emissions,
-                energyConsumption: buildingMetrics.energyConsumption,
-                waterUsage: buildingMetrics.waterUsage,
-                totalFootprint: buildingMetrics.totalFootprint,
-                materialComplexity: buildingMetrics.materialComplexity,
-                sustainabilityScore: buildingMetrics.sustainabilityScore,
-                populationHappiness,
-                avgDb,
-                activeCount,
-              }}
-            />
-          </div>
-        )}
-        {/* Drainage Panel */}
-        <DrainagePanel
-          visible={showDrainagePanel}
-          onClose={() => setShowDrainagePanel(false)}
-          buildings={buildingsActiveAtTimeline}
-        />
-        {/* Stakeholder Impact Panel */}
-        <StakeholderImpactPanel
-          analysis={stakeholderAnalysis}
-          visible={showStakeholderPanel}
-          onClose={() => setShowStakeholderPanel(false)}
-          radius={stakeholderRadius}
-          onRadiusChange={setStakeholderRadius}
-        />
-        {/* Traffic Impact Panel */}
-{/* TrafficImpactPanel is now rendered inline in the right sidebar */}
+        {/* All analysis panels now render inline in the right sidebar */}
       </div>
 
       {/* SIDEBARS CONTAINER */}
@@ -1301,11 +1265,47 @@ function MapPageContent() {
           </button>
         )}
         <aside
-          className={`absolute right-6 top-6 w-80 pointer-events-auto sidebar-transition ${placedBuildings.length > 0 && !showEnvironmentalReport ? "bottom-30" : "bottom-6"} ${!rightSidebarOpen ? "hidden" : ""}`}
+          className={`absolute right-6 top-6 w-80 pointer-events-auto sidebar-transition ${placedBuildings.length > 0 ? "bottom-30" : "bottom-6"} ${!rightSidebarOpen ? "hidden" : ""}`}
         >
           <div className="glass rounded-lg p-5 h-full overflow-y-auto custom-scrollbar">
-            {/* Traffic controls */}
 
+            {/* ── INLINE ANALYSIS PANELS ── */}
+            {/* When an analysis panel is active, it replaces the normal sidebar content */}
+            {showEnvironmentalReport ? (
+              <EnvironmentalReportModal
+                visible={showEnvironmentalReport}
+                onClose={() => setShowEnvironmentalReport(false)}
+                buildings={buildingsActiveAtTimeline}
+                snapshot={{
+                  timelineDate,
+                  co2Emissions: buildingMetrics.co2Emissions,
+                  energyConsumption: buildingMetrics.energyConsumption,
+                  waterUsage: buildingMetrics.waterUsage,
+                  totalFootprint: buildingMetrics.totalFootprint,
+                  materialComplexity: buildingMetrics.materialComplexity,
+                  sustainabilityScore: buildingMetrics.sustainabilityScore,
+                  populationHappiness,
+                  avgDb,
+                  activeCount,
+                }}
+              />
+            ) : showDrainagePanel ? (
+              <DrainagePanel
+                visible={showDrainagePanel}
+                onClose={() => setShowDrainagePanel(false)}
+                buildings={buildingsActiveAtTimeline}
+              />
+            ) : showStakeholderPanel ? (
+              <StakeholderImpactPanel
+                analysis={stakeholderAnalysis}
+                visible={showStakeholderPanel}
+                onClose={() => setShowStakeholderPanel(false)}
+                radius={stakeholderRadius}
+                onRadiusChange={setStakeholderRadius}
+              />
+            ) : (<>
+
+            {/* ── NORMAL SIDEBAR CONTENT ── */}
             {/* Header */}
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/10">
               <div className="flex flex-col gap-0.5">
@@ -2209,12 +2209,13 @@ function MapPageContent() {
                 <span className="text-[11px] font-black uppercase tracking-tight">Fly to Downtown</span>
               </button>
             </div>
+            </>)}
           </div>
         </aside>
       </div>
 
-      {/* FIXED BOTTOM PANEL: INTEGRATED TIMELINE - only show when at least one building is placed and not in environmental report view */}
-      {placedBuildings.length > 0 && !showEnvironmentalReport && (
+      {/* FIXED BOTTOM PANEL: INTEGRATED TIMELINE - only show when at least one building is placed */}
+      {placedBuildings.length > 0 && (
         <div className="absolute bottom-0 left-0 right-0 z-50 glass border-t border-white/10 px-8 py-4 flex items-center gap-10 shadow-lg">
           {/* Simulation Controls */}
           <div className="flex items-center gap-4 shrink-0 border-r border-white/10 pr-10">
