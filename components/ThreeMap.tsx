@@ -16,7 +16,7 @@ import { createSceneManager, handleResize } from "@/lib/sceneManager";
 // Rendering systems
 import { fetchBuildings } from "@/lib/buildingData";
 import { renderBuildings } from "@/lib/buildingRenderer";
-import { renderRoads, renderTrafficHeatmap, renderCongestionMarkers } from "@/lib/roadRenderer";
+import { renderRoads, renderTrafficHeatmap, renderCongestionMarkers, renderBarricadeMarkers } from "@/lib/roadRenderer";
 import { createGround, fetchSatelliteImagery, createSky, createCelestialBodies } from "@/lib/environmentRenderer";
 import { computeTimeOfDay, applyTimeOfDay } from "@/lib/sun/timeOfDay";
 import { analyzeShadowImpact, applyShadowOverlay as applyShadowOverlayFn } from "@/lib/sun/shadowAnalysis";
@@ -169,6 +169,12 @@ interface ThreeMapProps {
   trafficImpactResult?: import("@/lib/trafficImpact").TrafficImpactResult | null;
   /** Called once after road network is loaded, passing the RoadNetwork instance */
   onRoadNetworkLoaded?: (roadNetwork: RoadNetwork) => void;
+  /** Whether barricade placement mode is active */
+  isBarricadeMode?: boolean;
+  /** Set of barricaded edge IDs */
+  barricadedEdgeIds?: Set<string>;
+  /** Called when user clicks a road to toggle barricade */
+  onBarricadeToggle?: (edgeId: string) => void;
   /** When true, mouse movement shows a street-view pin preview; click triggers street view */
   isStreetViewSelectionMode?: boolean;
   /** Map base style: satellite imagery or light/street map */
@@ -522,6 +528,9 @@ export default function ThreeMap({
   showTrafficHeatmap = false,
   trafficImpactResult,
   onRoadNetworkLoaded,
+  isBarricadeMode = false,
+  barricadedEdgeIds,
+  onBarricadeToggle,
   isStreetViewSelectionMode = false,
   mapStyle = "satellite",
 }: ThreeMapProps) {
@@ -644,7 +653,7 @@ export default function ThreeMap({
     if (!isReady || !groupsRef.current) return;
     const groups = groupsRef.current;
 
-    // Remove existing heatmap/markers
+    // Remove existing heatmap/markers/barricades
     if (trafficHeatmapGroupRef.current) {
       groups.dynamicObjects.remove(trafficHeatmapGroupRef.current);
       trafficHeatmapGroupRef.current = null;
@@ -653,17 +662,26 @@ export default function ThreeMap({
       groups.dynamicObjects.remove(congestionMarkersGroupRef.current);
       congestionMarkersGroupRef.current = null;
     }
+    if (barricadeMarkersGroupRef.current) {
+      groups.dynamicObjects.remove(barricadeMarkersGroupRef.current);
+      barricadeMarkersGroupRef.current = null;
+    }
 
     if (!showTrafficHeatmap || !trafficImpactResult || !roadNetworkRef.current) return;
 
     const roadNetwork = roadNetworkRef.current;
     const allEdges = roadNetwork.getEdges();
 
-    // Render heatmap overlay on impacted roads
+    // Extract building positions for gradient rendering
+    const buildingPositions: [number, number][] = trafficImpactResult.buildings.map(b => b.position);
+
+    // Render heatmap overlay on impacted roads with distance-based gradient
     const heatmapGroup = renderTrafficHeatmap(
       trafficImpactResult.edgeImpact,
       allEdges,
       CityProjection,
+      buildingPositions,
+      trafficImpactResult.maxImpactRadius,
     );
     groups.dynamicObjects.add(heatmapGroup);
     trafficHeatmapGroupRef.current = heatmapGroup;
@@ -684,6 +702,13 @@ export default function ThreeMap({
       congestionMarkersGroupRef.current = markersGroup;
     }
 
+    // Render barricade markers if any
+    if (barricadedEdgeIds && barricadedEdgeIds.size > 0) {
+      const barricadeGroup = renderBarricadeMarkers(barricadedEdgeIds, allEdges, CityProjection);
+      groups.dynamicObjects.add(barricadeGroup);
+      barricadeMarkersGroupRef.current = barricadeGroup;
+    }
+
     return () => {
       if (trafficHeatmapGroupRef.current) {
         groups.dynamicObjects.remove(trafficHeatmapGroupRef.current);
@@ -693,8 +718,12 @@ export default function ThreeMap({
         groups.dynamicObjects.remove(congestionMarkersGroupRef.current);
         congestionMarkersGroupRef.current = null;
       }
+      if (barricadeMarkersGroupRef.current) {
+        groups.dynamicObjects.remove(barricadeMarkersGroupRef.current);
+        barricadeMarkersGroupRef.current = null;
+      }
     };
-  }, [showTrafficHeatmap, trafficImpactResult, isReady]);
+  }, [showTrafficHeatmap, trafficImpactResult, barricadedEdgeIds, isReady]);
 
   // Swap ground tile textures when mapStyle changes
   useEffect(() => {
@@ -922,6 +951,7 @@ export default function ThreeMap({
   const speedZonesGroupRef = useRef<THREE.Group | null>(null);
   const trafficHeatmapGroupRef = useRef<THREE.Group | null>(null);
   const congestionMarkersGroupRef = useRef<THREE.Group | null>(null);
+  const barricadeMarkersGroupRef = useRef<THREE.Group | null>(null);
   const carMeshesRef = useRef<Record<string, THREE.Mesh>>({});
   const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
   const [, setCarPanelTick] = useState(0);
@@ -1969,6 +1999,25 @@ export default function ThreeMap({
         }
       }
 
+      // Barricade mode: raycast against road meshes to toggle barricades
+      if (isBarricadeMode && onBarricadeToggle && groupsRef.current) {
+        const roadMeshes = groupsRef.current.staticGeometry.children.filter(
+          (child) => child.userData.isRoad === true,
+        );
+        const roadIntersects = raycasterRef.current.intersectObjects(roadMeshes, true);
+        if (roadIntersects.length > 0) {
+          let target: THREE.Object3D | null = roadIntersects[0].object;
+          while (target && !target.userData.isRoad) target = target.parent;
+          if (target && target.name.startsWith("road-")) {
+            const edgeId = target.name.replace("road-", "");
+            // Toggle both forward and reverse edges
+            const baseId = edgeId.replace(/-reverse$/, "");
+            onBarricadeToggle(baseId);
+            return;
+          }
+        }
+      }
+
       // For placement mode, check for building collisions first
       if (isPlacementMode && buildingIntersects.length > 0) {
         // Prevent placing a building on top of another building
@@ -2729,6 +2778,62 @@ export default function ThreeMap({
       removeWind();
     };
   }, [showWindLayer, isReady]);
+
+  // Barricade mode: crosshair cursor and road hover highlight
+  useEffect(() => {
+    if (!isBarricadeMode || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    canvas.style.cursor = "crosshair";
+
+    let highlightedMesh: THREE.Mesh | null = null;
+    let originalEmissive: THREE.Color | null = null;
+
+    function handleMouseMove(event: MouseEvent) {
+      if (!canvasRef.current || !cameraRef.current || !groupsRef.current) return;
+
+      // Restore previous highlight
+      if (highlightedMesh && originalEmissive) {
+        const mat = highlightedMesh.material as THREE.MeshStandardMaterial;
+        if (mat.emissive) mat.emissive.copy(originalEmissive);
+        highlightedMesh = null;
+        originalEmissive = null;
+      }
+
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      raycasterRef.current.setFromCamera(mouse, cameraRef.current);
+
+      const roadMeshes = groupsRef.current.staticGeometry.children.filter(
+        (child) => child.userData.isRoad === true,
+      );
+      const hits = raycasterRef.current.intersectObjects(roadMeshes, true);
+      if (hits.length > 0) {
+        let target: THREE.Object3D | null = hits[0].object;
+        while (target && !target.userData.isRoad) target = target.parent;
+        if (target && target instanceof THREE.Mesh) {
+          const mat = target.material as THREE.MeshStandardMaterial;
+          if (mat.emissive) {
+            originalEmissive = mat.emissive.clone();
+            mat.emissive.set(0xff4444);
+            highlightedMesh = target;
+          }
+        }
+      }
+    }
+
+    canvas.addEventListener("mousemove", handleMouseMove);
+    return () => {
+      canvas.removeEventListener("mousemove", handleMouseMove);
+      canvas.style.cursor = "";
+      if (highlightedMesh && originalEmissive) {
+        const mat = highlightedMesh.material as THREE.MeshStandardMaterial;
+        if (mat.emissive) mat.emissive.copy(originalEmissive);
+      }
+    };
+  }, [isBarricadeMode]);
 
   // Update ghost position on mouse move
   useEffect(() => {

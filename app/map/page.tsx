@@ -61,7 +61,7 @@ import StakeholderImpactPanel from "@/components/StakeholderImpactPanel";
 import type { ShadowAnalysisSummary, BuildingShadowImpact } from "@/lib/sun/shadowAnalysis";
 import { analyzeStakeholderImpact, type StakeholderAnalysis, type ImpactRadius } from "@/lib/stakeholderImpact";
 import type { Building } from "@/lib/buildingData";
-import { analyzeTrafficImpact, type TrafficImpactResult } from "@/lib/trafficImpact";
+import { analyzeTrafficImpact, fetchMapboxCongestion, type TrafficImpactResult, type MapboxCongestion } from "@/lib/trafficImpact";
 import { TrafficImpactPanel } from "@/components/TrafficImpactPanel";
 import { RoadNetwork } from "@/lib/roadNetwork";
 
@@ -160,6 +160,16 @@ function MapPageContent() {
   const [trafficImpactResult, setTrafficImpactResult] = useState<TrafficImpactResult | null>(null);
   const roadNetworkRef = useRef<RoadNetwork | null>(null);
   const [roadNetworkReady, setRoadNetworkReady] = useState(false);
+
+  // Barricade / road block state
+  const [barricadedEdgeIds, setBarricadedEdgeIds] = useState<Set<string>>(new Set());
+  const [isBarricadeMode, setIsBarricadeMode] = useState(false);
+
+  // Mapbox real traffic data
+  const mapboxCongestionRef = useRef<Map<string, MapboxCongestion> | null>(null);
+  const [mapboxDataTimestamp, setMapboxDataTimestamp] = useState<Date | null>(null);
+  const [isLoadingMapbox, setIsLoadingMapbox] = useState(false);
+  const [useRealTrafficData, setUseRealTrafficData] = useState(false);
 
   // Shadow analysis state
   const [shadowEnabled, setShadowEnabled] = useState(false);
@@ -387,7 +397,7 @@ function MapPageContent() {
     setStakeholderAnalysis(result);
   }, [showStakeholderPanel, showImpactColors, placedBuildings, stakeholderRadius]);
 
-  // Traffic impact analysis: re-analyze whenever placed buildings change
+  // Traffic impact analysis: re-analyze whenever placed buildings or barricades change
   useEffect(() => {
     if (!showTrafficImpact || placedBuildings.length === 0 || !roadNetworkRef.current) {
       setTrafficImpactResult(null);
@@ -405,9 +415,43 @@ function MapPageContent() {
       setTrafficImpactResult(null);
       return;
     }
-    const result = analyzeTrafficImpact(buildingsForAnalysis, roadNetworkRef.current);
+    const result = analyzeTrafficImpact(buildingsForAnalysis, roadNetworkRef.current, {
+      barricadedEdgeIds: barricadedEdgeIds.size > 0 ? barricadedEdgeIds : undefined,
+      mapboxCongestion: useRealTrafficData ? mapboxCongestionRef.current ?? undefined : undefined,
+    });
     setTrafficImpactResult(result);
-  }, [showTrafficImpact, placedBuildings, roadNetworkReady]);
+  }, [showTrafficImpact, placedBuildings, roadNetworkReady, barricadedEdgeIds, useRealTrafficData, mapboxDataTimestamp]);
+
+  // Fetch Mapbox traffic data
+  const handleFetchMapboxData = async () => {
+    if (!roadNetworkRef.current) return;
+    setIsLoadingMapbox(true);
+    try {
+      const data = await fetchMapboxCongestion(roadNetworkRef.current);
+      mapboxCongestionRef.current = data;
+      setMapboxDataTimestamp(new Date());
+      setUseRealTrafficData(data.size > 0);
+    } catch {
+      console.warn("Failed to fetch Mapbox traffic data");
+    } finally {
+      setIsLoadingMapbox(false);
+    }
+  };
+
+  // Barricade toggle handler
+  const handleBarricadeToggle = (edgeId: string) => {
+    setBarricadedEdgeIds(prev => {
+      const next = new Set(prev);
+      if (next.has(edgeId)) {
+        next.delete(edgeId);
+        next.delete(edgeId + "-reverse");
+      } else {
+        next.add(edgeId);
+        next.add(edgeId + "-reverse");
+      }
+      return next;
+    });
+  };
 
   // Timeline range from earliest start to latest end across all placed buildings
   const timelineRange = useMemo(() => {
@@ -667,6 +711,9 @@ function MapPageContent() {
           showTrafficHeatmap={showTrafficImpact}
           trafficImpactResult={showTrafficImpact ? trafficImpactResult : null}
           onRoadNetworkLoaded={(rn) => { roadNetworkRef.current = rn; setRoadNetworkReady(true); }}
+          isBarricadeMode={isBarricadeMode}
+          barricadedEdgeIds={barricadedEdgeIds}
+          onBarricadeToggle={handleBarricadeToggle}
           isStreetViewSelectionMode={isStreetViewSelectionMode}
           mapStyle={mapStyle}
         />
@@ -809,6 +856,21 @@ function MapPageContent() {
           impactResult={trafficImpactResult}
           visible={showTrafficImpact}
           onClose={() => setShowTrafficImpact(false)}
+          isBarricadeMode={isBarricadeMode}
+          onBarricadeModeToggle={() => setIsBarricadeMode(!isBarricadeMode)}
+          barricadedEdgeIds={barricadedEdgeIds}
+          onRemoveBarricade={(edgeId) => {
+            setBarricadedEdgeIds(prev => {
+              const next = new Set(prev);
+              next.delete(edgeId);
+              next.delete(edgeId + "-reverse");
+              return next;
+            });
+          }}
+          useRealTrafficData={useRealTrafficData}
+          mapboxDataTimestamp={mapboxDataTimestamp}
+          isLoadingMapbox={isLoadingMapbox}
+          onFetchMapboxData={handleFetchMapboxData}
         />
       </div>
 

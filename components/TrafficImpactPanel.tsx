@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { X, Car, AlertTriangle } from "lucide-react";
+import { X, Car, AlertTriangle, Construction, Trash2, RefreshCw, Radio } from "lucide-react";
 import {
   TrafficImpactResult,
   getLOSDescription,
@@ -11,6 +11,14 @@ interface TrafficImpactPanelProps {
   impactResult: TrafficImpactResult | null;
   visible: boolean;
   onClose: () => void;
+  isBarricadeMode?: boolean;
+  onBarricadeModeToggle?: () => void;
+  barricadedEdgeIds?: Set<string>;
+  onRemoveBarricade?: (edgeId: string) => void;
+  useRealTrafficData?: boolean;
+  mapboxDataTimestamp?: Date | null;
+  isLoadingMapbox?: boolean;
+  onFetchMapboxData?: () => void;
 }
 
 function LOSBadge({ los }: { los: string }) {
@@ -59,6 +67,14 @@ export function TrafficImpactPanel({
   impactResult,
   visible,
   onClose,
+  isBarricadeMode = false,
+  onBarricadeModeToggle,
+  barricadedEdgeIds,
+  onRemoveBarricade,
+  useRealTrafficData = false,
+  mapboxDataTimestamp,
+  isLoadingMapbox = false,
+  onFetchMapboxData,
 }: TrafficImpactPanelProps) {
   const sortedEdges = useMemo(() => {
     if (!impactResult) return [];
@@ -67,6 +83,16 @@ export function TrafficImpactPanel({
       .sort((a, b) => b.delta - a.delta)
       .slice(0, 12);
   }, [impactResult]);
+
+  // Get unique barricaded base edge IDs (without -reverse suffix)
+  const barricadeList = useMemo(() => {
+    if (!barricadedEdgeIds) return [];
+    const baseIds = new Set<string>();
+    for (const id of barricadedEdgeIds) {
+      baseIds.add(id.replace(/-reverse$/, ""));
+    }
+    return Array.from(baseIds);
+  }, [barricadedEdgeIds]);
 
   if (!visible) return null;
 
@@ -86,9 +112,21 @@ export function TrafficImpactPanel({
               <h2 className="text-sm font-black text-white uppercase tracking-tight">
                 Traffic Impact Analysis
               </h2>
-              <p className="text-[10px] text-zinc-400">
-                ITE Trip Generation + Road Segment Impact
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-[10px] text-zinc-400">
+                  ITE Trip Generation + Road Segment Impact
+                </p>
+                {/* Data source badge */}
+                {useRealTrafficData ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded bg-green-600/30 border border-green-400/30 text-green-300">
+                    <Radio size={8} /> Live Traffic Data
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded bg-zinc-600/30 border border-zinc-400/20 text-zinc-400">
+                    Estimated Data
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <button
@@ -107,8 +145,44 @@ export function TrafficImpactPanel({
             </div>
           ) : (
             <>
+              {/* Action buttons row */}
+              <div className="flex gap-2">
+                {/* Barricade toggle */}
+                {onBarricadeModeToggle && (
+                  <button
+                    onClick={onBarricadeModeToggle}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                      isBarricadeMode
+                        ? "bg-red-600 text-white shadow-md"
+                        : "bg-white/5 border border-white/10 text-zinc-300 hover:bg-white/10"
+                    }`}
+                  >
+                    <Construction size={14} />
+                    {isBarricadeMode ? "Placing Barricades..." : "Place Barricade"}
+                  </button>
+                )}
+                {/* Refresh / Fetch Mapbox data */}
+                {onFetchMapboxData && (
+                  <button
+                    onClick={onFetchMapboxData}
+                    disabled={isLoadingMapbox}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-white/5 border border-white/10 text-zinc-300 hover:bg-white/10 transition-all disabled:opacity-50"
+                  >
+                    <RefreshCw size={14} className={isLoadingMapbox ? "animate-spin" : ""} />
+                    {isLoadingMapbox ? "Loading..." : useRealTrafficData ? "Refresh Traffic Data" : "Fetch Live Data"}
+                  </button>
+                )}
+              </div>
+
+              {/* Mapbox data timestamp */}
+              {mapboxDataTimestamp && useRealTrafficData && (
+                <p className="text-[9px] text-zinc-500">
+                  Last updated: {mapboxDataTimestamp.toLocaleTimeString()}
+                </p>
+              )}
+
               {/* Summary stats */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <div className="bg-white/5 rounded-lg p-3 border border-white/10">
                   <div className="text-[10px] font-bold text-zinc-500 uppercase">
                     Daily Trips
@@ -134,7 +208,52 @@ export function TrafficImpactPanel({
                   </div>
                   <div className="text-[9px] text-zinc-500">intersections</div>
                 </div>
+                <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div className="text-[10px] font-bold text-zinc-500 uppercase">
+                    Barricades
+                  </div>
+                  <div className={`text-xl font-black ${barricadeList.length > 0 ? "text-red-400" : "text-zinc-400"}`}>
+                    {barricadeList.length}
+                  </div>
+                  <div className="text-[9px] text-zinc-500">road blocks</div>
+                </div>
               </div>
+
+              {/* Barricaded roads list */}
+              {barricadeList.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] font-bold text-zinc-500 uppercase mb-2">
+                    Barricaded Roads
+                  </h4>
+                  <div className="space-y-1">
+                    {barricadeList.map((edgeId) => {
+                      const impact = impactResult?.edgeImpact.get(edgeId);
+                      return (
+                        <div
+                          key={edgeId}
+                          className="flex items-center justify-between bg-red-500/10 border border-red-400/20 rounded-lg px-3 py-2"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Construction size={12} className="text-red-400" />
+                            <span className="text-xs text-red-200 truncate max-w-[200px]">
+                              {impact?.edgeName || `Road ${edgeId.slice(0, 12)}`}
+                            </span>
+                          </div>
+                          {onRemoveBarricade && (
+                            <button
+                              onClick={() => onRemoveBarricade(edgeId)}
+                              className="p-1 hover:bg-red-500/20 rounded text-red-400 hover:text-red-300 transition-colors"
+                              title="Remove barricade"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Congestion warnings */}
               {congestedIntersections.length > 0 && (
