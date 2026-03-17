@@ -101,7 +101,8 @@ function MapPageContent() {
   const [placedBuildings, setPlacedBuildings] = useState<PlacedBuilding[]>([]);
   const [isPlacementMode, setIsPlacementMode] = useState(false);
   // Default scale for placed GLB buildings (map uses SCALE_FACTOR = 10/1.4 ≈ 7.14)
-  const [buildingScale, setBuildingScale] = useState({ x: 10, y: 10, z: 10 });
+  // Modern Office Tower uses 0.75× multiplier → 7.5
+  const [buildingScale, setBuildingScale] = useState({ x: 7.5, y: 7.5, z: 7.5 });
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(
     null,
   );
@@ -329,7 +330,7 @@ function MapPageContent() {
     setImportedBuildingName(null);
     setSelectedModelId(null);
     setIsPlacementMode(false);
-    setBuildingScale({ x: 10, y: 10, z: 10 });
+    setBuildingScale({ x: 7.5, y: 7.5, z: 7.5 });
     // Clear the URL param
     window.history.replaceState({}, "", "/map");
   };
@@ -1512,6 +1513,10 @@ function MapPageContent() {
                                 setImportedBuildingName(building.name);
                                 setShowBuildingSelector(false);
                                 setIsPlacementMode(true);
+                                // Modern Office Tower has a 0.75× default scale
+                                if (building.id === "default-sleep") {
+                                  setBuildingScale({ x: 7.5, y: 7.5, z: 7.5 });
+                                }
                               }}
                               className={`w-full flex items-center gap-2 px-3 py-2 text-[10px] text-left hover:bg-blue-500/10 transition-colors ${
                                 selectedModelId === building.id &&

@@ -197,89 +197,115 @@ const TRAFFIC_LIGHT_TIMINGS = {
 function createCarModel(type: CarType, color: string): THREE.Mesh {
   const S = 10 / 1.4; // map scale factor
   const group = new THREE.Group();
-  const material = new THREE.MeshPhongMaterial({ color });
+  const c = new THREE.Color(color);
+  const bodyMat = new THREE.MeshPhongMaterial({ color, emissive: c, emissiveIntensity: 0.35 });
+  const wheelMat = new THREE.MeshPhongMaterial({ color: 0x222222, emissive: new THREE.Color(0x222222), emissiveIntensity: 0.2 });
+  const rimMat  = new THREE.MeshPhongMaterial({ color: 0xaaaaaa, emissive: new THREE.Color(0x888888), emissiveIntensity: 0.3 });
 
-  switch (type) {
-    case "sedan": {
-      const bodyGeometry = new THREE.BoxGeometry(1.8 * S, 0.8 * S, 4.2 * S);
-      const body = new THREE.Mesh(bodyGeometry, material);
-      body.position.y = 0.4 * S;
-      group.add(body);
+  // Per-type specs: all dimensions in real-world meters, Y=0 is ground.
+  // wheelR = wheel radius, wheelW = wheel width, halfTrack = lateral offset of wheel centres,
+  // frontAxleZ / rearAxleZ = Z position of front/rear axles.
+  type CarSpec = {
+    bodyW: number; bodyH: number; bodyL: number; bodyY: number;
+    cabinW: number; cabinH: number; cabinL: number; cabinZ: number;
+    wheelR: number; wheelW: number; halfTrack: number;
+    frontAxleZ: number; rearAxleZ: number;
+  };
 
-      const cabinGeometry = new THREE.BoxGeometry(1.6 * S, 0.6 * S, 2.2 * S);
-      const cabin = new THREE.Mesh(cabinGeometry, material);
-      cabin.position.y = 1.1 * S;
-      cabin.position.z = -0.3 * S;
-      group.add(cabin);
-      break;
-    }
-    case "suv": {
-      const bodyGeometry = new THREE.BoxGeometry(2.0 * S, 1.0 * S, 4.5 * S);
-      const body = new THREE.Mesh(bodyGeometry, material);
-      body.position.y = 0.5 * S;
-      group.add(body);
+  const specs: Record<CarType, CarSpec> = {
+    sedan:   { bodyW:1.80, bodyH:0.62, bodyL:4.50, bodyY:0.32, cabinW:1.60, cabinH:0.52, cabinL:2.20, cabinZ:-0.25, wheelR:0.32, wheelW:0.22, halfTrack:1.00, frontAxleZ: 1.40, rearAxleZ:-1.40 },
+    suv:     { bodyW:1.95, bodyH:0.80, bodyL:4.70, bodyY:0.36, cabinW:1.85, cabinH:0.68, cabinL:3.00, cabinZ:-0.10, wheelR:0.36, wheelW:0.24, halfTrack:1.10, frontAxleZ: 1.50, rearAxleZ:-1.50 },
+    truck:   { bodyW:2.00, bodyH:0.48, bodyL:5.40, bodyY:0.38, cabinW:2.00, cabinH:0.95, cabinL:2.10, cabinZ: 1.35, wheelR:0.38, wheelW:0.26, halfTrack:1.12, frontAxleZ: 1.70, rearAxleZ:-1.60 },
+    compact: { bodyW:1.70, bodyH:0.58, bodyL:3.90, bodyY:0.30, cabinW:1.55, cabinH:0.55, cabinL:2.40, cabinZ:-0.10, wheelR:0.30, wheelW:0.20, halfTrack:0.95, frontAxleZ: 1.20, rearAxleZ:-1.20 },
+  };
 
-      const cabinGeometry = new THREE.BoxGeometry(1.9 * S, 0.8 * S, 2.5 * S);
-      const cabin = new THREE.Mesh(cabinGeometry, material);
-      cabin.position.y = 1.3 * S;
-      cabin.position.z = -0.2 * S;
-      group.add(cabin);
-      break;
-    }
-    case "truck": {
-      const cabGeometry = new THREE.BoxGeometry(2.0 * S, 1.2 * S, 2.0 * S);
-      const cab = new THREE.Mesh(cabGeometry, material);
-      cab.position.y = 1.0 * S;
-      cab.position.z = 1.5 * S;
-      group.add(cab);
+  const sp = specs[type];
 
-      const bedGeometry = new THREE.BoxGeometry(2.0 * S, 0.8 * S, 3.0 * S);
-      const bed = new THREE.Mesh(bedGeometry, material);
-      bed.position.y = 0.4 * S;
-      bed.position.z = -1.0 * S;
-      group.add(bed);
-      break;
-    }
-    case "compact": {
-      const bodyGeometry = new THREE.BoxGeometry(1.6 * S, 0.7 * S, 3.5 * S);
-      const body = new THREE.Mesh(bodyGeometry, material);
-      body.position.y = 0.35 * S;
-      group.add(body);
+  // Body — lower slab
+  const body = new THREE.Mesh(new THREE.BoxGeometry(sp.bodyW * S, sp.bodyH * S, sp.bodyL * S), bodyMat);
+  body.position.y = (sp.bodyY + sp.bodyH / 2) * S;
+  group.add(body);
 
-      const cabinGeometry = new THREE.BoxGeometry(1.5 * S, 0.5 * S, 2.0 * S);
-      const cabin = new THREE.Mesh(cabinGeometry, material);
-      cabin.position.y = 0.95 * S;
-      cabin.position.z = -0.2 * S;
-      group.add(cabin);
-      break;
-    }
+  // Cabin — upper glasshouse
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(sp.cabinW * S, sp.cabinH * S, sp.cabinL * S), bodyMat);
+  cabin.position.y = (sp.bodyY + sp.bodyH + sp.cabinH / 2) * S;
+  cabin.position.z = sp.cabinZ * S;
+  group.add(cabin);
+
+  // Truck bed walls (open box look)
+  if (type === 'truck') {
+    const bedMat = new THREE.MeshPhongMaterial({ color: 0x333333, emissive: new THREE.Color(0x333333), emissiveIntensity: 0.2 });
+    const bedFloor = new THREE.Mesh(new THREE.BoxGeometry(1.90 * S, 0.08 * S, 2.80 * S), bedMat);
+    bedFloor.position.set(0, (sp.bodyY + sp.bodyH) * S, -1.35 * S);
+    group.add(bedFloor);
+    [[0.95, 0.30, 0], [-0.95, 0.30, 0]].forEach(([lx, lh, _]) => {
+      const side = new THREE.Mesh(new THREE.BoxGeometry(0.06 * S, lh * S, 2.80 * S), bedMat);
+      side.position.set(lx * S, (sp.bodyY + sp.bodyH + lh / 2) * S, -1.35 * S);
+      group.add(side);
+    });
   }
 
-  // Add wheels
-  const wheelGeometry = new THREE.CylinderGeometry(0.3 * S, 0.3 * S, 0.2 * S, 16);
-  const wheelMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
+  // 4 wheels — each is a dark cylinder with a lighter rim disc
+  const wheelGeo = new THREE.CylinderGeometry(sp.wheelR * S, sp.wheelR * S, sp.wheelW * S, 16);
+  const rimGeo   = new THREE.CylinderGeometry(sp.wheelR * 0.55 * S, sp.wheelR * 0.55 * S, sp.wheelW * 1.02 * S, 8);
+  const axleY = sp.wheelR * S; // wheel centre sits exactly on ground
 
-  const wheelPositions = [
-    [0.7 * S, 0.3 * S, 1.2 * S],
-    [-0.7 * S, 0.3 * S, 1.2 * S],
-    [0.7 * S, 0.3 * S, -1.2 * S],
-    [-0.7 * S, 0.3 * S, -1.2 * S],
-  ];
-
-  wheelPositions.forEach(([x, y, z]) => {
-    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+  [
+    [ sp.halfTrack * S, axleY,  sp.frontAxleZ * S],
+    [-sp.halfTrack * S, axleY,  sp.frontAxleZ * S],
+    [ sp.halfTrack * S, axleY,  sp.rearAxleZ  * S],
+    [-sp.halfTrack * S, axleY,  sp.rearAxleZ  * S],
+  ].forEach(([wx, wy, wz]) => {
+    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
     wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(x, y, z);
+    wheel.position.set(wx, wy, wz);
     group.add(wheel);
+    const rim = new THREE.Mesh(rimGeo, rimMat);
+    rim.rotation.z = Math.PI / 2;
+    rim.position.set(wx, wy, wz);
+    group.add(rim);
   });
 
-  // Wrap in parent mesh for consistent handling
-  const finalGeometry = new THREE.BoxGeometry(0.01, 0.01, 0.01);
-  const finalMesh = new THREE.Mesh(finalGeometry, material);
-  finalMesh.add(group);
-  finalMesh.visible = true;
+  // Invisible wrapper mesh so existing code that expects THREE.Mesh still works
+  const wrapper = new THREE.Mesh(new THREE.BoxGeometry(0.001, 0.001, 0.001), bodyMat);
+  wrapper.add(group);
+  return wrapper;
+}
 
-  return finalMesh;
+// Simple street tree: cylinder trunk + cone canopy
+function createStreetTreeModel(): THREE.Group {
+  const S = 10 / 1.4;
+  const group = new THREE.Group();
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.15 * S, 0.2 * S, 1.2 * S, 8),
+    new THREE.MeshPhongMaterial({ color: 0x5d3a1a, emissive: new THREE.Color(0x5d3a1a), emissiveIntensity: 0.3 }),
+  );
+  trunk.position.y = 0.6 * S;
+  group.add(trunk);
+  const canopy = new THREE.Mesh(
+    new THREE.ConeGeometry(0.8 * S, 2.0 * S, 7),
+    new THREE.MeshPhongMaterial({ color: 0x2d6a2d, emissive: new THREE.Color(0x2d6a2d), emissiveIntensity: 0.35 }),
+  );
+  canopy.position.y = 2.5 * S;
+  group.add(canopy);
+  return group;
+}
+
+// Simple human figure: body block + head block
+function createHumanModel(color: string): THREE.Group {
+  const S = 10 / 1.4;
+  const group = new THREE.Group();
+  const mat = new THREE.MeshPhongMaterial({ color, emissive: new THREE.Color(color), emissiveIntensity: 0.4 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.4 * S, 0.9 * S, 0.25 * S), mat);
+  body.position.y = 0.9 * S;
+  group.add(body);
+  const head = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3 * S, 0.3 * S, 0.3 * S),
+    new THREE.MeshPhongMaterial({ color: 0xf5cba7, emissive: new THREE.Color(0xf5cba7), emissiveIntensity: 0.4 }),
+  );
+  head.position.y = 1.5 * S;
+  group.add(head);
+  return group;
 }
 
 // Create traffic light 3D model (real-world scale, then multiplied by map SCALE_FACTOR)
@@ -516,6 +542,8 @@ export default function ThreeMap({
   const dayOfYearRef = useRef<number>(80);
   // Saved bird-eye state so exit street view can return to exact pre-entry position
   const savedBirdEyeStateRef = useRef<{ position: THREE.Vector3; target: THREE.Vector3 } | null>(null);
+  // Group holding static parked cars shown only during street view
+  const streetViewCarsRef = useRef<THREE.Group | null>(null);
   const shadowOverlayCleanupRef = useRef<(() => void) | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const initialized = useRef(false);
@@ -731,6 +759,111 @@ export default function ThreeMap({
       position: cameraRef.current.position.clone(),
       target: controlsRef.current.target.clone(),
     };
+
+    // Spawn static street props on nearby roads
+    if (groupsRef.current && roadNetworkRef.current) {
+      const CAR_COLORS   = ["#c0392b","#2980b9","#27ae60","#f39c12","#8e44ad","#bdc3c7","#2c3e50","#e67e22"];
+      const HUMAN_COLORS = ["#e74c3c","#3498db","#2ecc71","#f1c40f","#9b59b6","#1abc9c","#e67e22","#ecf0f1"];
+      const CAR_TYPES: CarType[] = ["sedan", "suv", "compact", "truck"];
+
+      const Wu = 10 / 1.4; // world-units per metre
+      // Fixed lateral offsets from road centre-line (metres → world units)
+      const CAR_SIDE    = 3.8 * Wu; // parking lane — just right of road edge
+      const TREE_SIDE   = 5.5 * Wu; // nature strip between road & footpath
+      const HUMAN_SIDE  = 7.2 * Wu; // footpath
+
+      // Minimum spacing between objects of the same type (world units)
+      const CAR_GAP   = 40 * Wu; // ~40 m (car length + gap)
+      const TREE_GAP  = 12 * Wu; // ~12 m
+      const HUMAN_GAP =  5 * Wu; // ~5 m
+
+      const carsGroup = new THREE.Group();
+      carsGroup.name = "street-view-parked-cars";
+
+      const svLngLat = CityProjection.unprojectFromWorld(
+        new THREE.Vector3(streetViewTarget.worldX, 0, streetViewTarget.worldZ)
+      );
+      const nearbyEdges = roadNetworkRef.current.findEdgesNearPosition(svLngLat, 200);
+
+      // Track placed positions per type so we can enforce spacing
+      const placedCars:   THREE.Vector2[] = [];
+      const placedTrees:  THREE.Vector2[] = [];
+      const placedHumans: THREE.Vector2[] = [];
+
+      const tooClose = (list: THREE.Vector2[], x: number, z: number, minDist: number) =>
+        list.some(p => Math.hypot(p.x - x, p.y - z) < minDist);
+
+      const tryAdd = (
+        list: THREE.Vector2[], minDist: number,
+        x: number, z: number, rotY: number,
+        factory: () => THREE.Object3D,
+      ) => {
+        if (tooClose(list, x, z, minDist)) return;
+        list.push(new THREE.Vector2(x, z));
+        const obj = factory();
+        obj.position.set(x, 0, z);
+        obj.rotation.y = rotY;
+        carsGroup.add(obj);
+      };
+
+      nearbyEdges.forEach((edge) => {
+        if (edge.geometry.length < 2) return;
+
+        // Walk along each segment of the edge
+        for (let si = 0; si < edge.geometry.length - 1; si++) {
+          const p0 = CityProjection.projectToWorld(edge.geometry[si]     as [number,number]);
+          const p1 = CityProjection.projectToWorld(edge.geometry[si + 1] as [number,number]);
+          const segLen = Math.hypot(p1.x - p0.x, p1.z - p0.z);
+          if (segLen < 1) continue;
+
+          // Road direction unit vector
+          const rdx = (p1.x - p0.x) / segLen;
+          const rdz = (p1.z - p0.z) / segLen;
+          // Right-hand perpendicular: (rdz, 0, -rdx)
+          const rpx = rdz;
+          const rpz = -rdx;
+          const roadAngle = Math.atan2(rdx, rdz);
+
+          // Sample candidate points every ~8 m along this segment
+          const step = 8 * Wu;
+          for (let d = step * 0.5; d < segLen; d += step) {
+            const t = d / segLen;
+            const mx = p0.x + rdx * d;
+            const mz = p0.z + rdz * d;
+
+            const r = Math.random();
+
+            if (r < 0.35) {
+              // Parked car — right side of road
+              const cx = mx + rpx * CAR_SIDE;
+              const cz = mz + rpz * CAR_SIDE;
+              const type  = CAR_TYPES[Math.floor(Math.random() * CAR_TYPES.length)];
+              const color = CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)];
+              tryAdd(placedCars, CAR_GAP, cx, cz, roadAngle,
+                () => createCarModel(type, color) as unknown as THREE.Group);
+
+            } else if (r < 0.65) {
+              // Street tree — nature strip
+              const tx = mx + rpx * TREE_SIDE;
+              const tz = mz + rpz * TREE_SIDE;
+              tryAdd(placedTrees, TREE_GAP, tx, tz, 0, createStreetTreeModel);
+
+            } else if (r < 0.80) {
+              // Pedestrian — footpath
+              const hx = mx + rpx * HUMAN_SIDE;
+              const hz = mz + rpz * HUMAN_SIDE;
+              const color  = HUMAN_COLORS[Math.floor(Math.random() * HUMAN_COLORS.length)];
+              const facing = Math.random() * Math.PI * 2;
+              tryAdd(placedHumans, HUMAN_GAP, hx, hz, facing, () => createHumanModel(color));
+            }
+          }
+        }
+      });
+
+      groupsRef.current.dynamicObjects.add(carsGroup);
+      streetViewCarsRef.current = carsGroup;
+    }
+
     flyToStreetLevel(
       cameraRef.current,
       controlsRef.current,
@@ -744,6 +877,16 @@ export default function ThreeMap({
   // Exit street view when trigger increments
   useEffect(() => {
     if (!exitStreetViewTrigger || !cameraRef.current || !controlsRef.current) return;
+
+    // Remove parked cars
+    if (streetViewCarsRef.current && groupsRef.current) {
+      groupsRef.current.dynamicObjects.remove(streetViewCarsRef.current);
+      streetViewCarsRef.current.traverse((child) => {
+        if ((child as THREE.Mesh).geometry) (child as THREE.Mesh).geometry.dispose();
+      });
+      streetViewCarsRef.current = null;
+    }
+
     const savedState = savedBirdEyeStateRef.current;
     savedBirdEyeStateRef.current = null;
     exitStreetLevel(cameraRef.current, controlsRef.current, 1500, savedState ?? undefined).then(() => {

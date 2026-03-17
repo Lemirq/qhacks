@@ -373,48 +373,64 @@ export function exitStreetLevel(
     groundClampListener = null;
   }
 
+  // Unlock OrbitControls constraints BEFORE animating so the camera can
+  // freely move upward. Without this, the street-view maxDistance (20 units)
+  // clamps the camera back to ground level every frame, causing it to lag
+  // and clip into the terrain.
+  controls.minDistance = 0;
+  controls.maxDistance = 200000;
+  controls.minPolarAngle = 0;
+  controls.maxPolarAngle = Math.PI;
+  controls.enablePan = false;
+  controls.enableZoom = false;
+  controls.update();
+
   return new Promise((resolve) => {
-    // Phase 1: shoot straight up from street level to a high altitude
-    //          directly above the current position (~600 units up)
-    const phase1Start = {
-      x: camera.position.x,
-      y: camera.position.y,
-      z: camera.position.z,
+    const liftHeight = Math.max(state.position.y, 600);
+
+    // Phase 1: shoot straight up — combine cam+target into one tween so
+    // controls.update() is always called with both values consistent.
+    const phase1 = {
+      camX: camera.position.x,
+      camY: camera.position.y,
+      camZ: camera.position.z,
+      tarX: controls.target.x,
+      tarY: controls.target.y,
+      tarZ: controls.target.z,
     };
     const phase1End = {
-      x: camera.position.x,
-      y: Math.max(state.position.y, 600),
-      z: camera.position.z,
-    };
-    const targetPhase1Start = {
-      x: controls.target.x,
-      y: controls.target.y,
-      z: controls.target.z,
-    };
-    const targetPhase1End = {
-      x: controls.target.x,
-      y: 0,
-      z: controls.target.z,
+      camX: camera.position.x,
+      camY: liftHeight,
+      camZ: camera.position.z,
+      tarX: controls.target.x,
+      tarY: 0,
+      tarZ: controls.target.z,
     };
 
     // Phase 2: glide from high-up to the saved bird-eye position
-    const phase2Start = { x: phase1End.x, y: phase1End.y, z: phase1End.z };
-    const phase2End = { x: state.position.x, y: state.position.y, z: state.position.z };
-    const targetPhase2Start = { x: targetPhase1End.x, y: 0, z: targetPhase1End.z };
-    const targetPhase2End = { x: state.target.x, y: state.target.y, z: state.target.z };
+    const phase2 = {
+      camX: phase1End.camX,
+      camY: phase1End.camY,
+      camZ: phase1End.camZ,
+      tarX: phase1End.tarX,
+      tarY: 0,
+      tarZ: phase1End.tarZ,
+    };
+    const phase2End = {
+      camX: state.position.x,
+      camY: state.position.y,
+      camZ: state.position.z,
+      tarX: state.target.x,
+      tarY: state.target.y,
+      tarZ: state.target.z,
+    };
 
-    const phase2Pos = new TWEEN.Tween(phase2Start)
+    const phase2Tween = new TWEEN.Tween(phase2)
       .to(phase2End, duration * 0.7)
       .easing(TWEEN.Easing.Cubic.InOut)
       .onUpdate(() => {
-        camera.position.set(phase2Start.x, phase2Start.y, phase2Start.z);
-      });
-
-    const phase2Target = new TWEEN.Tween(targetPhase2Start)
-      .to(targetPhase2End, duration * 0.7)
-      .easing(TWEEN.Easing.Cubic.InOut)
-      .onUpdate(() => {
-        controls.target.set(targetPhase2Start.x, targetPhase2Start.y, targetPhase2Start.z);
+        camera.position.set(phase2.camX, phase2.camY, phase2.camZ);
+        controls.target.set(phase2.tarX, phase2.tarY, phase2.tarZ);
         controls.update();
       })
       .onComplete(() => {
@@ -429,27 +445,18 @@ export function exitStreetLevel(
         resolve();
       });
 
-    const phase1Pos = new TWEEN.Tween(phase1Start)
-      .to(phase1End, duration * 0.5)
+    new TWEEN.Tween(phase1)
+      .to(phase1End, duration * 0.4)
       .easing(TWEEN.Easing.Cubic.In)
       .onUpdate(() => {
-        camera.position.set(phase1Start.x, phase1Start.y, phase1Start.z);
+        camera.position.set(phase1.camX, phase1.camY, phase1.camZ);
+        controls.target.set(phase1.tarX, phase1.tarY, phase1.tarZ);
+        controls.update();
       })
       .onComplete(() => {
-        phase2Pos.start();
-        phase2Target.start();
-      });
-
-    const phase1Target = new TWEEN.Tween(targetPhase1Start)
-      .to(targetPhase1End, duration * 0.5)
-      .easing(TWEEN.Easing.Cubic.In)
-      .onUpdate(() => {
-        controls.target.set(targetPhase1Start.x, targetPhase1Start.y, targetPhase1Start.z);
-        controls.update();
-      });
-
-    phase1Pos.start();
-    phase1Target.start();
+        phase2Tween.start();
+      })
+      .start();
   });
 }
 

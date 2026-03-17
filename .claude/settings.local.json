@@ -30,7 +30,8 @@
       "Bash(find . -maxdepth 2 -type f -name README* -o -name package.json -o -name tsconfig.json)",
       "Bash(pdftotext \"/Users/notjackl3/Programming/qhacks/_2026 MIC - Participant''''s Information Package.pdf\" -)",
       "Bash(grep -n \"^import Link\\\\|from ''next/link\\\\|from \"\"next/link\" /Users/notjackl3/Programming/qhacks/app/map/page.tsx)",
-      "Bash(xargs basename:*)"
+      "Bash(xargs basename:*)",
+      "Bash(grep -r street /Users/notjackl3/Programming/qhacks --include=*.ts --include=*.tsx -l -i)"
     ],
     "additionalDirectories": [
       "c:\\Users\\phine\\OneDrive\\Laptop\\HACKATHON\\qhacks\\qhacks\\public\\sounds",
