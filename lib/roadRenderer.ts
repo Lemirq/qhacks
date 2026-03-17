@@ -277,7 +277,7 @@ export function renderTrafficHeatmap(
   allEdges: RoadEdge[],
   projection: typeof CityProjection,
   buildingPositions?: [number, number][],
-  maxImpactRadius: number = 300,
+  maxImpactRadius: number = 800,
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = "traffic-heatmap";
@@ -310,7 +310,7 @@ export function renderTrafficHeatmap(
       mesh = createHeatmapStrip(points, overlayWidth, color, impact.level);
     }
 
-    mesh.position.y = 1.5;
+    mesh.position.y = 3.0;
     mesh.name = `heatmap-${edge.id}`;
     group.add(mesh);
   });
