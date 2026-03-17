@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import ThreeMap from "@/components/ThreeMap";
 import { formatHour, getPresetHour, type TimePreset } from "@/lib/sun/timeOfDay";
 import {
@@ -41,6 +42,7 @@ import {
   Wind,
   Users,
   Car,
+  Pencil,
 } from "lucide-react";
 import { prefetchMapData } from "@/lib/prefetchMapData";
 import {
@@ -236,20 +238,17 @@ function MapPageContent() {
   }, [searchParams]);
 
   // Shadow analysis handlers
-  const handleRunShadowAnalysis = (doy: number) => {
+  const handleRunShadowAnalysis = async (doy: number) => {
     if (!shadowAnalysisRef.current) return;
     setIsShadowAnalyzing(true);
-    // Use requestAnimationFrame to avoid blocking UI
-    requestAnimationFrame(() => {
-      const results = shadowAnalysisRef.current?.runAnalysis(doy) ?? null;
-      setShadowResults(results);
-      setIsShadowAnalyzing(false);
-      // Auto-enable overlay if there are results
-      if (results && results.totalAffected > 0) {
-        setShowShadowOverlay(true);
-        shadowAnalysisRef.current?.applyShadowOverlay(results.impacts);
-      }
-    });
+    const results = (await shadowAnalysisRef.current.runAnalysis(doy)) ?? null;
+    setShadowResults(results);
+    setIsShadowAnalyzing(false);
+    // Auto-enable overlay if there are results
+    if (results && results.totalAffected > 0) {
+      setShowShadowOverlay(true);
+      shadowAnalysisRef.current?.applyShadowOverlay(results.impacts);
+    }
   };
 
   const handleToggleShadowOverlay = (show: boolean) => {
@@ -821,12 +820,12 @@ function MapPageContent() {
           </button>
         )}
         <aside
-          className={`absolute left-6 top-6 w-72 pointer-events-auto flex flex-col gap-3 sidebar-transition ${placedBuildings.length > 0 ? "bottom-32" : "bottom-6"} ${!leftSidebarOpen ? "hidden" : ""}`}
+          className={`absolute left-6 top-6 w-72 pointer-events-auto flex flex-col gap-3 sidebar-transition bottom-6 ${!leftSidebarOpen ? "hidden" : ""}`}
         >
           {/* Municipal Branding */}
 
           {/* Geospatial Layers Panel */}
-          <div className="flex-1 glass rounded-lg p-4 flex flex-col overflow-hidden">
+          <div className="flex-1 glass rounded-lg p-4 overflow-y-auto custom-scrollbar">
             <div className="flex items-center justify-between mb-3">
               <span className="text-3!xl lp-nav-logo text-white">KingsView</span>
               <button
@@ -841,7 +840,7 @@ function MapPageContent() {
             </div>
 
             {/* Geospatial Layers: Noise Ripple + Zoning */}
-            <div className="space-y-2 overflow-y-auto custom-scrollbar pr-1">
+            <div className="space-y-2 pr-1">
               <div
                 className={`p-2.5 rounded-md border transition-all cursor-pointer group ${
                   showNoiseRipple
@@ -1407,6 +1406,18 @@ function MapPageContent() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="ui-label">Building Placement</h3>
                 </div>
+
+                {/* Go to Build Mode */}
+                <Link
+                  href="/editor"
+                  className="flex items-center justify-between w-full px-3 py-2 mb-3 rounded-lg bg-indigo-600/20 border border-indigo-400/30 hover:bg-indigo-600/30 hover:border-indigo-400/50 transition-colors group"
+                >
+                  <div className="flex items-center gap-2">
+                    <Pencil size={12} className="text-indigo-300" />
+                    <span className="text-[10px] font-bold text-indigo-200 uppercase tracking-tight">Design in Build Mode</span>
+                  </div>
+                  <span className="text-[9px] text-indigo-400 group-hover:text-indigo-300 transition-colors">→</span>
+                </Link>
 
                 <div className="rounded-md p-3 border bg-white/5 border-white/10 space-y-3">
                   {/* Building Selector Dropdown */}
@@ -2071,6 +2082,20 @@ function MapPageContent() {
                 </div>
               )}
             </div>
+
+            {/* Fly to Downtown */}
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <button
+                onClick={() =>
+                  setFlyToTarget({ lngLat: [-76.47965, 44.232703], id: Date.now() })
+                }
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-accent-blue/20 border border-accent-blue/30 hover:bg-accent-blue/30 hover:border-accent-blue/50 transition-colors text-accent-blue"
+                title="Fly to 44.232703°, -76.479650°"
+              >
+                <Navigation size={14} />
+                <span className="text-[11px] font-black uppercase tracking-tight">Fly to Downtown</span>
+              </button>
+            </div>
           </div>
         </aside>
       </div>
@@ -2218,17 +2243,6 @@ function MapPageContent() {
           </div>
         </div>
       )}
-      {/* Fly To Downtown Button - Bottom Right */}
-      <button
-        onClick={() =>
-          setFlyToTarget({ lngLat: [-76.47965, 44.232703], id: Date.now() })
-        }
-        className="fixed bottom-6 right-6 z-[60] flex items-center gap-2 px-4 py-3 bg-accent-blue text-white rounded-lg shadow-lg hover:bg-zinc-800 transition-colors"
-        title="Fly to 44.232703°, -76.479650°"
-      >
-        <Navigation size={18} />
-        <span className="text-xs font-black uppercase tracking-tight">Fly to Downtown</span>
-      </button>
     </div>
   );
 }

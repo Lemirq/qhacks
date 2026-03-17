@@ -94,19 +94,21 @@ export const SEASON_PRESETS: { label: string; dayOfYear: number }[] = [
  * For each sample hour (6am → 8pm), casts rays from each surrounding building
  * toward the sun. Checks if the proposed building blocks those rays.
  *
+ * Processing is chunked to avoid blocking the main thread.
+ *
  * @param scene - The Three.js scene
  * @param proposedBuildings - Group(s) representing the proposed building(s)
  * @param osmBuildingMeshes - Map of existing building meshes
  * @param dayOfYear - Day of year for sun angle calculation
  * @param sampleIntervalHours - Time step between samples (default 0.5 = 30 min)
  */
-export function analyzeShadowImpact(
+export async function analyzeShadowImpact(
   scene: THREE.Scene,
   proposedBuildings: THREE.Object3D[],
   osmBuildingMeshes: Map<string, THREE.Group>,
   dayOfYear: number = 80,
   sampleIntervalHours: number = 0.5,
-): ShadowAnalysisSummary {
+): Promise<ShadowAnalysisSummary> {
   const START_HOUR = 6;
   const END_HOUR = 20;
   const sampleHours: number[] = [];
@@ -158,86 +160,110 @@ export function analyzeShadowImpact(
     }
   });
 
-  // All scene meshes INCLUDING proposed building
-  const allMeshesWithProposed = [...allSceneMeshes, ...proposedMeshes];
+  // Compute proposed building center for distance culling
+  const proposedBox = new THREE.Box3();
+  for (const mesh of proposedMeshes) {
+    proposedBox.expandByObject(mesh);
+  }
+  const proposedCenter = proposedBox.getCenter(new THREE.Vector3());
+  const proposedHeight = proposedBox.max.y - proposedBox.min.y;
+  // Shadow length = height / tan(sun_altitude). At ~10° (low sun): height * 5.7.
+  // Use height * 6 with a floor of 1500 world units (~210m) so small buildings
+  // still catch nearby neighbors, capped at raycaster.far (5000).
+  const MAX_SHADOW_RADIUS = Math.max(Math.min(proposedHeight * 6 + 50, 5000), 1500);
 
-  osmBuildingMeshes.forEach((group, buildingId) => {
-    // Skip if this is one of the proposed buildings
-    if (proposedBuildings.some((pb) => pb === group)) return;
+  const buildingEntries = Array.from(osmBuildingMeshes.entries());
+  const CHUNK_SIZE = 50;
 
-    const userData = group.userData;
-    const buildingType = userData?.type as string | undefined;
-    const buildingHeight = (userData?.height as number) || 5;
+  for (let chunkStart = 0; chunkStart < buildingEntries.length; chunkStart += CHUNK_SIZE) {
+    const chunk = buildingEntries.slice(chunkStart, chunkStart + CHUNK_SIZE);
 
-    // Get building center and top for ray origin
-    const box = new THREE.Box3().setFromObject(group);
-    const center = box.getCenter(new THREE.Vector3());
-    // Sample from multiple points on the building roof
-    const samplePoints = [
-      new THREE.Vector3(center.x, box.max.y - 0.5, center.z),
-    ];
+    for (const [buildingId, group] of chunk) {
+      // Skip if this is one of the proposed buildings
+      if (proposedBuildings.some((pb) => pb === group)) continue;
 
-    let baselineSunSamples = 0;
-    let newSunSamples = 0;
+      // Distance culling: skip buildings that are too far to ever be shadowed
+      const box = new THREE.Box3().setFromObject(group);
+      const center = box.getCenter(new THREE.Vector3());
+      const dx = center.x - proposedCenter.x;
+      const dz = center.z - proposedCenter.z;
+      if (dx * dx + dz * dz > MAX_SHADOW_RADIUS * MAX_SHADOW_RADIUS) continue;
 
-    for (let si = 0; si < sampleHours.length; si++) {
-      const sunDir = sunDirections[si];
-      if (!sunDir) continue; // Sun below horizon
+      const userData = group.userData;
+      const buildingType = userData?.type as string | undefined;
+      const buildingHeight = (userData?.height as number) || 5;
 
-      for (const origin of samplePoints) {
-        // Baseline: check if sun is blocked by existing buildings (excluding proposed)
-        raycaster.set(origin, sunDir);
-        const baselineHits = raycaster.intersectObjects(allSceneMeshes, false);
-        const baselineBlocked = baselineHits.some((hit) => {
-          // Don't count self-intersections
-          let parent: THREE.Object3D | null = hit.object;
-          while (parent) {
-            if (parent === group) return false;
-            parent = parent.parent;
+      // Sample from roof center
+      const samplePoints = [
+        new THREE.Vector3(center.x, box.max.y - 0.5, center.z),
+      ];
+
+      let baselineSunSamples = 0;
+      let newSunSamples = 0;
+
+      for (let si = 0; si < sampleHours.length; si++) {
+        const sunDir = sunDirections[si];
+        if (!sunDir) continue; // Sun below horizon
+
+        for (const origin of samplePoints) {
+          // Baseline: check if sun is blocked by existing buildings (excluding proposed)
+          raycaster.set(origin, sunDir);
+          const baselineHits = raycaster.intersectObjects(allSceneMeshes, false);
+          const baselineBlocked = baselineHits.some((hit) => {
+            let parent: THREE.Object3D | null = hit.object;
+            while (parent) {
+              if (parent === group) return false;
+              parent = parent.parent;
+            }
+            return true;
+          });
+
+          if (baselineBlocked) {
+            // Already in shadow — proposed building can't take away sun it doesn't have.
+            // Both baseline and new are blocked; skip the proposed raycast entirely.
+            continue;
           }
-          return true;
-        });
-        if (!baselineBlocked) baselineSunSamples++;
 
-        // With proposed building: check if sun is now blocked
-        const newHits = raycaster.intersectObjects(allMeshesWithProposed, false);
-        const newBlocked = newHits.some((hit) => {
-          let parent: THREE.Object3D | null = hit.object;
-          while (parent) {
-            if (parent === group) return false;
-            parent = parent.parent;
+          baselineSunSamples++;
+
+          // Baseline was clear — check if proposed building now blocks the sun
+          const proposedHits = raycaster.intersectObjects(proposedMeshes, false);
+          if (proposedHits.length === 0) {
+            // Proposed doesn't block either → no change for this sample
+            newSunSamples++;
           }
-          return true;
+          // else: proposed blocks → newSunSamples not incremented (sun lost)
+        }
+      }
+
+      const activeSampleHours = sunDirections.filter((d) => d !== null).length;
+      const totalPossibleSamples = samplePoints.length * activeSampleHours;
+
+      if (totalPossibleSamples === 0) continue;
+
+      const baselineSunHours =
+        (baselineSunSamples / totalPossibleSamples) * (END_HOUR - START_HOUR);
+      const newSunHours =
+        (newSunSamples / totalPossibleSamples) * (END_HOUR - START_HOUR);
+      const hoursLost = baselineSunHours - newSunHours;
+
+      if (hoursLost > 0.1) {
+        const isResidential = RESIDENTIAL_TYPES.has(buildingType || "");
+        impacts.push({
+          buildingId,
+          buildingType,
+          hoursLost: Math.round(hoursLost * 10) / 10,
+          baselineSunHours: Math.round(baselineSunHours * 10) / 10,
+          newSunHours: Math.round(newSunHours * 10) / 10,
+          isResidential,
+          estimatedUnits: estimateResidentialUnits(buildingType, buildingHeight),
         });
-        if (!newBlocked) newSunSamples++;
       }
     }
 
-    const totalSamples = samplePoints.length;
-    const activeSampleHours = sunDirections.filter((d) => d !== null).length;
-    const totalPossibleSamples = totalSamples * activeSampleHours;
-
-    if (totalPossibleSamples === 0) return;
-
-    const baselineSunHours =
-      (baselineSunSamples / totalPossibleSamples) * (END_HOUR - START_HOUR);
-    const newSunHours =
-      (newSunSamples / totalPossibleSamples) * (END_HOUR - START_HOUR);
-    const hoursLost = baselineSunHours - newSunHours;
-
-    if (hoursLost > 0.1) {
-      const isResidential = RESIDENTIAL_TYPES.has(buildingType || "");
-      impacts.push({
-        buildingId,
-        buildingType,
-        hoursLost: Math.round(hoursLost * 10) / 10,
-        baselineSunHours: Math.round(baselineSunHours * 10) / 10,
-        newSunHours: Math.round(newSunHours * 10) / 10,
-        isResidential,
-        estimatedUnits: estimateResidentialUnits(buildingType, buildingHeight),
-      });
-    }
-  });
+    // Yield to the browser between chunks to keep the UI responsive
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
 
   // Sort by impact descending
   impacts.sort((a, b) => b.hoursLost - a.hoursLost);

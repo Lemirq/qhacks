@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Building2, AlertTriangle } from "lucide-react";
+import { X, Building2, AlertTriangle, Pencil } from "lucide-react";
+import Link from "next/link";
 import { KINGSTON_ZONE_TYPES, type KingstonZoneCode } from "@/lib/kingstonZoning";
 import {
   fetchZoneAtPoint,
@@ -83,6 +84,24 @@ export function BuildingPlacementForm({
           >
             <X size={18} />
           </button>
+        </div>
+
+        {/* Go to Build Mode */}
+        <div className="px-6 pt-4 pb-2">
+          <Link
+            href="/editor"
+            className="flex items-center justify-between w-full px-4 py-2.5 rounded-lg bg-indigo-600/20 border border-indigo-400/30 hover:bg-indigo-600/30 hover:border-indigo-400/50 transition-colors group"
+          >
+            <div className="flex items-center gap-2">
+              <Pencil size={14} className="text-indigo-300" />
+              <span className="text-[11px] font-bold text-indigo-200 uppercase tracking-tight">
+                Design a Building First
+              </span>
+            </div>
+            <span className="text-[10px] text-indigo-400 group-hover:text-indigo-300 transition-colors">
+              Go to Build Mode →
+            </span>
+          </Link>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">

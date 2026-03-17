@@ -155,7 +155,7 @@ interface ThreeMapProps {
   showProposedBuilding?: boolean;
   /** Ref-based API for shadow analysis — parent can call methods on this ref */
   shadowAnalysisRef?: React.MutableRefObject<{
-    runAnalysis: (dayOfYear: number) => import("@/lib/sun/shadowAnalysis").ShadowAnalysisSummary | null;
+    runAnalysis: (dayOfYear: number) => Promise<import("@/lib/sun/shadowAnalysis").ShadowAnalysisSummary | null>;
     applyShadowOverlay: (impacts: import("@/lib/sun/shadowAnalysis").BuildingShadowImpact[]) => void;
     clearShadowOverlay: () => void;
   } | null>;
@@ -563,7 +563,7 @@ export default function ThreeMap({
   useEffect(() => {
     if (!shadowAnalysisRef) return;
     shadowAnalysisRef.current = {
-      runAnalysis: (doy: number) => {
+      runAnalysis: async (doy: number) => {
         if (!sceneRef.current) return null;
         const proposedObjs = Array.from(buildingModelsRef.current.values());
         if (proposedObjs.length === 0) return null;
