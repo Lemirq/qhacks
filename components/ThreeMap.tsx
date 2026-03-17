@@ -156,7 +156,7 @@ interface ThreeMapProps {
   /** Ref-based API for shadow analysis — parent can call methods on this ref */
   shadowAnalysisRef?: React.MutableRefObject<{
     runAnalysis: (dayOfYear: number) => Promise<import("@/lib/sun/shadowAnalysis").ShadowAnalysisSummary | null>;
-    applyShadowOverlay: (impacts: import("@/lib/sun/shadowAnalysis").BuildingShadowImpact[]) => void;
+    applyShadowOverlay: (impacts: import("@/lib/sun/shadowAnalysis").BuildingShadowImpact[], filterHour?: number) => void;
     clearShadowOverlay: () => void;
   } | null>;
   /** Called once after OSM buildings are fetched, passing the raw building data array */
@@ -617,7 +617,7 @@ export default function ThreeMap({
           1, // 1-hour intervals for performance with ~4776 buildings
         );
       },
-      applyShadowOverlay: (impacts) => {
+      applyShadowOverlay: (impacts, filterHour) => {
         // Clear previous overlay
         if (shadowOverlayCleanupRef.current) {
           shadowOverlayCleanupRef.current();
@@ -625,6 +625,7 @@ export default function ThreeMap({
         shadowOverlayCleanupRef.current = applyShadowOverlayFn(
           impacts,
           osmBuildingMeshesRef.current,
+          filterHour,
         );
       },
       clearShadowOverlay: () => {
@@ -2279,6 +2280,14 @@ export default function ThreeMap({
           model.userData.buildingId = building.id;
           model.userData.timeline = building.timeline;
 
+          // Enable shadow casting/receiving on all meshes
+          model.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+
           // Position the model
           model.position.set(
             building.position.x,
@@ -2636,7 +2645,7 @@ export default function ThreeMap({
       const hx = scale.x * 0.6;
       const hz = scale.z * 0.6;
       const sourceDb = getConstructionSourceDb(site, timelineDate);
-      const intensity = sourceDb / 108;
+      const intensity = Math.max(0.3, Math.min(1.0, (sourceDb - 70) / 30));
 
       const perimeterPoints: [number, number][] = [
         [px + hx, pz + hz],

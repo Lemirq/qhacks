@@ -23,6 +23,8 @@ export interface BuildingShadowImpact {
   isResidential: boolean;
   /** Estimated residential units in this building */
   estimatedUnits: number;
+  /** Specific hours at which this building is newly shadowed by the proposed building */
+  impactedAtHours: number[];
 }
 
 /** Summary of shadow analysis */
@@ -200,10 +202,13 @@ export async function analyzeShadowImpact(
 
       let baselineSunSamples = 0;
       let newSunSamples = 0;
+      const impactedAtHours: number[] = [];
 
       for (let si = 0; si < sampleHours.length; si++) {
         const sunDir = sunDirections[si];
         if (!sunDir) continue; // Sun below horizon
+
+        let blockedThisHour = false;
 
         for (const origin of samplePoints) {
           // Baseline: check if sun is blocked by existing buildings (excluding proposed)
@@ -231,8 +236,14 @@ export async function analyzeShadowImpact(
           if (proposedHits.length === 0) {
             // Proposed doesn't block either → no change for this sample
             newSunSamples++;
+          } else {
+            // Proposed blocks sun at this hour
+            blockedThisHour = true;
           }
-          // else: proposed blocks → newSunSamples not incremented (sun lost)
+        }
+
+        if (blockedThisHour) {
+          impactedAtHours.push(sampleHours[si]);
         }
       }
 
@@ -257,6 +268,7 @@ export async function analyzeShadowImpact(
           newSunHours: Math.round(newSunHours * 10) / 10,
           isResidential,
           estimatedUnits: estimateResidentialUnits(buildingType, buildingHeight),
+          impactedAtHours,
         });
       }
     }
@@ -296,11 +308,13 @@ function sunToDirection(altitude: number, azimuth: number): THREE.Vector3 {
 
 /**
  * Compute a shadow "heatmap" — for each nearby building, color it by hours of sunlight lost.
+ * When filterHour is provided, only highlights buildings impacted at that specific hour.
  * Returns a cleanup function to restore original materials.
  */
 export function applyShadowOverlay(
   impacts: BuildingShadowImpact[],
   osmBuildingMeshes: Map<string, THREE.Group>,
+  filterHour?: number,
 ): () => void {
   const originalMaterials = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
 
@@ -309,6 +323,14 @@ export function applyShadowOverlay(
   osmBuildingMeshes.forEach((group, buildingId) => {
     const impact = impactMap.get(buildingId);
     if (!impact) return;
+
+    // When filtering by hour, skip buildings not impacted at this specific hour
+    if (filterHour !== undefined) {
+      const isImpactedNow = impact.impactedAtHours.some(
+        (h) => Math.abs(h - filterHour) < 0.5,
+      );
+      if (!isImpactedNow) return;
+    }
 
     // Color from green (low impact) → yellow → red (high impact)
     const t = Math.min(impact.hoursLost / 4, 1); // 4+ hours = max red

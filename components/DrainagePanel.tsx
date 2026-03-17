@@ -78,258 +78,254 @@ export default function DrainagePanel({
 
   if (!buildings.length) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-        <div className="bg-zinc-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-white/10 w-full max-w-md p-5 pointer-events-auto">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Droplets className="text-blue-400" size={20} />
-              <h3 className="font-bold text-white text-sm uppercase tracking-tight">
-                Drainage Impact
-              </h3>
-            </div>
-            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded">
-              <X size={16} className="text-zinc-400" />
-            </button>
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Droplets className="text-blue-400" size={20} />
+            <h3 className="font-bold text-white text-sm uppercase tracking-tight">
+              Drainage Impact
+            </h3>
           </div>
-          <p className="text-zinc-400 text-sm">No buildings placed. Add buildings to analyze drainage impact.</p>
+          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded">
+            <X size={16} className="text-zinc-400" />
+          </button>
         </div>
+        <p className="text-zinc-400 text-sm">No buildings placed. Add buildings to analyze drainage impact.</p>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-      <div className="bg-zinc-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-white/10 w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden pointer-events-auto">
-        {/* Header */}
-        <div className="p-4 border-b border-white/10 bg-gradient-to-r from-blue-950/50 to-cyan-950/50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Droplets className="text-blue-400" size={20} />
-              <h3 className="font-bold text-white text-sm uppercase tracking-tight">
-                Drainage Impact Analysis
-              </h3>
-            </div>
-            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded">
-              <X size={16} className="text-zinc-400" />
-            </button>
+    <div>
+      {/* Header */}
+      <div className="pb-3 mb-3 border-b border-white/10">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Droplets className="text-blue-400" size={20} />
+            <h3 className="font-bold text-white text-sm uppercase tracking-tight">
+              Drainage Impact Analysis
+            </h3>
           </div>
-          {buildings.length > 1 && (
-            <p className="text-xs text-zinc-400 mt-1">
-              {buildings.length} buildings analyzed
-            </p>
-          )}
+          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded">
+            <X size={16} className="text-zinc-400" />
+          </button>
         </div>
+        {buildings.length > 1 && (
+          <p className="text-xs text-zinc-400 mt-1">
+            {buildings.length} buildings analyzed
+          </p>
+        )}
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-          {/* Aggregate totals (when multiple buildings) */}
-          {buildings.length > 1 && (
-            <div className="grid grid-cols-3 gap-2">
-              <StatCard
-                label="Net Impervious"
-                value={`+${formatNumber(totals.totalNetIncreaseM2)}`}
-                unit="m²"
-              />
-              <StatCard
-                label="2-yr Runoff"
-                value={`+${formatNumber(totals.totalRunoffIncreaseL_2yr)}`}
-                unit="L"
-              />
-              <StatCard
-                label="100-yr Runoff"
-                value={`+${formatNumber(totals.totalRunoffIncreaseL_100yr)}`}
-                unit="L"
-              />
-            </div>
-          )}
+      <div className="space-y-4">
+        {/* Aggregate totals (when multiple buildings) */}
+        {buildings.length > 1 && (
+          <div className="grid grid-cols-3 gap-2">
+            <StatCard
+              label="Net Impervious"
+              value={`+${formatNumber(totals.totalNetIncreaseM2)}`}
+              unit="m²"
+            />
+            <StatCard
+              label="2-yr Runoff"
+              value={`+${formatNumber(totals.totalRunoffIncreaseL_2yr)}`}
+              unit="L"
+            />
+            <StatCard
+              label="100-yr Runoff"
+              value={`+${formatNumber(totals.totalRunoffIncreaseL_100yr)}`}
+              unit="L"
+            />
+          </div>
+        )}
 
-          {/* Building selector */}
-          {buildings.length > 1 && (
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {buildings.map((b, i) => (
-                <button
-                  key={b.id}
-                  onClick={() => setSelectedIdx(i)}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    selectedIdx === i
-                      ? "bg-blue-600 text-white"
-                      : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
-                  }`}
-                >
-                  Building {i + 1}
-                </button>
-              ))}
-            </div>
-          )}
+        {/* Building selector */}
+        {buildings.length > 1 && (
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {buildings.map((b, i) => (
+              <button
+                key={b.id}
+                onClick={() => setSelectedIdx(i)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  selectedIdx === i
+                    ? "bg-blue-600 text-white"
+                    : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
+                }`}
+              >
+                Building {i + 1}
+              </button>
+            ))}
+          </div>
+        )}
 
-          {current && (
-            <>
-              {/* Impervious Surface Breakdown */}
-              <Section title="Impervious Surface" icon={<CloudRain size={14} />}>
-                <div className="space-y-1.5 text-xs">
-                  <Row label="Building footprint" value={`${formatNumber(current.surface.buildingFootprintM2)} m²`} />
-                  <Row label="Estimated parking" value={`${formatNumber(current.surface.parkingAreaM2)} m²`} />
-                  <Row label="Access / sidewalks" value={`${formatNumber(current.surface.sidewalksAndAccessM2)} m²`} />
-                  <div className="border-t border-white/5 pt-1.5 mt-1.5">
-                    <Row label="Total impervious" value={`${formatNumber(current.surface.totalImperviousM2)} m²`} bold />
-                    <Row label="Previously impervious" value={`${formatNumber(current.surface.previousImperviousM2)} m²`} />
-                    <Row
-                      label="Net increase"
-                      value={`+${formatNumber(current.surface.netImperviousIncrease)} m²`}
-                      bold
-                      highlight
+        {current && (
+          <>
+            {/* Impervious Surface Breakdown */}
+            <Section title="Impervious Surface" icon={<CloudRain size={14} />}>
+              <div className="space-y-1.5 text-xs">
+                <Row label="Building footprint" value={`${formatNumber(current.surface.buildingFootprintM2)} m²`} />
+                <Row label="Estimated parking" value={`${formatNumber(current.surface.parkingAreaM2)} m²`} />
+                <Row label="Access / sidewalks" value={`${formatNumber(current.surface.sidewalksAndAccessM2)} m²`} />
+                <div className="border-t border-white/5 pt-1.5 mt-1.5">
+                  <Row label="Total impervious" value={`${formatNumber(current.surface.totalImperviousM2)} m²`} bold />
+                  <Row label="Previously impervious" value={`${formatNumber(current.surface.previousImperviousM2)} m²`} />
+                  <Row
+                    label="Net increase"
+                    value={`+${formatNumber(current.surface.netImperviousIncrease)} m²`}
+                    bold
+                    highlight
+                  />
+                </div>
+                {/* Impervious bar */}
+                <div className="mt-2">
+                  <div className="flex justify-between text-[10px] text-zinc-500 mb-0.5">
+                    <span>Before: {current.surface.imperviousPercentBefore}%</span>
+                    <span>After: {current.surface.imperviousPercentAfter}%</span>
+                  </div>
+                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 rounded-full transition-all"
+                      style={{ width: `${current.surface.imperviousPercentAfter}%` }}
                     />
                   </div>
-                  {/* Impervious bar */}
-                  <div className="mt-2">
-                    <div className="flex justify-between text-[10px] text-zinc-500 mb-0.5">
-                      <span>Before: {current.surface.imperviousPercentBefore}%</span>
-                      <span>After: {current.surface.imperviousPercentAfter}%</span>
-                    </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 rounded-full transition-all"
-                        style={{ width: `${current.surface.imperviousPercentAfter}%` }}
-                      />
-                    </div>
-                  </div>
                 </div>
-              </Section>
+              </div>
+            </Section>
 
-              {/* Runoff Impact */}
-              <Section title="Stormwater Runoff" icon={<Droplets size={14} />}>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-zinc-500 text-[10px] uppercase">
-                      <th className="text-left font-bold pb-1">Storm</th>
-                      <th className="text-right font-bold pb-1">Before</th>
-                      <th className="text-right font-bold pb-1">After</th>
-                      <th className="text-right font-bold pb-1">Increase</th>
+            {/* Runoff Impact */}
+            <Section title="Stormwater Runoff" icon={<Droplets size={14} />}>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-zinc-500 text-[10px] uppercase">
+                    <th className="text-left font-bold pb-1">Storm</th>
+                    <th className="text-right font-bold pb-1">Before</th>
+                    <th className="text-right font-bold pb-1">After</th>
+                    <th className="text-right font-bold pb-1">Increase</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {current.runoff.map((r) => (
+                    <tr
+                      key={r.returnPeriod}
+                      className={`border-t border-white/5 ${
+                        r.returnPeriod === '2-year' || r.returnPeriod === '100-year'
+                          ? 'font-semibold text-zinc-200'
+                          : 'text-zinc-400'
+                      }`}
+                    >
+                      <td className="py-1 text-zinc-300">{r.returnPeriod}</td>
+                      <td className="py-1 text-right">{r.runoffBeforeMm} mm</td>
+                      <td className="py-1 text-right">{r.runoffAfterMm} mm</td>
+                      <td className="py-1 text-right text-blue-400">
+                        +{formatNumber(r.runoffVolumeIncreaseL)} L
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {current.runoff.map((r) => (
-                      <tr
-                        key={r.returnPeriod}
-                        className={`border-t border-white/5 ${
-                          r.returnPeriod === '2-year' || r.returnPeriod === '100-year'
-                            ? 'font-semibold text-zinc-200'
-                            : 'text-zinc-400'
-                        }`}
-                      >
-                        <td className="py-1 text-zinc-300">{r.returnPeriod}</td>
-                        <td className="py-1 text-right">{r.runoffBeforeMm} mm</td>
-                        <td className="py-1 text-right">{r.runoffAfterMm} mm</td>
-                        <td className="py-1 text-right text-blue-400">
-                          +{formatNumber(r.runoffVolumeIncreaseL)} L
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {/* Peak flow */}
-                <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
-                  {current.runoff
-                    .filter((r) => r.returnPeriod === '2-year' || r.returnPeriod === '100-year')
-                    .map((r) => (
-                      <div key={r.returnPeriod} className="flex justify-between text-xs">
-                        <span className="text-zinc-400">{r.returnPeriod} peak flow increase</span>
-                        <span className="font-semibold text-blue-400">
-                          +{r.peakFlowIncreaseLps.toFixed(2)} L/s
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </Section>
-
-              {/* Mitigation Recommendations */}
-              <Section title="Mitigation Measures" icon={<Leaf size={14} />}>
-                {/* Offset meter */}
-                <div className="mb-3">
-                  <div className="flex justify-between text-[10px] mb-0.5">
-                    <span className="text-zinc-400">Runoff offset (if all applied)</span>
-                    <span
-                      className={`font-bold ${
-                        current.offsetPercent >= 100
-                          ? 'text-green-400'
-                          : current.offsetPercent >= 70
-                          ? 'text-amber-400'
-                          : 'text-red-400'
-                      }`}
-                    >
-                      {current.offsetPercent}%
-                    </span>
-                  </div>
-                  <div className="h-2.5 bg-white/10 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        current.offsetPercent >= 100
-                          ? 'bg-green-500'
-                          : current.offsetPercent >= 70
-                          ? 'bg-amber-500'
-                          : 'bg-red-500'
-                      }`}
-                      style={{ width: `${Math.min(100, current.offsetPercent)}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {current.mitigations.map((m, i) => (
-                    <div
-                      key={i}
-                      className="bg-white/5 rounded-lg border border-white/10 overflow-hidden"
-                    >
-                      <button
-                        className="w-full flex items-center justify-between p-2.5 text-left"
-                        onClick={() => setExpandedMitigation(expandedMitigation === i ? null : i)}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              m.applicability === 'high'
-                                ? 'bg-green-500'
-                                : m.applicability === 'medium'
-                                ? 'bg-amber-500'
-                                : 'bg-zinc-500'
-                            }`}
-                          />
-                          <span className="text-xs font-semibold text-zinc-200">
-                            {m.name}
-                          </span>
-                          <span className="text-[10px] text-blue-400 font-medium">
-                            −{formatNumber(m.volumeReductionL)} L
-                          </span>
-                        </div>
-                        {expandedMitigation === i ? (
-                          <ChevronUp size={12} className="text-zinc-400" />
-                        ) : (
-                          <ChevronDown size={12} className="text-zinc-400" />
-                        )}
-                      </button>
-                      {expandedMitigation === i && (
-                        <div className="px-2.5 pb-2.5 text-[11px] text-zinc-400 space-y-1 border-t border-white/5 pt-2">
-                          <p>{m.description}</p>
-                          <div className="flex gap-4 mt-1">
-                            <span>Area: {formatNumber(m.areaRequiredM2)} m²</span>
-                            <span>Cost: {formatCost(m.costEstimateLow, m.costEstimateHigh)}</span>
-                          </div>
-                          <div className="flex items-center gap-1 mt-1">
-                            {m.applicability === 'high' ? (
-                              <CheckCircle size={10} className="text-green-400" />
-                            ) : (
-                              <AlertTriangle size={10} className="text-amber-400" />
-                            )}
-                            <span className="capitalize">{m.applicability} applicability</span>
-                          </div>
-                        </div>
-                      )}
+                  ))}
+                </tbody>
+              </table>
+              {/* Peak flow */}
+              <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
+                {current.runoff
+                  .filter((r) => r.returnPeriod === '2-year' || r.returnPeriod === '100-year')
+                  .map((r) => (
+                    <div key={r.returnPeriod} className="flex justify-between text-xs">
+                      <span className="text-zinc-400">{r.returnPeriod} peak flow increase</span>
+                      <span className="font-semibold text-blue-400">
+                        +{r.peakFlowIncreaseLps.toFixed(2)} L/s
+                      </span>
                     </div>
                   ))}
+              </div>
+            </Section>
+
+            {/* Mitigation Recommendations */}
+            <Section title="Mitigation Measures" icon={<Leaf size={14} />}>
+              {/* Offset meter */}
+              <div className="mb-3">
+                <div className="flex justify-between text-[10px] mb-0.5">
+                  <span className="text-zinc-400">Runoff offset (if all applied)</span>
+                  <span
+                    className={`font-bold ${
+                      current.offsetPercent >= 100
+                        ? 'text-green-400'
+                        : current.offsetPercent >= 70
+                        ? 'text-amber-400'
+                        : 'text-red-400'
+                    }`}
+                  >
+                    {current.offsetPercent}%
+                  </span>
                 </div>
-              </Section>
-            </>
-          )}
-        </div>
+                <div className="h-2.5 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      current.offsetPercent >= 100
+                        ? 'bg-green-500'
+                        : current.offsetPercent >= 70
+                        ? 'bg-amber-500'
+                        : 'bg-red-500'
+                    }`}
+                    style={{ width: `${Math.min(100, current.offsetPercent)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {current.mitigations.map((m, i) => (
+                  <div
+                    key={i}
+                    className="bg-white/5 rounded-lg border border-white/10 overflow-hidden"
+                  >
+                    <button
+                      className="w-full flex items-center justify-between p-2.5 text-left"
+                      onClick={() => setExpandedMitigation(expandedMitigation === i ? null : i)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            m.applicability === 'high'
+                              ? 'bg-green-500'
+                              : m.applicability === 'medium'
+                              ? 'bg-amber-500'
+                              : 'bg-zinc-500'
+                          }`}
+                        />
+                        <span className="text-xs font-semibold text-zinc-200">
+                          {m.name}
+                        </span>
+                        <span className="text-[10px] text-blue-400 font-medium">
+                          −{formatNumber(m.volumeReductionL)} L
+                        </span>
+                      </div>
+                      {expandedMitigation === i ? (
+                        <ChevronUp size={12} className="text-zinc-400" />
+                      ) : (
+                        <ChevronDown size={12} className="text-zinc-400" />
+                      )}
+                    </button>
+                    {expandedMitigation === i && (
+                      <div className="px-2.5 pb-2.5 text-[11px] text-zinc-400 space-y-1 border-t border-white/5 pt-2">
+                        <p>{m.description}</p>
+                        <div className="flex gap-4 mt-1">
+                          <span>Area: {formatNumber(m.areaRequiredM2)} m²</span>
+                          <span>Cost: {formatCost(m.costEstimateLow, m.costEstimateHigh)}</span>
+                        </div>
+                        <div className="flex items-center gap-1 mt-1">
+                          {m.applicability === 'high' ? (
+                            <CheckCircle size={10} className="text-green-400" />
+                          ) : (
+                            <AlertTriangle size={10} className="text-amber-400" />
+                          )}
+                          <span className="capitalize">{m.applicability} applicability</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          </>
+        )}
       </div>
     </div>
   );
