@@ -154,7 +154,10 @@ function SceneContent({ sceneRef }: SceneContentProps) {
   };
 
   const handleGridClick = (e: any) => {
-    if (!placementMode) return;
+    if (!placementMode) {
+      clearSelection();
+      return;
+    }
 
     const point = e.point;
     const { x, y, z } = getSnappedPosition(point.x, point.z);

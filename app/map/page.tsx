@@ -124,6 +124,7 @@ function MapPageContent() {
   >([]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [showBuildingSelector, setShowBuildingSelector] = useState(false);
+  const [mapStyle, setMapStyle] = useState<"satellite" | "light">("satellite");
   const [showNoiseRipple, setShowNoiseRipple] = useState(true);
   const [showZoningLayer, setShowZoningLayer] = useState(false);
   const [showWindLayer, setShowWindLayer] = useState(false);
@@ -157,6 +158,7 @@ function MapPageContent() {
   const [showTrafficImpact, setShowTrafficImpact] = useState(false);
   const [trafficImpactResult, setTrafficImpactResult] = useState<TrafficImpactResult | null>(null);
   const roadNetworkRef = useRef<RoadNetwork | null>(null);
+  const [roadNetworkReady, setRoadNetworkReady] = useState(false);
 
   // Shadow analysis state
   const [shadowEnabled, setShadowEnabled] = useState(false);
@@ -404,7 +406,7 @@ function MapPageContent() {
     }
     const result = analyzeTrafficImpact(buildingsForAnalysis, roadNetworkRef.current);
     setTrafficImpactResult(result);
-  }, [showTrafficImpact, placedBuildings]);
+  }, [showTrafficImpact, placedBuildings, roadNetworkReady]);
 
   // Timeline range from earliest start to latest end across all placed buildings
   const timelineRange = useMemo(() => {
@@ -663,8 +665,9 @@ function MapPageContent() {
           stakeholderImpactAnalysis={(showStakeholderPanel || showImpactColors) ? stakeholderAnalysis : null}
           showTrafficHeatmap={showTrafficImpact}
           trafficImpactResult={showTrafficImpact ? trafficImpactResult : null}
-          onRoadNetworkLoaded={(rn) => { roadNetworkRef.current = rn; }}
+          onRoadNetworkLoaded={(rn) => { roadNetworkRef.current = rn; setRoadNetworkReady(true); }}
           isStreetViewSelectionMode={isStreetViewSelectionMode}
+          mapStyle={mapStyle}
         />
         {/* Map gradient overlay for better UI contrast */}
         <div className="absolute inset-0 map-gradient pointer-events-none"></div>
@@ -820,7 +823,7 @@ function MapPageContent() {
           </button>
         )}
         <aside
-          className={`absolute left-6 top-6 w-72 pointer-events-auto flex flex-col gap-3 sidebar-transition bottom-6 ${!leftSidebarOpen ? "hidden" : ""}`}
+          className={`absolute left-6 top-6 w-72 pointer-events-auto flex flex-col gap-3 sidebar-transition ${placedBuildings.length > 0 && !showEnvironmentalReport ? "bottom-30" : "bottom-6"} ${!leftSidebarOpen ? "hidden" : ""}`}
         >
           {/* Municipal Branding */}
 
@@ -835,6 +838,35 @@ function MapPageContent() {
                 <ChevronLeft size={16} className="text-zinc-400" />
               </button>
             </div>
+            {/* Map Style Toggle */}
+            <div className="mb-4">
+              <h3 className="ui-label mb-3">Map Style</h3>
+              <div className="flex rounded-md overflow-hidden border border-white/10">
+                <button
+                  onClick={() => setMapStyle("satellite")}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-tight transition-colors ${
+                    mapStyle === "satellite"
+                      ? "bg-accent-blue text-white"
+                      : "bg-white/5 text-zinc-400 hover:bg-white/10"
+                  }`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                  Satellite
+                </button>
+                <button
+                  onClick={() => setMapStyle("light")}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-tight transition-colors ${
+                    mapStyle === "light"
+                      ? "bg-accent-blue text-white"
+                      : "bg-white/5 text-zinc-400 hover:bg-white/10"
+                  }`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/><circle cx="12" cy="12" r="4"/></svg>
+                  Light
+                </button>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between mb-5">
               <h3 className="ui-label">Geospatial Layers</h3>
             </div>
@@ -1218,7 +1250,7 @@ function MapPageContent() {
           </button>
         )}
         <aside
-          className={`absolute right-6 top-6 w-80 pointer-events-auto sidebar-transition ${placedBuildings.length > 0 ? "bottom-32" : "bottom-6"} ${!rightSidebarOpen ? "hidden" : ""}`}
+          className={`absolute right-6 top-6 w-80 pointer-events-auto sidebar-transition ${placedBuildings.length > 0 && !showEnvironmentalReport ? "bottom-30" : "bottom-6"} ${!rightSidebarOpen ? "hidden" : ""}`}
         >
           <div className="glass rounded-lg p-5 h-full overflow-y-auto custom-scrollbar">
             {/* Traffic controls */}
@@ -2100,8 +2132,8 @@ function MapPageContent() {
         </aside>
       </div>
 
-      {/* FIXED BOTTOM PANEL: INTEGRATED TIMELINE - only show when at least one building is placed */}
-      {placedBuildings.length > 0 && (
+      {/* FIXED BOTTOM PANEL: INTEGRATED TIMELINE - only show when at least one building is placed and not in environmental report view */}
+      {placedBuildings.length > 0 && !showEnvironmentalReport && (
         <div className="absolute bottom-0 left-0 right-0 z-50 glass border-t border-white/10 px-8 py-4 flex items-center gap-10 shadow-lg">
           {/* Simulation Controls */}
           <div className="flex items-center gap-4 shrink-0 border-r border-white/10 pr-10">

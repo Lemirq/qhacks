@@ -78,8 +78,8 @@ export default function DrainagePanel({
 
   if (!buildings.length) {
     return (
-      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div className="bg-zinc-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-white/10 w-full max-w-md p-5">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+        <div className="bg-zinc-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-white/10 w-full max-w-md p-5 pointer-events-auto">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Droplets className="text-blue-400" size={20} />
@@ -98,8 +98,8 @@ export default function DrainagePanel({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-zinc-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-white/10 w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+      <div className="bg-zinc-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-white/10 w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden pointer-events-auto">
         {/* Header */}
         <div className="p-4 border-b border-white/10 bg-gradient-to-r from-blue-950/50 to-cyan-950/50">
           <div className="flex items-center justify-between">

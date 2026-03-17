@@ -171,6 +171,8 @@ interface ThreeMapProps {
   onRoadNetworkLoaded?: (roadNetwork: RoadNetwork) => void;
   /** When true, mouse movement shows a street-view pin preview; click triggers street view */
   isStreetViewSelectionMode?: boolean;
+  /** Map base style: satellite imagery or light/street map */
+  mapStyle?: "satellite" | "light";
 }
 
 type CarType = "sedan" | "suv" | "truck" | "compact";
@@ -495,6 +497,7 @@ export default function ThreeMap({
   trafficImpactResult,
   onRoadNetworkLoaded,
   isStreetViewSelectionMode = false,
+  mapStyle = "satellite",
 }: ThreeMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -662,6 +665,49 @@ export default function ThreeMap({
       }
     };
   }, [showTrafficHeatmap, trafficImpactResult, isReady]);
+
+  // Swap ground tile textures when mapStyle changes
+  useEffect(() => {
+    if (!isReady || !groundGroupRef.current || !rendererRef.current) return;
+    const textureLoader = new THREE.TextureLoader();
+    const maxAniso = rendererRef.current.capabilities.getMaxAnisotropy();
+    groundGroupRef.current.children.forEach((child) => {
+      if (child.name.startsWith("ground-tile-") && child.userData.tileBbox) {
+        const tileBbox = child.userData.tileBbox as [number, number, number, number];
+        const mesh = child as THREE.Mesh;
+        fetchSatelliteImagery(tileBbox, mapStyle).then((imageUrl) => {
+          if (!imageUrl) return;
+          textureLoader.load(imageUrl, (texture) => {
+            texture.anisotropy = maxAniso;
+            texture.minFilter = THREE.LinearMipmapLinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.generateMipmaps = true;
+            const oldMat = mesh.material as THREE.Material;
+            if (mapStyle === "light") {
+              // MeshBasicMaterial ignores all lighting and shadows — keeps map bright
+              const newMat = new THREE.MeshBasicMaterial({ map: texture });
+              oldMat.dispose();
+              mesh.material = newMat;
+              mesh.receiveShadow = false;
+            } else {
+              // MeshStandardMaterial for satellite — shadows look natural on aerial
+              const newMat = new THREE.MeshStandardMaterial({
+                map: texture,
+                roughness: 0.9,
+                metalness: 0.0,
+                polygonOffset: true,
+                polygonOffsetFactor: 1,
+                polygonOffsetUnits: 1,
+              });
+              oldMat.dispose();
+              mesh.material = newMat;
+              mesh.receiveShadow = true;
+            }
+          });
+        });
+      }
+    });
+  }, [mapStyle, isReady]);
 
   // Fly to target location when prop changes
   useEffect(() => {
@@ -975,6 +1021,10 @@ export default function ThreeMap({
         );
 
         } // end disabled car simulation
+
+        // Road network is always needed for traffic impact analysis
+        roadNetworkRef.current = roadNetwork;
+        onRoadNetworkLoaded?.(roadNetwork);
 
         // Fetch and setup traffic lights using Traffic Infrastructure Manager
         setLoadingStatus("Setting up traffic lights...");

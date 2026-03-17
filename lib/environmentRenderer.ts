@@ -8,6 +8,7 @@ import * as THREE from "three";
  */
 export async function fetchSatelliteImagery(
   bbox: [number, number, number, number],
+  mapStyle: "satellite" | "light" = "satellite",
 ): Promise<string | null> {
   const [south, west, north, east] = bbox;
 
@@ -23,8 +24,10 @@ export async function fetchSatelliteImagery(
 
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
   if (mapboxToken) {
-    // Use pure satellite (no labels) so text doesn't clash with 3D geometry
-    for (const style of ["satellite-v9", "satellite-streets-v12"]) {
+    const styles = mapStyle === "light"
+      ? ["streets-v12"]
+      : ["satellite-v9", "satellite-streets-v12"];
+    for (const style of styles) {
       try {
         const url = `https://api.mapbox.com/styles/v1/mapbox/${style}/static/[${west},${south},${east},${north}]/${width}x${height}@2x?access_token=${mapboxToken}`;
         const res = await fetch(url, { method: "HEAD" });
