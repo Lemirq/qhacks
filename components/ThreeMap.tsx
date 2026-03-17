@@ -2587,7 +2587,7 @@ export default function ThreeMap({
       const hx = scale.x * 0.6;
       const hz = scale.z * 0.6;
       const sourceDb = getConstructionSourceDb(site, timelineDate);
-      const intensity = sourceDb / 108;
+      const intensity = Math.max(0.3, Math.min(1.0, (sourceDb - 70) / 30));
 
       const perimeterPoints: [number, number][] = [
         [px + hx, pz + hz],
