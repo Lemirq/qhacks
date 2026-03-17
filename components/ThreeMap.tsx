@@ -514,6 +514,8 @@ export default function ThreeMap({
   const groundGroupRef = useRef<THREE.Group | null>(null);
   const timeOfDayHourRef = useRef<number>(12);
   const dayOfYearRef = useRef<number>(80);
+  // Saved bird-eye state so exit street view can return to exact pre-entry position
+  const savedBirdEyeStateRef = useRef<{ position: THREE.Vector3; target: THREE.Vector3 } | null>(null);
   const shadowOverlayCleanupRef = useRef<(() => void) | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const initialized = useRef(false);
@@ -724,6 +726,11 @@ export default function ThreeMap({
   // Street-level POV: fly down when streetViewTarget changes
   useEffect(() => {
     if (!streetViewTarget || !cameraRef.current || !controlsRef.current) return;
+    // Snapshot exact camera/target position before entering street view
+    savedBirdEyeStateRef.current = {
+      position: cameraRef.current.position.clone(),
+      target: controlsRef.current.target.clone(),
+    };
     flyToStreetLevel(
       cameraRef.current,
       controlsRef.current,
@@ -737,8 +744,9 @@ export default function ThreeMap({
   // Exit street view when trigger increments
   useEffect(() => {
     if (!exitStreetViewTrigger || !cameraRef.current || !controlsRef.current) return;
-    if (!isInStreetMode()) return;
-    exitStreetLevel(cameraRef.current, controlsRef.current).then(() => {
+    const savedState = savedBirdEyeStateRef.current;
+    savedBirdEyeStateRef.current = null;
+    exitStreetLevel(cameraRef.current, controlsRef.current, 1500, savedState ?? undefined).then(() => {
       onStreetViewChange?.(false);
     });
   }, [exitStreetViewTrigger]);

@@ -315,9 +315,9 @@ export function flyToStreetLevel(
         controls.minDistance = 0.1;
         controls.maxDistance = 20;
         // Allow looking up freely, but cap downward angle so the camera
-        // can't orbit below ground level (π*0.6 ≈ 108° = ~18° below horizon)
+        // can't orbit below ground level (π*0.75 ≈ 135° = ~45° above horizon)
         controls.minPolarAngle = 0.05;
-        controls.maxPolarAngle = Math.PI * 0.6;
+        controls.maxPolarAngle = Math.PI * 0.75;
         controls.update();
 
         // Hard clamp: if OrbitControls still nudges the camera below ground,
@@ -340,13 +340,20 @@ export function flyToStreetLevel(
 
 /**
  * Return camera from street level back to the saved bird-eye view.
+ * @param overrideTarget - If provided, animate to this position/target instead of the module-level savedCameraState.
  */
 export function exitStreetLevel(
   camera: THREE.Camera,
   controls: OrbitControls,
   duration: number = 1500,
+  overrideTarget?: { position: THREE.Vector3; target: THREE.Vector3 },
 ): Promise<void> {
-  const state = savedCameraState;
+  const state = overrideTarget
+    ? { ...savedCameraState, position: overrideTarget.position, target: overrideTarget.target } as SavedCameraState
+    : savedCameraState;
+
+  savedCameraState = null;
+
   if (!state) {
     // No saved state — just reset controls to defaults
     controls.enablePan = true;
@@ -359,8 +366,6 @@ export function exitStreetLevel(
     controls.update();
     return Promise.resolve();
   }
-
-  savedCameraState = null;
 
   // Remove ground clamp before animating back up
   if (groundClampListener) {
