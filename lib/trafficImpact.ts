@@ -455,7 +455,7 @@ function redistributeBlockedTraffic(
     const toNode = roadNetwork.getNode(blockedEdge.to);
     if (!fromNode || !toNode) continue;
 
-    const altRoute = pathfinder.findRoute(fromNode.position, toNode.position, { blockedEdgeIds });
+    const altRoute = pathfinder.findRoute(fromNode.position, toNode.position, { blockedEdgeIds: barricadedEdgeIds });
     if (altRoute && altRoute.edges.length > 0) {
       // Distribute rerouted traffic across alternate route edges
       // Each edge on the detour gets the full rerouted traffic (they all carry it)
