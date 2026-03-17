@@ -2230,6 +2230,14 @@ export default function ThreeMap({
           model.userData.buildingId = building.id;
           model.userData.timeline = building.timeline;
 
+          // Enable shadow casting/receiving on all meshes
+          model.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+
           // Position the model
           model.position.set(
             building.position.x,
