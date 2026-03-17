@@ -7,6 +7,7 @@
 
 import * as turf from "@turf/turf";
 import { RoadNetwork, RoadEdge, RoadNode } from "./roadNetwork";
+import { Pathfinder } from "./pathfinding";
 import { KingstonZoneCode } from "./kingstonZoning";
 
 // ─── ITE Trip Generation Rates ───────────────────────────────────────────────
@@ -111,6 +112,8 @@ export interface TrafficImpactResult {
   edgeImpact: Map<string, EdgeImpact>;
   /** Intersection node IDs that become congested */
   congestedIntersections: string[];
+  /** Maximum radius (meters) used for trip distribution / gradient rendering */
+  maxImpactRadius: number;
 }
 
 export interface EdgeImpact {
@@ -126,6 +129,14 @@ export interface EdgeImpact {
   level: number;
   /** Level of Service grade A-F */
   los: string;
+  /** Minimum distance (meters) from this edge to the nearest source building */
+  distanceFromSource: number;
+}
+
+/** Mapbox congestion data for a single edge */
+export interface MapboxCongestion {
+  level: "low" | "moderate" | "heavy" | "severe";
+  speed?: number;
 }
 
 /**
@@ -219,46 +230,68 @@ function getLOS(vcRatio: number): string {
  * Distribute generated trips across nearby road edges.
  * Trips are distributed inversely proportional to distance from the building.
  */
+interface DistributionResult {
+  trips: Map<string, number>;
+  distances: Map<string, number>;
+}
+
 function distributeTrips(
   tripGen: BuildingTripGeneration,
   roadNetwork: RoadNetwork,
   radiusM: number = 300,
-): Map<string, number> {
-  const distribution = new Map<string, number>();
+  barricadedEdgeIds?: Set<string>,
+): DistributionResult {
+  const trips = new Map<string, number>();
+  const distances = new Map<string, number>();
   const nearEdges = roadNetwork.findEdgesNearPosition(tripGen.position, radiusM);
 
-  if (nearEdges.length === 0) return distribution;
+  if (nearEdges.length === 0) return { trips, distances };
 
   // Weight by inverse distance (closer roads get more trips)
   const point = turf.point(tripGen.position);
-  const weighted: { edge: RoadEdge; weight: number }[] = [];
+  const weighted: { edge: RoadEdge; weight: number; dist: number }[] = [];
   let totalWeight = 0;
 
   for (const edge of nearEdges) {
     if (!edge.geometry || edge.geometry.length < 2) continue;
+    // Skip barricaded edges for trip distribution
+    const baseId = edge.id.replace(/-reverse$/, "");
+    if (barricadedEdgeIds?.has(edge.id) || barricadedEdgeIds?.has(baseId)) continue;
+
     const line = turf.lineString(edge.geometry);
     const dist = turf.pointToLineDistance(point, line, { units: "meters" });
     const weight = 1 / Math.max(dist, 10); // avoid division by very small numbers
-    weighted.push({ edge, weight });
+    weighted.push({ edge, weight, dist });
     totalWeight += weight;
+
+    // Record distance (keep minimum across all buildings)
+    distances.set(edge.id, dist);
   }
 
   // Distribute peak hour trips (for impact analysis, use peak hour)
   for (const { edge, weight } of weighted) {
     const fraction = weight / totalWeight;
-    const trips = Math.round(tripGen.peakHourTrips * fraction);
-    if (trips > 0) {
-      const existing = distribution.get(edge.id) || 0;
-      distribution.set(edge.id, existing + trips);
+    const tripCount = Math.round(tripGen.peakHourTrips * fraction);
+    if (tripCount > 0) {
+      const existing = trips.get(edge.id) || 0;
+      trips.set(edge.id, existing + tripCount);
     }
   }
 
-  return distribution;
+  return { trips, distances };
 }
 
 /**
  * Run full traffic impact analysis for placed buildings.
  */
+/** Map Mapbox congestion levels to volume multipliers (fraction of capacity) */
+const CONGESTION_MULTIPLIERS: Record<string, number> = {
+  low: 0.3,
+  moderate: 0.55,
+  heavy: 0.8,
+  severe: 0.95,
+};
+
 export function analyzeTrafficImpact(
   buildings: Array<{
     id: string;
@@ -267,7 +300,15 @@ export function analyzeTrafficImpact(
     scale: { x: number; y: number; z: number };
   }>,
   roadNetwork: RoadNetwork,
+  options?: {
+    barricadedEdgeIds?: Set<string>;
+    mapboxCongestion?: Map<string, MapboxCongestion>;
+  },
 ): TrafficImpactResult {
+  const barricadedEdgeIds = options?.barricadedEdgeIds;
+  const mapboxCongestion = options?.mapboxCongestion;
+  const IMPACT_RADIUS = 300;
+
   // 1. Generate trips for each building
   const tripGenerations: BuildingTripGeneration[] = buildings.map((b) =>
     generateTrips(b.id, b.zoneCode, b.position, b.scale),
@@ -276,30 +317,53 @@ export function analyzeTrafficImpact(
   const totalDailyTrips = tripGenerations.reduce((s, t) => s + t.dailyTrips, 0);
   const totalPeakHourTrips = tripGenerations.reduce((s, t) => s + t.peakHourTrips, 0);
 
-  // 2. Distribute trips to road edges
+  // 2. Distribute trips to road edges (collecting distances)
   const edgeTrips = new Map<string, number>();
+  const edgeDistances = new Map<string, number>(); // min distance to any building
   for (const tripGen of tripGenerations) {
-    const dist = distributeTrips(tripGen, roadNetwork);
-    dist.forEach((trips, edgeId) => {
-      edgeTrips.set(edgeId, (edgeTrips.get(edgeId) || 0) + trips);
+    const { trips, distances } = distributeTrips(tripGen, roadNetwork, IMPACT_RADIUS, barricadedEdgeIds);
+    trips.forEach((tripCount, edgeId) => {
+      edgeTrips.set(edgeId, (edgeTrips.get(edgeId) || 0) + tripCount);
     });
+    distances.forEach((dist, edgeId) => {
+      const existing = edgeDistances.get(edgeId);
+      if (existing === undefined || dist < existing) {
+        edgeDistances.set(edgeId, dist);
+      }
+    });
+  }
+
+  // 2b. If barricades exist, redistribute blocked traffic to alternate routes
+  if (barricadedEdgeIds && barricadedEdgeIds.size > 0) {
+    redistributeBlockedTraffic(edgeTrips, edgeDistances, barricadedEdgeIds, roadNetwork, tripGenerations);
   }
 
   // 3. Calculate before/after for each impacted edge
   const edgeImpact = new Map<string, EdgeImpact>();
   const allEdges = roadNetwork.getEdges();
 
+  // Also include edges within radius that have distance data (for gradient rendering)
   for (const edge of allEdges) {
     const addedTrips = edgeTrips.get(edge.id) || 0;
-    const before = baselineVolumePerLane(edge.speedLimit) * Math.max(edge.lanes, 1);
-    const after = before + addedTrips;
+    const distance = edgeDistances.get(edge.id);
     const capacity = laneCapacity(edge.speedLimit) * Math.max(edge.lanes, 1);
-    const vcBefore = before / capacity;
+
+    // Use Mapbox congestion for baseline if available
+    let before: number;
+    const mapboxData = mapboxCongestion?.get(edge.id);
+    if (mapboxData) {
+      const multiplier = CONGESTION_MULTIPLIERS[mapboxData.level] ?? 0.3;
+      before = Math.round(capacity * multiplier);
+    } else {
+      before = baselineVolumePerLane(edge.speedLimit) * Math.max(edge.lanes, 1);
+    }
+
+    const after = before + addedTrips;
     const vcAfter = after / capacity;
     const level = Math.min(1, vcAfter); // congestion level 0-1
 
-    // Only include edges with actual impact or near buildings
-    if (addedTrips > 0) {
+    // Include edges with impact OR within distance radius (for gradient)
+    if (addedTrips > 0 || (distance !== undefined && distance <= IMPACT_RADIUS)) {
       edgeImpact.set(edge.id, {
         edgeId: edge.id,
         edgeName: edge.name,
@@ -308,6 +372,7 @@ export function analyzeTrafficImpact(
         delta: addedTrips,
         level,
         los: getLOS(vcAfter),
+        distanceFromSource: distance ?? IMPACT_RADIUS,
       });
     }
   }
@@ -339,7 +404,109 @@ export function analyzeTrafficImpact(
     totalPeakHourTrips,
     edgeImpact,
     congestedIntersections,
+    maxImpactRadius: IMPACT_RADIUS,
   };
+}
+
+/**
+ * Redistribute trips from barricaded edges to alternate routes.
+ * Uses simple A* pathfinding to find alternate paths around blocked roads.
+ */
+function redistributeBlockedTraffic(
+  edgeTrips: Map<string, number>,
+  edgeDistances: Map<string, number>,
+  barricadedEdgeIds: Set<string>,
+  roadNetwork: RoadNetwork,
+  tripGenerations: BuildingTripGeneration[],
+): void {
+  const pathfinder = new Pathfinder(roadNetwork);
+
+  // For each barricaded edge, try to reroute its trips to adjacent edges
+  for (const blockedId of barricadedEdgeIds) {
+    const blockedTrips = edgeTrips.get(blockedId) || 0;
+    if (blockedTrips === 0) continue;
+
+    // Remove trips from blocked edge
+    edgeTrips.delete(blockedId);
+
+    // Find the edge to get its endpoints
+    const allEdges = roadNetwork.getEdges();
+    const blockedEdge = allEdges.find(e => e.id === blockedId);
+    if (!blockedEdge) continue;
+
+    // Find alternate route around the blocked edge
+    const fromNode = roadNetwork.getNode(blockedEdge.from);
+    const toNode = roadNetwork.getNode(blockedEdge.to);
+    if (!fromNode || !toNode) continue;
+
+    const altRoute = pathfinder.findRoute(fromNode.position, toNode.position, { blockedEdgeIds });
+    if (altRoute && altRoute.edges.length > 0) {
+      // Distribute the blocked trips across the alternate route edges
+      const perEdge = Math.max(1, Math.round(blockedTrips / altRoute.edges.length));
+      for (const altEdgeId of altRoute.edges) {
+        edgeTrips.set(altEdgeId, (edgeTrips.get(altEdgeId) || 0) + perEdge);
+        // If the alt edge doesn't have a distance, give it a moderate distance
+        if (!edgeDistances.has(altEdgeId)) {
+          edgeDistances.set(altEdgeId, 200);
+        }
+      }
+    } else {
+      // No alternate route found; spill trips to immediate neighbors
+      const neighborEdges = roadNetwork.getNodeEdges(blockedEdge.from);
+      const validNeighbors = neighborEdges.filter(e => !barricadedEdgeIds.has(e.id) && e.id !== blockedId);
+      if (validNeighbors.length > 0) {
+        const perEdge = Math.max(1, Math.round(blockedTrips / validNeighbors.length));
+        for (const neighbor of validNeighbors) {
+          edgeTrips.set(neighbor.id, (edgeTrips.get(neighbor.id) || 0) + perEdge);
+          if (!edgeDistances.has(neighbor.id)) {
+            edgeDistances.set(neighbor.id, 150);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Fetch Mapbox congestion data for road edges.
+ * Calls the /api/map/traffic endpoint which proxies to Mapbox Map Matching API.
+ */
+export async function fetchMapboxCongestion(
+  roadNetwork: RoadNetwork,
+): Promise<Map<string, MapboxCongestion>> {
+  const edges = roadNetwork.getEdges();
+  const edgeData = edges
+    .filter(e => e.geometry && e.geometry.length >= 2)
+    .slice(0, 200) // Limit to avoid huge payloads
+    .map(e => ({
+      id: e.id,
+      geometry: e.geometry,
+    }));
+
+  try {
+    const response = await fetch("/api/map/traffic", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ edges: edgeData }),
+    });
+
+    if (!response.ok) {
+      console.warn("Mapbox traffic fetch failed:", response.status);
+      return new Map();
+    }
+
+    const data = await response.json();
+    const result = new Map<string, MapboxCongestion>();
+    if (data.congestion) {
+      for (const [edgeId, congestion] of Object.entries(data.congestion)) {
+        result.set(edgeId, congestion as MapboxCongestion);
+      }
+    }
+    return result;
+  } catch (error) {
+    console.warn("Mapbox traffic fetch error:", error);
+    return new Map();
+  }
 }
 
 // ─── Heatmap color helpers ───────────────────────────────────────────────────

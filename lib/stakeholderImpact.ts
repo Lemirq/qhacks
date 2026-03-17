@@ -9,6 +9,7 @@
 import * as THREE from "three";
 import { Building } from "./buildingData";
 import { CityProjection } from "./projection";
+import { getRepresentativeSourceDb, dbAtDistanceMeters } from "./constructionNoise";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -130,19 +131,17 @@ function calculateShadowImpact(
 }
 
 /**
- * Noise impact from construction and new building activity.
- * Construction noise: ~85 dB at source, drops ~6 dB per doubling of distance.
- * Impact threshold: 55 dB (residential quiet zone).
+ * Noise impact from construction activity.
+ * Uses FHWA equipment-based source levels and inverse-square propagation.
+ * WHO-aligned thresholds: 45 dB = 0 impact, 85 dB = 1.0 impact.
  */
 function calculateNoiseImpact(distanceMeters: number, placedHeight: number): number {
-  // Construction is louder for larger buildings
-  const sourceDb = 80 + Math.min(10, placedHeight / 5);
-  // Sound attenuation: ~6 dB per doubling of distance
-  const attenuation = 20 * Math.log10(Math.max(1, distanceMeters));
-  const receivedDb = sourceDb - attenuation;
+  // Use representative peak source dB from equipment model (no zoneType available here)
+  const sourceDb = getRepresentativeSourceDb(undefined, placedHeight);
+  const receivedDb = dbAtDistanceMeters(Math.max(1, distanceMeters), sourceDb);
 
-  // Normalize: 55 dB = no impact, 85 dB = full impact
-  const impact = (receivedDb - 55) / 30;
+  // Normalize: 45 dB = 0 impact, 85 dB = 1.0 impact (WHO-aligned)
+  const impact = (receivedDb - 45) / 40;
   return Math.min(1, Math.max(0, impact));
 }
 
