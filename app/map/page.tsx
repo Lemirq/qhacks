@@ -64,6 +64,7 @@ import type { Building } from "@/lib/buildingData";
 import { analyzeTrafficImpact, fetchMapboxCongestion, type TrafficImpactResult, type MapboxCongestion } from "@/lib/trafficImpact";
 import { TrafficImpactPanel } from "@/components/TrafficImpactPanel";
 import { RoadNetwork } from "@/lib/roadNetwork";
+import { fetchWindData, WindDataSet } from "@/lib/windData";
 
 interface PlacedBuilding {
   id: string;
@@ -129,6 +130,11 @@ function MapPageContent() {
   const [showNoiseRipple, setShowNoiseRipple] = useState(false);
   const [showZoningLayer, setShowZoningLayer] = useState(false);
   const [showWindLayer, setShowWindLayer] = useState(false);
+  const [windData, setWindData] = useState<WindDataSet | null>(null);
+  useEffect(() => {
+    if (!showWindLayer) return;
+    fetchWindData().then(setWindData).catch(console.error);
+  }, [showWindLayer]);
   const [showImpactColors, setShowImpactColors] = useState(false);
   // Correct config for Kingston zoning layer (Official Plan)
   const [zoningOffset, setZoningOffset] = useState({ x: 0, z: 0 });
@@ -697,6 +703,7 @@ function MapPageContent() {
           showNoiseRipple={showNoiseRipple}
           showZoningLayer={showZoningLayer}
           showWindLayer={showWindLayer}
+          windData={showWindLayer ? windData : null}
           zoningOffset={zoningOffset}
           zoningRotationY={zoningRotationY}
           zoningFlipH={zoningFlipH}
@@ -1052,7 +1059,9 @@ function MapPageContent() {
                       Wind Effects
                     </p>
                     <p className="text-[9px] text-zinc-500">
-                      Flow simulation · Venturi zones · Comfort
+                      {showWindLayer && windData
+                        ? `${windData.hourly[Math.floor(timeOfDayHour) % 24]?.speedMs.toFixed(1)} m/s · ${windData.hourly[Math.floor(timeOfDayHour) % 24]?.directionDeg.toFixed(0)}°`
+                        : "Flow simulation · Venturi zones · Comfort"}
                     </p>
                   </div>
                   <div className="flex items-center">

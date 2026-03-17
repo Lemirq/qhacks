@@ -1,28 +1,27 @@
 /**
  * Wind Effect Visualization for Kingston
- * Simplified wind model using building heights and orientation
- * relative to prevailing wind direction (W/SW for Kingston).
- *
- * Uses a coarse grid + particle system to show wind flow at street level.
+ * Simplified wind model using building heights and orientation.
+ * Supports hourly wind data with pre-computed fields for time-of-day scrubbing.
  */
 
 import * as THREE from "three";
 import { Building } from "./buildingData";
 import { CityProjection } from "./projection";
+import type { HourlyWindData } from "./windData";
 
-const BASE_WIND_SPEED = 5.0; // m/s
+const DEFAULT_WIND_SPEED = 5.0; // m/s
 const COMFORT_THRESHOLD = 6.0; // m/s — uncomfortable
 const SAFETY_THRESHOLD = 15.0; // m/s — dangerous
 
-// Coarse grid — fewer cells = much faster computation
 const GRID_RES = 30;
 const PARTICLE_AREA_PADDING = 40;
+const MAX_ARROWS = 200;
 
-// Wind direction: blowing FROM WSW, particles move toward ENE
-const WIND_DIR_X = 0.87;  // ENE
-const WIND_DIR_Z = -0.5;
+// Default direction: blowing FROM WSW, particles move toward ENE
+const DEFAULT_DIR_X = 0.87;
+const DEFAULT_DIR_Z = -0.5;
 
-interface WindCell {
+export interface WindCell {
   x: number;
   z: number;
   speed: number;
@@ -42,14 +41,33 @@ interface BuildingObstacle {
   maxZ: number;
 }
 
-/**
- * Compute wind field on a coarse grid with yields so the UI doesn't freeze.
- * Skips expensive Venturi pair-building; uses a simpler wake+deflect model.
- */
-async function computeWindField(
+interface ObstacleData {
+  obstacles: BuildingObstacle[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+// --- 2a: speedToColor helper ---
+const _tmpColor = new THREE.Color();
+function speedToColor(speed: number): THREE.Color {
+  if (speed < 3) {
+    _tmpColor.setRGB(0.1, 0.75, 0.2);
+  } else if (speed < COMFORT_THRESHOLD) {
+    const t = (speed - 3) / (COMFORT_THRESHOLD - 3);
+    _tmpColor.setRGB(0.1 + t * 0.9, 0.75, 0.2 - t * 0.2);
+  } else if (speed < SAFETY_THRESHOLD) {
+    const t = (speed - COMFORT_THRESHOLD) / (SAFETY_THRESHOLD - COMFORT_THRESHOLD);
+    _tmpColor.setRGB(1.0, 0.65 - t * 0.55, 0.0);
+  } else {
+    _tmpColor.setRGB(0.95, 0.05, 0.05);
+  }
+  return _tmpColor;
+}
+
+// --- 2b: buildObstacles helper ---
+function buildObstacles(
   buildings: Building[],
   projection: typeof CityProjection,
-): Promise<{ cells: WindCell[]; bounds: { minX: number; maxX: number; minZ: number; maxZ: number } }> {
+): ObstacleData {
   const obstacles: BuildingObstacle[] = [];
   let bMinX = Infinity, bMaxX = -Infinity;
   let bMinZ = Infinity, bMaxZ = -Infinity;
@@ -73,14 +91,25 @@ async function computeWindField(
 
   bMinX -= PARTICLE_AREA_PADDING; bMaxX += PARTICLE_AREA_PADDING;
   bMinZ -= PARTICLE_AREA_PADDING; bMaxZ += PARTICLE_AREA_PADDING;
-  const bounds = { minX: bMinX, maxX: bMaxX, minZ: bMinZ, maxZ: bMaxZ };
+
+  return { obstacles, bounds: { minX: bMinX, maxX: bMaxX, minZ: bMinZ, maxZ: bMaxZ } };
+}
+
+// --- 2c: Parameterized computeWindField ---
+async function computeWindField(
+  obstacleData: ObstacleData,
+  baseSpeed: number = DEFAULT_WIND_SPEED,
+  windDirX: number = DEFAULT_DIR_X,
+  windDirZ: number = DEFAULT_DIR_Z,
+): Promise<WindCell[]> {
+  const { obstacles, bounds } = obstacleData;
+  const { minX: bMinX, maxX: bMaxX, minZ: bMinZ, maxZ: bMaxZ } = bounds;
 
   const cols = Math.ceil((bMaxX - bMinX) / GRID_RES);
   const rows = Math.ceil((bMaxZ - bMinZ) / GRID_RES);
   const cells: WindCell[] = new Array(rows * cols);
 
   for (let r = 0; r < rows; r++) {
-    // Yield every 5 rows — coarse grid, so this is frequent enough
     if (r > 0 && r % 5 === 0) {
       await new Promise<void>(resolve => setTimeout(resolve, 0));
     }
@@ -88,13 +117,12 @@ async function computeWindField(
       const cellX = bMinX + c * GRID_RES + GRID_RES / 2;
       const cellZ = bMinZ + r * GRID_RES + GRID_RES / 2;
 
-      let speed = BASE_WIND_SPEED;
-      let dX = WIND_DIR_X;
-      let dZ = WIND_DIR_Z;
+      let speed = baseSpeed;
+      let dX = windDirX;
+      let dZ = windDirZ;
       let inside = false;
 
       for (const obs of obstacles) {
-        // Inside building — no wind
         if (cellX >= obs.minX && cellX <= obs.maxX && cellZ >= obs.minZ && cellZ <= obs.maxZ) {
           inside = true;
           break;
@@ -105,16 +133,14 @@ async function computeWindField(
         const dist = Math.sqrt(relX * relX + relZ * relZ);
         const radius = Math.max(obs.halfWidth, obs.halfDepth);
 
-        // Wake zone: downwind of building
-        const dotWind = relX * WIND_DIR_X + relZ * WIND_DIR_Z;
-        const crossWind = Math.abs(relX * (-WIND_DIR_Z) + relZ * WIND_DIR_X);
+        const dotWind = relX * windDirX + relZ * windDirZ;
+        const crossWind = Math.abs(relX * (-windDirZ) + relZ * windDirX);
         const wakeLen = obs.height * 2.0;
         if (dotWind > 0 && dotWind < wakeLen && crossWind < radius * 1.3) {
           const f = 1 - (1 - dotWind / wakeLen) * 0.5 * Math.min(obs.height / 20, 1.5);
           speed *= Math.max(0.3, f);
         }
 
-        // Corner acceleration
         if (dist > radius * 0.9 && dist < radius * 1.8) {
           speed *= 1 + (obs.height / 50) * 0.5 * Math.max(0, 1 - (dist - radius) / radius);
         }
@@ -127,30 +153,32 @@ async function computeWindField(
     }
   }
 
-  return { cells, bounds };
+  return cells;
 }
 
+// --- 2d: precomputeWindFields ---
+export async function precomputeWindFields(
+  buildings: Building[],
+  projection: typeof CityProjection,
+  hourlyData: HourlyWindData[],
+): Promise<WindCell[][]> {
+  const obstacleData = buildObstacles(buildings, projection);
+  const fields: WindCell[][] = [];
+  for (const h of hourlyData) {
+    fields.push(await computeWindField(obstacleData, h.speedMs, h.dirX, h.dirZ));
+  }
+  return fields;
+}
 
-/**
- * Build a single merged mesh where every grid cell is colored by wind speed.
- * Uses vertex colors so one draw call covers the whole heatmap.
- *
- * Color scale (speed in m/s):
- *   0–3   : green  (calm)
- *   3–6   : cyan→blue (breezy)
- *   6–15  : yellow→orange (uncomfortable)
- *   15+   : red (dangerous)
- */
+// --- Heatmap creation (uses speedToColor) ---
 function createWindHeatmap(cells: WindCell[]): THREE.Mesh {
-  const validCells = cells.filter(c => c.speed > 0.1); // skip inside-building cells
+  const validCells = cells.filter(c => c.speed > 0.1);
   const size = GRID_RES * 0.92;
   const half = size / 2;
 
   const positions = new Float32Array(validCells.length * 4 * 3);
   const vColors   = new Float32Array(validCells.length * 4 * 3);
   const indices   = new Uint32Array(validCells.length * 6);
-
-  const col = new THREE.Color();
 
   for (let i = 0; i < validCells.length; i++) {
     const { x, z, speed } = validCells[i];
@@ -161,23 +189,7 @@ function createWindHeatmap(cells: WindCell[]): THREE.Mesh {
     positions[b + 6]  = x + half; positions[b + 7]  = 1.5; positions[b + 8]  = z + half;
     positions[b + 9]  = x - half; positions[b + 10] = 1.5; positions[b + 11] = z + half;
 
-    // Map speed to color
-    if (speed < 3) {
-      // 0–3 m/s: green
-      col.setRGB(0.1, 0.75, 0.2);
-    } else if (speed < COMFORT_THRESHOLD) {
-      // 3–6 m/s: green → yellow
-      const t = (speed - 3) / (COMFORT_THRESHOLD - 3);
-      col.setRGB(0.1 + t * 0.9, 0.75, 0.2 - t * 0.2);
-    } else if (speed < SAFETY_THRESHOLD) {
-      // 6–15 m/s: yellow → orange → red
-      const t = (speed - COMFORT_THRESHOLD) / (SAFETY_THRESHOLD - COMFORT_THRESHOLD);
-      col.setRGB(1.0, 0.65 - t * 0.55, 0.0);
-    } else {
-      // 15+ m/s: red
-      col.setRGB(0.95, 0.05, 0.05);
-    }
-
+    const col = speedToColor(speed);
     for (let v = 0; v < 4; v++) {
       vColors[(i * 4 + v) * 3]     = col.r;
       vColors[(i * 4 + v) * 3 + 1] = col.g;
@@ -206,56 +218,10 @@ function createWindHeatmap(cells: WindCell[]): THREE.Mesh {
   return mesh;
 }
 
-
-export interface WindVisualization {
-  group: THREE.Group;
-  update: (deltaTime: number) => void;
-  dispose: () => void;
-}
-
-export async function createWindVisualization(
-  buildings: Building[],
-  projection: typeof CityProjection,
-): Promise<WindVisualization> {
-  const group = new THREE.Group();
-  group.name = "windLayer";
-
-  const { cells } = await computeWindField(buildings, projection);
-
-  group.add(createWindHeatmap(cells));
-  group.add(createWindArrows(cells));
-
-  function update(_deltaTime: number) {
-    // Pulse arrow opacity — heatmap is static
-    const arrowGroup = group.getObjectByName("windArrows") as THREE.Group | undefined;
-    if (arrowGroup) {
-      const mat = arrowGroup.userData.arrowMaterial as THREE.MeshBasicMaterial | undefined;
-      if (mat) mat.opacity = 0.5 + 0.3 * Math.sin(Date.now() * 0.003);
-    }
-  }
-
-  function dispose() {
-    group.traverse((obj) => {
-      if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
-        obj.geometry?.dispose();
-        if (obj.material instanceof THREE.Material) obj.material.dispose();
-      }
-    });
-  }
-
-  return { group, update, dispose };
-}
-
+// --- 2e: Arrow creation with pre-allocated MAX_ARROWS ---
 function createWindArrows(cells: WindCell[]): THREE.Group {
   const group = new THREE.Group();
   group.name = "windArrows";
-
-  // Sample every 2nd cell, cap at 200 arrows
-  const eligible: WindCell[] = [];
-  for (let i = 0; i < cells.length && eligible.length < 200; i += 2) {
-    if (cells[i] && cells[i].speed >= COMFORT_THRESHOLD * 0.7) eligible.push(cells[i]);
-  }
-  if (eligible.length === 0) return group;
 
   const arrowGeom = new THREE.ConeGeometry(2.5, 7, 4);
   arrowGeom.rotateX(Math.PI / 2);
@@ -264,8 +230,25 @@ function createWindArrows(cells: WindCell[]): THREE.Group {
     transparent: true, opacity: 0.6, depthWrite: false, vertexColors: true,
   });
 
-  const mesh = new THREE.InstancedMesh(arrowGeom, mat, eligible.length);
+  // Pre-allocate with MAX_ARROWS capacity
+  const mesh = new THREE.InstancedMesh(arrowGeom, mat, MAX_ARROWS);
   mesh.renderOrder = 9996;
+  mesh.name = "windArrowMesh";
+
+  // Populate with initial data
+  const count = populateArrows(mesh, cells);
+  mesh.count = count;
+
+  group.add(mesh);
+  group.userData.arrowMaterial = mat;
+  return group;
+}
+
+function populateArrows(mesh: THREE.InstancedMesh, cells: WindCell[]): number {
+  const eligible: WindCell[] = [];
+  for (let i = 0; i < cells.length && eligible.length < MAX_ARROWS; i += 2) {
+    if (cells[i] && cells[i].speed >= COMFORT_THRESHOLD * 0.7) eligible.push(cells[i]);
+  }
 
   const dummy = new THREE.Object3D();
   const col = new THREE.Color();
@@ -283,8 +266,73 @@ function createWindArrows(cells: WindCell[]): THREE.Group {
 
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  return eligible.length;
+}
 
-  group.add(mesh);
-  group.userData.arrowMaterial = mat;
-  return group;
+// --- WindVisualization with setWindField ---
+export interface WindVisualization {
+  group: THREE.Group;
+  update: (deltaTime: number) => void;
+  dispose: () => void;
+  setWindField: (cells: WindCell[]) => void;
+}
+
+export async function createWindVisualization(
+  buildings: Building[],
+  projection: typeof CityProjection,
+  initialCells?: WindCell[],
+): Promise<WindVisualization> {
+  const group = new THREE.Group();
+  group.name = "windLayer";
+
+  // If no initial cells provided, compute with defaults (backward-compat)
+  const cells = initialCells ?? await computeWindField(buildObstacles(buildings, projection));
+
+  const heatmapMesh = createWindHeatmap(cells);
+  group.add(heatmapMesh);
+  group.add(createWindArrows(cells));
+
+  // --- 2f: setWindField — in-place updates ---
+  function setWindField(newCells: WindCell[]) {
+    // Update heatmap colors in-place
+    const colorAttr = heatmapMesh.geometry.getAttribute("color") as THREE.BufferAttribute;
+    const validCells = newCells.filter(c => c.speed > 0.1);
+    for (let i = 0; i < validCells.length && i * 4 * 3 < colorAttr.array.length; i++) {
+      const col = speedToColor(validCells[i].speed);
+      for (let v = 0; v < 4; v++) {
+        colorAttr.array[(i * 4 + v) * 3]     = col.r;
+        colorAttr.array[(i * 4 + v) * 3 + 1] = col.g;
+        colorAttr.array[(i * 4 + v) * 3 + 2] = col.b;
+      }
+    }
+    colorAttr.needsUpdate = true;
+
+    // Update arrows in-place
+    const arrowGroup = group.getObjectByName("windArrows") as THREE.Group | undefined;
+    if (arrowGroup) {
+      const arrowMesh = arrowGroup.getObjectByName("windArrowMesh") as THREE.InstancedMesh | undefined;
+      if (arrowMesh) {
+        arrowMesh.count = populateArrows(arrowMesh, newCells);
+      }
+    }
+  }
+
+  function update(_deltaTime: number) {
+    const arrowGroup = group.getObjectByName("windArrows") as THREE.Group | undefined;
+    if (arrowGroup) {
+      const mat = arrowGroup.userData.arrowMaterial as THREE.MeshBasicMaterial | undefined;
+      if (mat) mat.opacity = 0.5 + 0.3 * Math.sin(Date.now() * 0.003);
+    }
+  }
+
+  function dispose() {
+    group.traverse((obj) => {
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh || obj instanceof THREE.Points) {
+        obj.geometry?.dispose();
+        if (obj.material instanceof THREE.Material) obj.material.dispose();
+      }
+    });
+  }
+
+  return { group, update, dispose, setWindField };
 }

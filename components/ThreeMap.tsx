@@ -83,7 +83,8 @@ import {
   getConstructionSourceDb,
 } from "@/lib/constructionNoise";
 import { loadAndRenderZoningLayer } from "@/lib/zoningRenderer";
-import { createWindVisualization, WindVisualization } from "@/lib/windSimulation";
+import { createWindVisualization, WindVisualization, WindCell, precomputeWindFields } from "@/lib/windSimulation";
+import type { WindDataSet } from "@/lib/windData";
 
 interface PlacedBuilding {
   id: string;
@@ -126,6 +127,8 @@ interface ThreeMapProps {
   showZoningLayer?: boolean;
   /** Show wind effect visualization overlay */
   showWindLayer?: boolean;
+  /** Hourly wind data from Open-Meteo for time-of-day scrubbing */
+  windData?: WindDataSet | null;
   /** Offset to align zoning layer (world units) */
   zoningOffset?: { x: number; z: number };
   /** Rotation in degrees (Y axis) */
@@ -292,7 +295,7 @@ function createStreetTreeModel(): THREE.Group {
     new THREE.ConeGeometry(0.8 * S, 2.0 * S, 7),
     new THREE.MeshPhongMaterial({ color: 0x2d6a2d, emissive: new THREE.Color(0x2d6a2d), emissiveIntensity: 0.35 }),
   );
-  canopy.position.y = 2.5 * S;
+  canopy.position.y = 2.2 * S;
   group.add(canopy);
   return group;
 }
@@ -507,6 +510,7 @@ export default function ThreeMap({
   showNoiseRipple = false,
   showZoningLayer = false,
   showWindLayer = false,
+  windData = null,
   zoningOffset = { x: 0, z: 0 },
   zoningRotationY = 0,
   zoningFlipH = false,
@@ -579,6 +583,7 @@ export default function ThreeMap({
   const zoningGroupRef = useRef<THREE.Group | null>(null);
   const windVizRef = useRef<WindVisualization | null>(null);
   const buildingsDataRef = useRef<import("@/lib/buildingData").Building[]>([]);
+  const windFieldsRef = useRef<WindCell[][] | null>(null);
 
   // Sync time-of-day prop into ref for animation loop
   useEffect(() => {
@@ -2758,6 +2763,7 @@ export default function ThreeMap({
         windVizRef.current.dispose();
         windVizRef.current = null;
       }
+      windFieldsRef.current = null;
     };
 
     if (!showWindLayer) {
@@ -2773,20 +2779,50 @@ export default function ThreeMap({
     removeWind();
 
     let cancelled = false;
-    // createWindVisualization is async — yields to browser between row batches
-    // so clicking wind no longer freezes the app
-    createWindVisualization(buildingsDataRef.current, CityProjection).then((viz) => {
-      if (cancelled) { viz.dispose(); return; }
-      windVizRef.current = viz;
-      groupsRef.current?.dynamicObjects.add(viz.group);
-      console.log("✅ Wind visualization layer enabled");
-    });
+
+    if (windData && windData.hourly.length > 0) {
+      // Use hour-0 data for initial display, then pre-compute all 24 fields
+      const hour0 = windData.hourly[0];
+      createWindVisualization(buildingsDataRef.current, CityProjection).then(async (viz) => {
+        if (cancelled) { viz.dispose(); return; }
+        windVizRef.current = viz;
+        groupsRef.current?.dynamicObjects.add(viz.group);
+
+        // Pre-compute all 24 wind fields
+        const fields = await precomputeWindFields(buildingsDataRef.current, CityProjection, windData.hourly);
+        if (cancelled) return;
+        windFieldsRef.current = fields;
+
+        // Apply current hour
+        const hour = Math.floor(timeOfDayHourRef.current) % 24;
+        if (fields[hour]) viz.setWindField(fields[hour]);
+        console.log("✅ Wind visualization layer enabled with hourly data");
+      });
+    } else {
+      // Fallback: no wind data, use defaults
+      createWindVisualization(buildingsDataRef.current, CityProjection).then((viz) => {
+        if (cancelled) { viz.dispose(); return; }
+        windVizRef.current = viz;
+        groupsRef.current?.dynamicObjects.add(viz.group);
+        console.log("✅ Wind visualization layer enabled (default wind)");
+      });
+    }
 
     return () => {
       cancelled = true;
       removeWind();
     };
-  }, [showWindLayer, isReady]);
+  }, [showWindLayer, isReady, windData]);
+
+  // Update wind field when time-of-day slider changes
+  useEffect(() => {
+    if (!windVizRef.current || !windFieldsRef.current) return;
+    const hour = Math.floor(timeOfDayHour ?? 12) % 24;
+    const field = windFieldsRef.current[hour];
+    if (field) {
+      windVizRef.current.setWindField(field);
+    }
+  }, [timeOfDayHour]);
 
   // Barricade mode: crosshair cursor and road hover highlight
   useEffect(() => {
