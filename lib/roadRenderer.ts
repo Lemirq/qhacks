@@ -266,31 +266,51 @@ export function renderRoadsWithTubes(
  * Each impacted edge gets a semi-transparent colored overlay (green→red).
  * Returns a THREE.Group that can be added/removed from the scene.
  */
+/**
+ * Render a distance-based gradient heatmap overlay on roads.
+ * Roads near buildings glow red, transitioning to orange then green as distance increases.
+ * When buildingPositions is provided, uses per-vertex coloring based on distance to nearest building.
+ * Falls back to uniform congestion-level coloring when no building positions are given.
+ */
 export function renderTrafficHeatmap(
-  edgeImpact: Map<string, { edgeId: string; level: number; delta: number }>,
+  edgeImpact: Map<string, { edgeId: string; level: number; delta: number; distanceFromSource?: number }>,
   allEdges: RoadEdge[],
   projection: typeof CityProjection,
+  buildingPositions?: [number, number][],
+  maxImpactRadius: number = 300,
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = "traffic-heatmap";
 
   const edgeMap = new Map(allEdges.map((e) => [e.id, e]));
 
+  // Pre-compute building world positions for vertex gradient
+  let buildingWorldPositions: THREE.Vector3[] | null = null;
+  if (buildingPositions && buildingPositions.length > 0) {
+    buildingWorldPositions = buildingPositions.map(pos => projection.projectToWorld(pos));
+  }
+
   edgeImpact.forEach((impact) => {
     const edge = edgeMap.get(impact.edgeId);
-    if (!edge || edge.geometry.length < 2 || impact.delta <= 0) return;
+    if (!edge || edge.geometry.length < 2) return;
 
     const points = edge.geometry.map((coord) =>
       projection.projectToWorld(coord),
     );
 
     const { width } = getRoadStyle(edge.speedLimit, edge.lanes);
-    const color = getCongestionHex(impact.level);
+    const overlayWidth = width * 0.85;
 
-    // Create overlay strip on top of the road
-    const overlayWidth = width * 0.85; // slightly narrower than road
-    const mesh = createHeatmapStrip(points, overlayWidth, color, impact.level);
-    mesh.position.y = 1.5; // above road surface
+    let mesh: THREE.Mesh;
+    if (buildingWorldPositions) {
+      // Per-vertex gradient based on distance to nearest building
+      mesh = createGradientHeatmapStrip(points, overlayWidth, buildingWorldPositions, maxImpactRadius);
+    } else {
+      const color = getCongestionHex(impact.level);
+      mesh = createHeatmapStrip(points, overlayWidth, color, impact.level);
+    }
+
+    mesh.position.y = 1.5;
     mesh.name = `heatmap-${edge.id}`;
     group.add(mesh);
   });
@@ -429,4 +449,196 @@ function createHeatmapStrip(
 
   const mesh = new THREE.Mesh(geometry, material);
   return mesh;
+}
+
+/**
+ * Distance-to-color mapping for gradient heatmap.
+ * 0-100m = red, 100-200m = orange, 200-300m = green.
+ * Returns [r, g, b] in 0-1 range.
+ */
+function distanceToColor(dist: number, maxRadius: number): [number, number, number] {
+  const t = Math.max(0, Math.min(1, dist / maxRadius)); // 0=closest, 1=farthest
+  if (t < 0.33) {
+    // Red → Orange
+    const s = t / 0.33;
+    return [1, s * 0.65, 0];
+  } else if (t < 0.66) {
+    // Orange → Yellow-Green
+    const s = (t - 0.33) / 0.33;
+    return [1 - s * 0.5, 0.65 + s * 0.35, 0];
+  } else {
+    // Yellow-Green → Green
+    const s = (t - 0.66) / 0.34;
+    return [0.5 - s * 0.5, 1, 0];
+  }
+}
+
+/**
+ * Create a heatmap strip with per-vertex colors based on distance to nearest building.
+ * Produces a smooth red→orange→green gradient radiating outward from buildings.
+ */
+function createGradientHeatmapStrip(
+  points: THREE.Vector3[],
+  width: number,
+  buildingWorldPositions: THREE.Vector3[],
+  maxRadius: number,
+): THREE.Mesh {
+  const geometry = new THREE.BufferGeometry();
+  const half = width / 2;
+  const vertices: number[] = [];
+  const colors: number[] = [];
+  const indices: number[] = [];
+
+  const segRights: THREE.Vector3[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const forward = new THREE.Vector3()
+      .subVectors(points[i + 1], points[i])
+      .normalize();
+    segRights.push(new THREE.Vector3(-forward.z, 0, forward.x));
+  }
+
+  for (let i = 0; i < points.length; i++) {
+    let right: THREE.Vector3;
+    if (i === 0) {
+      right = segRights[0].clone();
+    } else if (i === points.length - 1) {
+      right = segRights[segRights.length - 1].clone();
+    } else {
+      right = new THREE.Vector3()
+        .addVectors(segRights[i - 1], segRights[i])
+        .normalize();
+      const dot = segRights[i - 1].dot(segRights[i]);
+      const miterScale = Math.min(1 / Math.sqrt((1 + dot) / 2), 2.0);
+      right.multiplyScalar(miterScale);
+    }
+
+    const p = points[i];
+
+    // Compute distance from this vertex to nearest building (in world coords, XZ plane)
+    let minDist = Infinity;
+    for (const bPos of buildingWorldPositions) {
+      const dx = p.x - bPos.x;
+      const dz = p.z - bPos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < minDist) minDist = dist;
+    }
+
+    // Convert world distance to approximate meters (SCALE_FACTOR = 10/1.4)
+    const distMeters = minDist / SCALE_FACTOR;
+    const [r, g, b] = distanceToColor(distMeters, maxRadius);
+
+    // Left vertex
+    vertices.push(p.x - right.x * half, 0, p.z - right.z * half);
+    colors.push(r, g, b);
+    // Right vertex
+    vertices.push(p.x + right.x * half, 0, p.z + right.z * half);
+    colors.push(r, g, b);
+
+    if (i < points.length - 1) {
+      const idx = i * 2;
+      indices.push(idx, idx + 2, idx + 1);
+      indices.push(idx + 1, idx + 2, idx + 3);
+    }
+  }
+
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+
+  const material = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.65,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+
+  return new THREE.Mesh(geometry, material);
+}
+
+/**
+ * Render barricade markers on blocked roads.
+ * Places a red/white striped box at the midpoint of each barricaded edge.
+ */
+export function renderBarricadeMarkers(
+  barricadedEdgeIds: Set<string>,
+  allEdges: RoadEdge[],
+  projection: typeof CityProjection,
+): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "barricade-markers";
+
+  const edgeMap = new Map(allEdges.map(e => [e.id, e]));
+
+  // Create red/white stripe texture using canvas
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d")!;
+  const stripeWidth = 8;
+  for (let i = 0; i < canvas.width; i += stripeWidth * 2) {
+    ctx.fillStyle = "#ff2222";
+    ctx.fillRect(i, 0, stripeWidth, canvas.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(i + stripeWidth, 0, stripeWidth, canvas.height);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+
+  for (const edgeId of barricadedEdgeIds) {
+    const edge = edgeMap.get(edgeId);
+    if (!edge || edge.geometry.length < 2) continue;
+
+    const points = edge.geometry.map(coord => projection.projectToWorld(coord));
+
+    // Find midpoint of the edge
+    let totalLen = 0;
+    const segLengths: number[] = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const len = points[i].distanceTo(points[i + 1]);
+      segLengths.push(len);
+      totalLen += len;
+    }
+    const halfLen = totalLen / 2;
+    let accum = 0;
+    let midpoint = points[0].clone();
+    let direction = new THREE.Vector3(1, 0, 0);
+    for (let i = 0; i < segLengths.length; i++) {
+      if (accum + segLengths[i] >= halfLen) {
+        const t = (halfLen - accum) / segLengths[i];
+        midpoint = new THREE.Vector3().lerpVectors(points[i], points[i + 1], t);
+        direction = new THREE.Vector3().subVectors(points[i + 1], points[i]).normalize();
+        break;
+      }
+      accum += segLengths[i];
+    }
+
+    const { width: roadWidth } = getRoadStyle(edge.speedLimit, edge.lanes);
+    const barricadeWidth = roadWidth;
+    const barricadeHeight = 5;
+    const barricadeDepth = 3;
+
+    const barricadeGeom = new THREE.BoxGeometry(barricadeWidth, barricadeHeight, barricadeDepth);
+    const barricadeMat = new THREE.MeshStandardMaterial({
+      map: texture,
+      roughness: 0.8,
+      metalness: 0.1,
+    });
+
+    const barricade = new THREE.Mesh(barricadeGeom, barricadeMat);
+    barricade.position.set(midpoint.x, barricadeHeight / 2 + 0.5, midpoint.z);
+
+    // Rotate to face along the road
+    const angle = Math.atan2(direction.x, direction.z);
+    barricade.rotation.y = angle;
+
+    barricade.name = `barricade-${edgeId}`;
+    barricade.userData.isBarricade = true;
+    barricade.castShadow = true;
+    group.add(barricade);
+  }
+
+  return group;
 }
