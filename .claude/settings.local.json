@@ -31,7 +31,8 @@
       "Bash(pdftotext \"/Users/notjackl3/Programming/qhacks/_2026 MIC - Participant''''s Information Package.pdf\" -)",
       "Bash(grep -n \"^import Link\\\\|from ''next/link\\\\|from \"\"next/link\" /Users/notjackl3/Programming/qhacks/app/map/page.tsx)",
       "Bash(xargs basename:*)",
-      "Bash(grep -r street /Users/notjackl3/Programming/qhacks --include=*.ts --include=*.tsx -l -i)"
+      "Bash(grep -r street /Users/notjackl3/Programming/qhacks --include=*.ts --include=*.tsx -l -i)",
+      "WebSearch"
     ],
     "additionalDirectories": [
       "c:\\Users\\phine\\OneDrive\\Laptop\\HACKATHON\\qhacks\\qhacks\\public\\sounds",
