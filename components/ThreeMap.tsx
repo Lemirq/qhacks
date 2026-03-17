@@ -156,7 +156,7 @@ interface ThreeMapProps {
   /** Ref-based API for shadow analysis — parent can call methods on this ref */
   shadowAnalysisRef?: React.MutableRefObject<{
     runAnalysis: (dayOfYear: number) => Promise<import("@/lib/sun/shadowAnalysis").ShadowAnalysisSummary | null>;
-    applyShadowOverlay: (impacts: import("@/lib/sun/shadowAnalysis").BuildingShadowImpact[]) => void;
+    applyShadowOverlay: (impacts: import("@/lib/sun/shadowAnalysis").BuildingShadowImpact[], filterHour?: number) => void;
     clearShadowOverlay: () => void;
   } | null>;
   /** Called once after OSM buildings are fetched, passing the raw building data array */
@@ -617,7 +617,7 @@ export default function ThreeMap({
           1, // 1-hour intervals for performance with ~4776 buildings
         );
       },
-      applyShadowOverlay: (impacts) => {
+      applyShadowOverlay: (impacts, filterHour) => {
         // Clear previous overlay
         if (shadowOverlayCleanupRef.current) {
           shadowOverlayCleanupRef.current();
@@ -625,6 +625,7 @@ export default function ThreeMap({
         shadowOverlayCleanupRef.current = applyShadowOverlayFn(
           impacts,
           osmBuildingMeshesRef.current,
+          filterHour,
         );
       },
       clearShadowOverlay: () => {

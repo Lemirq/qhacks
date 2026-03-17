@@ -126,7 +126,7 @@ function MapPageContent() {
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [showBuildingSelector, setShowBuildingSelector] = useState(false);
   const [mapStyle, setMapStyle] = useState<"satellite" | "light">("satellite");
-  const [showNoiseRipple, setShowNoiseRipple] = useState(true);
+  const [showNoiseRipple, setShowNoiseRipple] = useState(false);
   const [showZoningLayer, setShowZoningLayer] = useState(false);
   const [showWindLayer, setShowWindLayer] = useState(false);
   const [showImpactColors, setShowImpactColors] = useState(false);
@@ -179,8 +179,8 @@ function MapPageContent() {
   const [showProposedBuilding, setShowProposedBuilding] = useState(true);
   const [showShadowOverlay, setShowShadowOverlay] = useState(false);
   const shadowAnalysisRef = useRef<{
-    runAnalysis: (dayOfYear: number) => ShadowAnalysisSummary | null;
-    applyShadowOverlay: (impacts: BuildingShadowImpact[]) => void;
+    runAnalysis: (dayOfYear: number) => Promise<ShadowAnalysisSummary | null>;
+    applyShadowOverlay: (impacts: BuildingShadowImpact[], filterHour?: number) => void;
     clearShadowOverlay: () => void;
   } | null>(null);
 
@@ -260,18 +260,25 @@ function MapPageContent() {
     // Auto-enable overlay if there are results
     if (results && results.totalAffected > 0) {
       setShowShadowOverlay(true);
-      shadowAnalysisRef.current?.applyShadowOverlay(results.impacts);
+      shadowAnalysisRef.current?.applyShadowOverlay(results.impacts, timeOfDayHour);
     }
   };
 
   const handleToggleShadowOverlay = (show: boolean) => {
     setShowShadowOverlay(show);
     if (show && shadowResults) {
-      shadowAnalysisRef.current?.applyShadowOverlay(shadowResults.impacts);
+      shadowAnalysisRef.current?.applyShadowOverlay(shadowResults.impacts, timeOfDayHour);
     } else {
       shadowAnalysisRef.current?.clearShadowOverlay();
     }
   };
+
+  // Update shadow overlay when time of day changes
+  useEffect(() => {
+    if (showShadowOverlay && shadowResults) {
+      shadowAnalysisRef.current?.applyShadowOverlay(shadowResults.impacts, timeOfDayHour);
+    }
+  }, [timeOfDayHour, showShadowOverlay, shadowResults]);
 
   // Clean up shadow overlay when disabling shadow mode
   useEffect(() => {
