@@ -859,26 +859,7 @@ function MapPageContent() {
           onRadiusChange={setStakeholderRadius}
         />
         {/* Traffic Impact Panel */}
-        <TrafficImpactPanel
-          impactResult={trafficImpactResult}
-          visible={showTrafficImpact}
-          onClose={() => setShowTrafficImpact(false)}
-          isBarricadeMode={isBarricadeMode}
-          onBarricadeModeToggle={() => setIsBarricadeMode(!isBarricadeMode)}
-          barricadedEdgeIds={barricadedEdgeIds}
-          onRemoveBarricade={(edgeId) => {
-            setBarricadedEdgeIds(prev => {
-              const next = new Set(prev);
-              next.delete(edgeId);
-              next.delete(edgeId + "-reverse");
-              return next;
-            });
-          }}
-          useRealTrafficData={useRealTrafficData}
-          mapboxDataTimestamp={mapboxDataTimestamp}
-          isLoadingMapbox={isLoadingMapbox}
-          onFetchMapboxData={handleFetchMapboxData}
-        />
+{/* TrafficImpactPanel is now rendered inline in the right sidebar */}
       </div>
 
       {/* SIDEBARS CONTAINER */}
@@ -1501,6 +1482,32 @@ function MapPageContent() {
                   <Car size={18} />
                   <span>Traffic Impact</span>
                 </button>
+
+                {/* Inline Traffic Impact Panel */}
+                {showTrafficImpact && (
+                  <div className="mt-3">
+                    <TrafficImpactPanel
+                      impactResult={trafficImpactResult}
+                      visible={true}
+                      onClose={() => setShowTrafficImpact(false)}
+                      isBarricadeMode={isBarricadeMode}
+                      onBarricadeModeToggle={() => setIsBarricadeMode(!isBarricadeMode)}
+                      barricadedEdgeIds={barricadedEdgeIds}
+                      onRemoveBarricade={(edgeId) => {
+                        setBarricadedEdgeIds(prev => {
+                          const next = new Set(prev);
+                          next.delete(edgeId);
+                          next.delete(edgeId + "-reverse");
+                          return next;
+                        });
+                      }}
+                      useRealTrafficData={useRealTrafficData}
+                      mapboxDataTimestamp={mapboxDataTimestamp}
+                      isLoadingMapbox={isLoadingMapbox}
+                      onFetchMapboxData={handleFetchMapboxData}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Building Placement */}

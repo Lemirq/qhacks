@@ -238,7 +238,7 @@ interface DistributionResult {
 function distributeTrips(
   tripGen: BuildingTripGeneration,
   roadNetwork: RoadNetwork,
-  radiusM: number = 300,
+  radiusM: number = 800,
   barricadedEdgeIds?: Set<string>,
 ): DistributionResult {
   const trips = new Map<string, number>();
@@ -307,7 +307,7 @@ export function analyzeTrafficImpact(
 ): TrafficImpactResult {
   const barricadedEdgeIds = options?.barricadedEdgeIds;
   const mapboxCongestion = options?.mapboxCongestion;
-  const IMPACT_RADIUS = 300;
+  const IMPACT_RADIUS = 800;
 
   // 1. Generate trips for each building
   const tripGenerations: BuildingTripGeneration[] = buildings.map((b) =>
@@ -410,7 +410,9 @@ export function analyzeTrafficImpact(
 
 /**
  * Redistribute trips from barricaded edges to alternate routes.
- * Uses simple A* pathfinding to find alternate paths around blocked roads.
+ * Uses A* pathfinding to find alternate paths around blocked roads.
+ * Also redistributes baseline traffic (not just new trips) to properly
+ * show the congestion increase on surrounding roads.
  */
 function redistributeBlockedTraffic(
   edgeTrips: Map<string, number>,
@@ -420,19 +422,33 @@ function redistributeBlockedTraffic(
   tripGenerations: BuildingTripGeneration[],
 ): void {
   const pathfinder = new Pathfinder(roadNetwork);
+  const allEdges = roadNetwork.getEdges();
+  const edgeMap = new Map(allEdges.map(e => [e.id, e]));
 
-  // For each barricaded edge, try to reroute its trips to adjacent edges
+  // Track which edges have already been processed to avoid duplicates
+  const processed = new Set<string>();
+
   for (const blockedId of barricadedEdgeIds) {
-    const blockedTrips = edgeTrips.get(blockedId) || 0;
-    if (blockedTrips === 0) continue;
+    // Strip -reverse to get base ID, only process each physical road once
+    const baseId = blockedId.replace(/-reverse$/, "");
+    if (processed.has(baseId)) continue;
+    processed.add(baseId);
 
-    // Remove trips from blocked edge
-    edgeTrips.delete(blockedId);
-
-    // Find the edge to get its endpoints
-    const allEdges = roadNetwork.getEdges();
-    const blockedEdge = allEdges.find(e => e.id === blockedId);
+    const blockedEdge = edgeMap.get(blockedId) || edgeMap.get(baseId);
     if (!blockedEdge) continue;
+
+    // Calculate the total traffic that would use this road:
+    // existing new trips PLUS baseline traffic that needs to reroute
+    const newTrips = edgeTrips.get(blockedId) || edgeTrips.get(baseId) || 0;
+    const baselineTraffic = baselineVolumePerLane(blockedEdge.speedLimit) * Math.max(blockedEdge.lanes, 1);
+    // A significant portion of baseline traffic also needs to reroute
+    const reroutableBaseline = Math.round(baselineTraffic * 0.6);
+    const totalRedistributed = newTrips + reroutableBaseline;
+
+    // Remove trips from blocked edge(s)
+    edgeTrips.delete(blockedId);
+    edgeTrips.delete(baseId);
+    edgeTrips.delete(baseId + "-reverse");
 
     // Find alternate route around the blocked edge
     const fromNode = roadNetwork.getNode(blockedEdge.from);
@@ -441,25 +457,31 @@ function redistributeBlockedTraffic(
 
     const altRoute = pathfinder.findRoute(fromNode.position, toNode.position, { blockedEdgeIds });
     if (altRoute && altRoute.edges.length > 0) {
-      // Distribute the blocked trips across the alternate route edges
-      const perEdge = Math.max(1, Math.round(blockedTrips / altRoute.edges.length));
+      // Distribute rerouted traffic across alternate route edges
+      // Each edge on the detour gets the full rerouted traffic (they all carry it)
       for (const altEdgeId of altRoute.edges) {
-        edgeTrips.set(altEdgeId, (edgeTrips.get(altEdgeId) || 0) + perEdge);
-        // If the alt edge doesn't have a distance, give it a moderate distance
+        edgeTrips.set(altEdgeId, (edgeTrips.get(altEdgeId) || 0) + totalRedistributed);
         if (!edgeDistances.has(altEdgeId)) {
-          edgeDistances.set(altEdgeId, 200);
+          edgeDistances.set(altEdgeId, 100); // Show as nearby/impacted
         }
       }
     } else {
-      // No alternate route found; spill trips to immediate neighbors
-      const neighborEdges = roadNetwork.getNodeEdges(blockedEdge.from);
-      const validNeighbors = neighborEdges.filter(e => !barricadedEdgeIds.has(e.id) && e.id !== blockedId);
-      if (validNeighbors.length > 0) {
-        const perEdge = Math.max(1, Math.round(blockedTrips / validNeighbors.length));
-        for (const neighbor of validNeighbors) {
+      // No alternate route found; spill all traffic to immediate neighbors
+      const neighborEdges = [
+        ...roadNetwork.getNodeEdges(blockedEdge.from),
+        ...roadNetwork.getNodeEdges(blockedEdge.to),
+      ];
+      const validNeighbors = neighborEdges.filter(
+        e => !barricadedEdgeIds.has(e.id) && e.id !== blockedId && e.id !== baseId
+      );
+      // Remove duplicates
+      const uniqueNeighbors = [...new Map(validNeighbors.map(e => [e.id, e])).values()];
+      if (uniqueNeighbors.length > 0) {
+        const perEdge = Math.max(1, Math.round(totalRedistributed / uniqueNeighbors.length));
+        for (const neighbor of uniqueNeighbors) {
           edgeTrips.set(neighbor.id, (edgeTrips.get(neighbor.id) || 0) + perEdge);
           if (!edgeDistances.has(neighbor.id)) {
-            edgeDistances.set(neighbor.id, 150);
+            edgeDistances.set(neighbor.id, 50);
           }
         }
       }

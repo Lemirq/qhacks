@@ -100,45 +100,33 @@ export function TrafficImpactPanel({
     impactResult || { buildings: [], totalDailyTrips: 0, totalPeakHourTrips: 0, congestedIntersections: [] };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-      <div className="bg-zinc-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-white/10 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden pointer-events-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/10 bg-gradient-to-r from-orange-950/50 to-amber-950/50">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-orange-600 flex items-center justify-center">
-              <Car className="text-white" size={18} />
-            </div>
-            <div>
-              <h2 className="text-sm font-black text-white uppercase tracking-tight">
-                Traffic Impact Analysis
-              </h2>
-              <div className="flex items-center gap-2">
-                <p className="text-[10px] text-zinc-400">
-                  ITE Trip Generation + Road Segment Impact
-                </p>
-                {/* Data source badge */}
-                {useRealTrafficData ? (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded bg-green-600/30 border border-green-400/30 text-green-300">
-                    <Radio size={8} /> Live Traffic Data
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded bg-zinc-600/30 border border-zinc-400/20 text-zinc-400">
-                    Estimated Data
-                  </span>
-                )}
-              </div>
-            </div>
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-orange-600 flex items-center justify-center">
+            <Car className="text-white" size={14} />
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors text-zinc-400 hover:text-white"
-          >
-            <X size={18} />
-          </button>
+          <div>
+            <h3 className="text-[10px] font-black text-white uppercase tracking-tight">
+              Traffic Impact
+            </h3>
+            {/* Data source badge */}
+            {useRealTrafficData ? (
+              <span className="inline-flex items-center gap-1 px-1 py-0.5 text-[8px] font-bold rounded bg-green-600/30 border border-green-400/30 text-green-300">
+                <Radio size={7} /> Live Data
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-1 py-0.5 text-[8px] font-bold rounded bg-zinc-600/30 border border-zinc-400/20 text-zinc-400">
+                Estimated
+              </span>
+            )}
+          </div>
         </div>
+      </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+      {/* Body */}
+      <div className="space-y-3">
           {!impactResult ? (
             <div className="text-center py-8 text-zinc-500 text-sm">
               Place buildings with zoning types to see traffic impact analysis.
@@ -182,7 +170,7 @@ export function TrafficImpactPanel({
               )}
 
               {/* Summary stats */}
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <div className="bg-white/5 rounded-lg p-3 border border-white/10">
                   <div className="text-[10px] font-bold text-zinc-500 uppercase">
                     Daily Trips
@@ -344,7 +332,6 @@ export function TrafficImpactPanel({
             </>
           )}
         </div>
-      </div>
     </div>
   );
 }
