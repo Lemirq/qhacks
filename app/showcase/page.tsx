@@ -56,7 +56,7 @@ const features = [
     subtitle: "All 76 designations from By-Law 2022-62.",
     description:
       "Every placed building is validated against Kingston's Official Plan zoning designations in real-time. See zoning boundaries, land use compatibility, and population sentiment scores that reflect the building's impact on surrounding residents.",
-    gif: "/showcase/zoning.gif",
+    gif: "/showcase/zoning.mp4",
     color: "#1a1611",
   },
   {
@@ -65,7 +65,7 @@ const features = [
     subtitle: "ITE trip generation. SCS stormwater. Real standards.",
     description:
       "Simulate traffic on Kingston's road network with ITE Trip Generation standards. Identify affected stakeholders by proximity, noise, and shadow. Calculate stormwater runoff using the SCS Curve Number method with Kingston's rainfall data.",
-    gif: "/showcase/impact-analysis.gif",
+    gif: "/showcase/impact-analysis.mp4",
     color: "#1a1611",
   },
   {
@@ -74,7 +74,7 @@ const features = [
     subtitle: "See it from where residents actually stand.",
     description:
       "Drop to street level and walk through the proposed development at pedestrian height. See the building from the perspective that matters most — the view from a resident's front door, a nearby park, or the sidewalk across the street.",
-    gif: "/showcase/street-level.gif",
+    gif: "/showcase/street-level.mp4",
     color: "#1a1611",
   },
 ];
@@ -97,12 +97,30 @@ function FeatureCard({
       className="w-full"
     >
       <div
-        className={`flex flex-col ${isEven ? "lg:flex-row" : "lg:flex-row-reverse"} gap-0 rounded-2xl overflow-hidden shadow-lg`}
-        style={{ background: feature.color }}
+        className={`flex flex-col ${isEven ? "lg:flex-row" : "lg:flex-row-reverse"} gap-6 items-start`}
       >
-        {/* Media side */}
-        <div className="lg:w-[55%] relative">
-          <div className="bg-black/20 flex items-center justify-center overflow-hidden">
+        {/* Media side — standalone */}
+        <div className="lg:w-[55%] w-full rounded-2xl overflow-hidden shadow-lg">
+          {feature.gif.endsWith(".mp4") ? (
+            <video
+              src={feature.gif}
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full block"
+              onError={(e) => {
+                const target = e.target as HTMLVideoElement;
+                target.style.display = "none";
+                target.parentElement!.innerHTML = `
+                  <div class="flex flex-col items-center justify-center h-64 w-full text-white/30 gap-3 p-8 bg-black/20 rounded-2xl">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><circle cx="8" cy="8" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                    <span class="text-sm font-medium">Video coming soon</span>
+                  </div>
+                `;
+              }}
+            />
+          ) : (
             <img
               src={feature.gif}
               alt={feature.title}
@@ -111,30 +129,39 @@ function FeatureCard({
                 const target = e.target as HTMLImageElement;
                 target.style.display = "none";
                 target.parentElement!.innerHTML = `
-                  <div class="flex flex-col items-center justify-center h-full w-full text-white/30 gap-3 p-8">
+                  <div class="flex flex-col items-center justify-center h-64 w-full text-white/30 gap-3 p-8 bg-black/20 rounded-2xl">
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><circle cx="8" cy="8" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
                     <span class="text-sm font-medium">GIF recording coming soon</span>
                   </div>
                 `;
               }}
             />
-          </div>
+          )}
         </div>
 
-        {/* Text side */}
-        <div className="lg:w-[45%] p-8 lg:p-12 flex flex-col justify-center">
+        {/* Text side — card with background */}
+        <div
+          className="lg:w-[45%] w-full p-8 lg:p-12 rounded-2xl shadow-lg flex flex-col justify-center"
+          style={{ background: feature.color }}
+        >
           <span className="text-white/40 text-xs font-bold tracking-[0.2em] uppercase mb-4">
             Feature {String(index + 1).padStart(2, "0")}
           </span>
           <h2
             className="text-2xl lg:text-3xl font-bold text-white mb-2"
-            style={{ fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif" }}
+            style={{
+              fontFamily:
+                "var(--font-playfair), 'Playfair Display', Georgia, serif",
+            }}
           >
             {feature.title}
           </h2>
           <p
             className="text-white/60 text-sm italic mb-6"
-            style={{ fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif" }}
+            style={{
+              fontFamily:
+                "var(--font-playfair), 'Playfair Display', Georgia, serif",
+            }}
           >
             {feature.subtitle}
           </p>
@@ -162,7 +189,10 @@ export default function ShowcasePage() {
         <Link
           href="/"
           className="font-bold text-lg text-[#1a1611] no-underline"
-          style={{ fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif" }}
+          style={{
+            fontFamily:
+              "var(--font-playfair), 'Playfair Display', Georgia, serif",
+          }}
         >
           KingsView
         </Link>
@@ -196,53 +226,60 @@ export default function ShowcasePage() {
         </div>
 
         <div className="relative z-10 max-w-4xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          <span className="inline-block px-4 py-1.5 text-[11px] tracking-[0.15em] uppercase text-[#8a8279] border border-[#e8e0d2] rounded-full mb-8">
-            Mayor&apos;s Innovation Challenge 2026
-          </span>
-
-          <h1
-            className="text-5xl md:text-7xl font-bold mb-6"
-            style={{
-              fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif",
-              letterSpacing: "-0.02em",
-            }}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
           >
-            See Kingston&apos;s Future
-            <br />
-            <span className="italic font-normal text-[#8a8279]">
-              Before It&apos;s Built
+            <span className="inline-block px-4 py-1.5 text-[11px] tracking-[0.15em] uppercase text-[#8a8279] border border-[#e8e0d2] rounded-full mb-8">
+              Mayor&apos;s Innovation Challenge 2026
             </span>
-          </h1>
 
-          <p className="text-lg text-[#8a8279] max-w-2xl mx-auto mb-10 leading-relaxed">
-            KingsView gives residents and councillors the same visibility that
-            planners and developers already have. Design a building in plain
-            English, place it on a real 3D map of Kingston, and see the impact
-            instantly.
-          </p>
+            <h1
+              className="text-5xl md:text-7xl font-bold mb-6"
+              style={{
+                fontFamily:
+                  "var(--font-playfair), 'Playfair Display', Georgia, serif",
+                letterSpacing: "-0.02em",
+              }}
+            >
+              See Kingston&apos;s Future
+              <br />
+              <span className="italic font-normal text-[#8a8279]">
+                Before It&apos;s Built
+              </span>
+            </h1>
 
-          <div className="flex items-center justify-center gap-4 flex-wrap">
-            <Link
-              href="/map"
-              className="inline-flex items-center gap-2 px-8 py-3.5 bg-[#1a1611] text-[#f4efe6] rounded-full no-underline text-sm tracking-wide hover:-translate-y-0.5 hover:shadow-lg transition-all"
-              style={{ fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif" }}
-            >
-              Try It Live&ensp;&rarr;
-            </Link>
-            <a
-              href="#features"
-              className="inline-flex items-center gap-2 px-8 py-3.5 border border-[#e8e0d2] text-[#3d362c] rounded-full no-underline text-sm tracking-wide hover:border-[#3d362c] hover:text-[#1a1611] transition-all"
-              style={{ fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif" }}
-            >
-              See Features
-            </a>
-          </div>
-        </motion.div>
+            <p className="text-lg text-[#8a8279] max-w-2xl mx-auto mb-10 leading-relaxed">
+              KingsView gives residents and councillors the same visibility that
+              planners and developers already have. Design a building in plain
+              English, place it on a real 3D map of Kingston, and see the impact
+              instantly.
+            </p>
+
+            <div className="flex items-center justify-center gap-4 flex-wrap">
+              <Link
+                href="/map"
+                className="inline-flex items-center gap-2 px-8 py-3.5 bg-[#1a1611] text-[#f4efe6] rounded-full no-underline text-sm tracking-wide hover:-translate-y-0.5 hover:shadow-lg transition-all"
+                style={{
+                  fontFamily:
+                    "var(--font-playfair), 'Playfair Display', Georgia, serif",
+                }}
+              >
+                Try It Live&ensp;&rarr;
+              </Link>
+              <a
+                href="#features"
+                className="inline-flex items-center gap-2 px-8 py-3.5 border border-[#e8e0d2] text-[#3d362c] rounded-full no-underline text-sm tracking-wide hover:border-[#3d362c] hover:text-[#1a1611] transition-all"
+                style={{
+                  fontFamily:
+                    "var(--font-playfair), 'Playfair Display', Georgia, serif",
+                }}
+              >
+                See Features
+              </a>
+            </div>
+          </motion.div>
         </div>
       </header>
 
@@ -281,7 +318,10 @@ export default function ShowcasePage() {
         >
           <h2
             className="text-3xl md:text-5xl font-bold mb-6"
-            style={{ fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif" }}
+            style={{
+              fontFamily:
+                "var(--font-playfair), 'Playfair Display', Georgia, serif",
+            }}
           >
             The tool for everyone else.
           </h2>
@@ -302,8 +342,8 @@ export default function ShowcasePage() {
       {/* ───── FOOTER ───── */}
       <footer className="bg-[#1a1611] border-t border-white/10 py-8 px-6 text-center">
         <p className="text-white/30 text-xs tracking-wider uppercase">
-          Built by Jack Le, Vihaan Sharma, Dhan Narula &amp; Phin Truong
-          &nbsp;&mdash;&nbsp; Queen&apos;s University
+          Built by Vihaan Sharma, Jack Le, Dhan Narula &amp; Phin Truong
+          &nbsp;&mdash;&nbsp; University of Toronto
         </p>
       </footer>
     </div>
