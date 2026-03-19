@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 const features = [
   {
@@ -11,7 +11,7 @@ const features = [
     subtitle: "4,776 real buildings. Real roads. Real city.",
     description:
       "Explore Kingston in a fully interactive 3D environment built from OpenStreetMap data. Satellite and light map styles, real road networks, and every building footprint — all running in your browser.",
-    gif: "/showcase/live-map.gif",
+    video: "/showcase/live-map.mp4",
     color: "#1a1611",
   },
   {
@@ -20,7 +20,7 @@ const features = [
     subtitle: "Describe a building. Watch it appear.",
     description:
       "Design 3D buildings by speaking naturally — 'A 6-story mixed-use building, brick facade, flat roof.' Powered by Google Gemini, the system interprets your description and generates a full 3D model in seconds. Adjust dimensions, textures, windows, and rotation with precise controls.",
-    gif: "/showcase/build-mode.gif",
+    video: "/showcase/build-mode.mp4",
     color: "#1a1611",
   },
   {
@@ -29,7 +29,7 @@ const features = [
     subtitle: "40 verified species from Kingston's planting program.",
     description:
       "An AI-powered advisor recommends trees based on Kingston's climate, soil conditions, and the city's actual Neighbourhood Tree Planting Program. Filter by shade, cost, space, wildlife value, or year-round coverage. Toggle trees on to see landscaping in 3D.",
-    gif: "/showcase/tree-planting.gif",
+    video: "/showcase/tree-planting.mp4",
     color: "#1a1611",
   },
   {
@@ -38,7 +38,7 @@ const features = [
     subtitle: "CO2, energy, water, noise — quantified instantly.",
     description:
       "Place a building and immediately see its environmental footprint: CO2 emissions in tonnes per year, energy consumption in MWh, water usage in cubic metres, and construction noise radius. Generate a full AI-powered impact report with mitigation recommendations.",
-    gif: "/showcase/environmental-impact.gif",
+    video: "/showcase/environmental-impact.mp4",
     color: "#1a1611",
   },
   {
@@ -47,7 +47,7 @@ const features = [
     subtitle: "See which buildings lose sunlight — before it's built.",
     description:
       "Run shadow studies using real solar position equations for Kingston's latitude (44.23°N). Pick any season — winter solstice, equinox, summer solstice — and drag through the day to watch shadows sweep across the city. Toggle 'With Proposed' to compare before and after.",
-    gif: "/showcase/shadow-analysis.gif",
+    video: "/showcase/shadow-analysis.mp4",
     color: "#1a1611",
   },
   {
@@ -56,7 +56,7 @@ const features = [
     subtitle: "All 76 designations from By-Law 2022-62.",
     description:
       "Every placed building is validated against Kingston's Official Plan zoning designations in real-time. See zoning boundaries, land use compatibility, and population sentiment scores that reflect the building's impact on surrounding residents.",
-    gif: "/showcase/zoning.mp4",
+    video: "/showcase/zoning.mp4",
     color: "#1a1611",
   },
   {
@@ -65,7 +65,7 @@ const features = [
     subtitle: "ITE trip generation. SCS stormwater. Real standards.",
     description:
       "Simulate traffic on Kingston's road network with ITE Trip Generation standards. Identify affected stakeholders by proximity, noise, and shadow. Calculate stormwater runoff using the SCS Curve Number method with Kingston's rainfall data.",
-    gif: "/showcase/impact-analysis.mp4",
+    video: "/showcase/impact-analysis.mp4",
     color: "#1a1611",
   },
   {
@@ -74,7 +74,7 @@ const features = [
     subtitle: "See it from where residents actually stand.",
     description:
       "Drop to street level and walk through the proposed development at pedestrian height. See the building from the perspective that matters most — the view from a resident's front door, a nearby park, or the sidewalk across the street.",
-    gif: "/showcase/street-level.mp4",
+    video: "/showcase/street-level.mp4",
     color: "#1a1611",
   },
 ];
@@ -101,42 +101,24 @@ function FeatureCard({
       >
         {/* Media side — standalone */}
         <div className="lg:w-[55%] w-full rounded-2xl overflow-hidden shadow-lg">
-          {feature.gif.endsWith(".mp4") ? (
-            <video
-              src={feature.gif}
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="w-full block"
-              onError={(e) => {
-                const target = e.target as HTMLVideoElement;
-                target.style.display = "none";
-                target.parentElement!.innerHTML = `
-                  <div class="flex flex-col items-center justify-center h-64 w-full text-white/30 gap-3 p-8 bg-black/20 rounded-2xl">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><circle cx="8" cy="8" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                    <span class="text-sm font-medium">Video coming soon</span>
-                  </div>
-                `;
-              }}
-            />
-          ) : (
-            <img
-              src={feature.gif}
-              alt={feature.title}
-              className="w-full block"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = "none";
-                target.parentElement!.innerHTML = `
-                  <div class="flex flex-col items-center justify-center h-64 w-full text-white/30 gap-3 p-8 bg-black/20 rounded-2xl">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><circle cx="8" cy="8" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                    <span class="text-sm font-medium">GIF recording coming soon</span>
-                  </div>
-                `;
-              }}
-            />
-          )}
+          <video
+            src={feature.video}
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="w-full block"
+            onError={(e) => {
+              const target = e.target as HTMLVideoElement;
+              target.style.display = "none";
+              target.parentElement!.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-64 w-full text-white/30 gap-3 p-8 bg-black/20 rounded-2xl">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2"/><circle cx="8" cy="8" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                  <span class="text-sm font-medium">Video coming soon</span>
+                </div>
+              `;
+            }}
+          />
         </div>
 
         {/* Text side — card with background */}
