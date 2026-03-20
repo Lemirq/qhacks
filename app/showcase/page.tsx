@@ -59,24 +59,24 @@ const features = [
     video: "/showcase/zoning.mp4",
     color: "#1a1611",
   },
-  {
-    id: "traffic-stakeholder",
-    title: "Traffic, Stakeholder, & Drainage Impact",
-    subtitle: "ITE trip generation. SCS stormwater. Real standards.",
-    description:
-      "Simulate traffic on Kingston's road network with ITE Trip Generation standards. Identify affected stakeholders by proximity, noise, and shadow. Calculate stormwater runoff using the SCS Curve Number method with Kingston's rainfall data.",
-    video: "/showcase/impact-analysis.mp4",
-    color: "#1a1611",
-  },
-  {
-    id: "street-view",
-    title: "Street-Level Walkthrough",
-    subtitle: "See it from where residents actually stand.",
-    description:
-      "Drop to street level and walk through the proposed development at pedestrian height. See the building from the perspective that matters most — the view from a resident's front door, a nearby park, or the sidewalk across the street.",
-    video: "/showcase/street-level.mp4",
-    color: "#1a1611",
-  },
+  // {
+  //   id: "traffic-stakeholder",
+  //   title: "Traffic, Stakeholder, & Drainage Impact",
+  //   subtitle: "ITE trip generation. SCS stormwater. Real standards.",
+  //   description:
+  //     "Simulate traffic on Kingston's road network with ITE Trip Generation standards. Identify affected stakeholders by proximity, noise, and shadow. Calculate stormwater runoff using the SCS Curve Number method with Kingston's rainfall data.",
+  //   video: "/showcase/impact-analysis.mp4",
+  //   color: "#1a1611",
+  // },
+  // {
+  //   id: "street-view",
+  //   title: "Street-Level Walkthrough",
+  //   subtitle: "See it from where residents actually stand.",
+  //   description:
+  //     "Drop to street level and walk through the proposed development at pedestrian height. See the building from the perspective that matters most — the view from a resident's front door, a nearby park, or the sidewalk across the street.",
+  //   video: "/showcase/street-level.mp4",
+  //   color: "#1a1611",
+  // },
 ];
 
 function FeatureCard({
